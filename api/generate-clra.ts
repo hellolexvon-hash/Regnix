@@ -12,5 +12,21 @@ app.use(express.json({ limit: '20mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use('/api', router);
 
-export default (req: VercelRequest, res: VercelResponse) =>
-  app(req as any, res as any);
+export default async (req: VercelRequest, res: VercelResponse): Promise<void> => {
+  try {
+    await new Promise<void>((resolve, reject) => {
+      app(req as any, res as any, (err: unknown) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+  } catch (err) {
+    console.error('[CLRA] Unhandled error:', err);
+    if (!res.headersSent) {
+      res.status(500).json({
+        error: err instanceof Error ? err.message : String(err),
+        stack: err instanceof Error ? err.stack : undefined,
+      });
+    }
+  }
+};
