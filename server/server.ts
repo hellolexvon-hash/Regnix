@@ -9,6 +9,7 @@ import fs from 'fs';
 
 import { requestLogger } from './middleware/requestLogger.js';
 import { errorHandler } from './middleware/errorHandler.js';
+import generateDocsRouter from './routes/generateDocsRoute.js';
 import codeWagesRouter from './routes/codeOnWagesRoute.js';
 import apprenticesRouter from './routes/apprenticesActRoute.js';
 import clraRouter from './routes/clraActRoute.js';
@@ -31,6 +32,9 @@ const publicTemplatesDir = path.join(rootDir, 'public', 'templates');
 
 app.use('/templates', express.static(publicTemplatesDir));
 
+const publicManualRegistersDir = path.join(rootDir, 'public', 'manual_registers');
+app.use('/manual_registers', express.static(publicManualRegistersDir));
+
 if (isProduction && fs.existsSync(distDir)) {
   app.use(express.static(distDir));
 }
@@ -43,6 +47,7 @@ app.get('/api/health', (_req, res) => {
   });
 });
 
+app.use('/api', generateDocsRouter);
 app.use('/api', codeWagesRouter);
 app.use('/api', apprenticesRouter);
 app.use('/api', clraRouter);
@@ -61,6 +66,8 @@ if (isProduction && fs.existsSync(path.join(distDir, 'index.html'))) {
       message: 'Regnix backend is running in development mode',
       endpoints: [
         '/api/health',
+        '/api/generate-docs',
+        '/api/download-template',
         '/api/generate-code-wages',
         '/api/generate-apprentices',
         '/api/generate-clra',
@@ -89,6 +96,8 @@ app.use(errorHandler);
 app.listen(PORT, () => {
   console.log(`\x1b[36m✓ Regnix backend → http://localhost:${PORT}\x1b[0m`);
   console.log('  GET  /api/health');
+  console.log('  POST /api/generate-docs');
+  console.log('  GET  /api/download-template');
   console.log('  POST /api/generate-code-wages');
   console.log('  POST /api/generate-apprentices');
   console.log('  POST /api/generate-clra');

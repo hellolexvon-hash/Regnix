@@ -1,0 +1,33 @@
+{
+  "version": 2,
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "functions": {
+    "api/generate-apprentices.ts": { "maxDuration": 60 },
+    "api/generate-clra.ts":        { "maxDuration": 60 },
+    "api/generate-code-wages.ts":  { "maxDuration": 60 },
+    "api/generate-factories.ts":   { "maxDuration": 60 },
+    "api/generate-se-act.ts":      { "maxDuration": 60 },
+    "api/download-bocw.ts":        { "maxDuration": 30 },
+    "api/download-equal-remuneration.ts": { "maxDuration": 30 },
+    "api/download-ismw.ts":        { "maxDuration": 30 },
+    "api/download-maternity-benefit.ts":  { "maxDuration": 30 },
+    "api/download-posh.ts":        { "maxDuration": 30 },
+    "api/health.ts":               { "maxDuration": 10 }
+  },
+  "rewrites": [
+    { "source": "/api/generate-apprentices",     "destination": "/api/generate-apprentices" },
+    { "source": "/api/generate-clra",            "destination": "/api/generate-clra" },
+    { "source": "/api/generate-code-wages",      "destination": "/api/generate-code-wages" },
+    { "source": "/api/generate-factories",       "destination": "/api/generate-factories" },
+    { "source": "/api/generate-se-act",          "destination": "/api/generate-se-act" },
+    { "source": "/api/generate-se-act/states",   "destination": "/api/generate-se-act" },
+    { "source": "/api/download-bocw",            "destination": "/api/download-bocw" },
+    { "source": "/api/download-equal-remuneration", "destination": "/api/download-equal-remuneration" },
+    { "source": "/api/download-ismw",            "destination": "/api/download-ismw" },
+    { "source": "/api/download-maternity-benefit","destination": "/api/download-maternity-benefit" },
+    { "source": "/api/download-posh",            "destination": "/api/download-posh" },
+    { "source": "/api/health",                   "destination": "/api/health" },
+    { "source": "/(.*)",                         "destination": "/index.html" }
+  ]
+}

@@ -27,13 +27,11 @@
  *   Lists all acts and their file counts.
  *
  * ZIP files must be placed at:
- *   public/templates/manual_registers/<ZIP_FILENAME>
+ *   server/public/manual_registers/<ZIP_FILENAME>
  * (see MANUAL_ACTS map below for exact filenames)
  */
 
 import express, { Request, Response } from 'express';
-import path from 'path';
-import fs from 'fs';
 
 const router = express.Router();
 
@@ -42,7 +40,7 @@ const router = express.Router();
 interface ManualAct {
   /** Human-readable name shown in health / error responses */
   label: string;
-  /** Filename inside public/templates/manual_registers/ */
+  /** Filename inside public/manual_registers/ */
   zipFile: string;
   /** Content-Disposition filename sent to the browser */
   downloadName: string;
@@ -85,37 +83,18 @@ const MANUAL_ACTS: Record<string, ManualAct> = {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function resolveZipPath(zipFile: string): string {
-  return path.join(process.cwd(), 'public', 'templates', 'manual_registers', zipFile);
-}
-
+/**
+ * Redirect to the static ZIP served by Vercel CDN (or Express static in dev).
+ * ZIPs must be placed at:  public/manual_registers/<ZIP_FILENAME>
+ * They are served at:      /manual_registers/<ZIP_FILENAME>
+ */
 function sendManualZip(actKey: string, _req: Request, res: Response): void {
   const act = MANUAL_ACTS[actKey];
   if (!act) {
     res.status(404).json({ error: `Unknown act key: ${actKey}` });
     return;
   }
-
-  const filePath = resolveZipPath(act.zipFile);
-
-  if (!fs.existsSync(filePath)) {
-    res.status(404).json({
-      error: `ZIP not found for "${act.label}". Place ${act.zipFile} in public/templates/manual_registers/.`,
-    });
-    return;
-  }
-
-  const stat = fs.statSync(filePath);
-
-  res.set({
-    'Content-Type':        'application/zip',
-    'Content-Disposition': `attachment; filename="${act.downloadName}"`,
-    'Content-Length':      String(stat.size),
-    'X-Act':               act.label,
-    'X-File-Count':        String(act.fileCount),
-  });
-
-  fs.createReadStream(filePath).pipe(res);
+  res.redirect(302, `/manual_registers/${act.zipFile}`);
 }
 
 // ─── Individual download endpoints ────────────────────────────────────────────
@@ -148,7 +127,7 @@ router.get('/manual-registers/health', (_req, res) => {
     label:     act.label,
     endpoint:  `/api/download-${key}`,
     fileCount: act.fileCount,
-    available: fs.existsSync(resolveZipPath(act.zipFile)),
+    staticUrl: `/manual_registers/${act.zipFile}`,
   }));
 
   res.json({
