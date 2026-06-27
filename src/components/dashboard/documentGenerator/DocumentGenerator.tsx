@@ -43,11 +43,11 @@ const EMPTY_COMPANY: CompanyDetails = {
 };
 
 const STATES = [
-  'Andhra Pradesh', 'Assam', 'Bihar', 'Chhattisgarh', 'Delhi', 'Goa', 'Gujarat',
-  'Haryana', 'Himachal Pradesh', 'Jharkhand', 'Karnataka', 'Kerala',
-  'Madhya Pradesh', 'Maharashtra', 'Meghalaya', 'Odisha', 'Punjab',
-  'Rajasthan', 'Tamil Nadu', 'Telangana', 'Uttar Pradesh', 'Uttarakhand',
-  'West Bengal', 'Chandigarh', 'Puducherry',
+   'Assam', 'Delhi', 'Gujarat', 'Haryana', 
+   'Karnataka', 'Kerala', 'Maharashtra', 'Meghalaya', 
+   'Odisha', 'Punjab', 'Rajasthan', 'Tamil Nadu', 'Telangana', 
+   'West Bengal'
+
 ];
 
 const INDUSTRIES = [
@@ -167,11 +167,15 @@ const CATEGORIES = ['All', 'Labour', 'State', 'Compliance'];
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ENDPOINT ROUTING
-// Each act with a dedicated TypeScript backend module gets its own endpoint.
-// All others fall through to /api/generate-docs (Python pipeline).
+// Each act routes to its dedicated TypeScript backend endpoint.
+// Manual acts (bocw, maternity, posh, equal_remuneration, ismw) are served as
+// pre-built ZIPs via GET — no master file upload required.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Acts that have a dedicated TS backend route (POST with master file) */
+/**
+ * Acts that have a dedicated TS backend route (POST with master file).
+ * Every POST-based act MUST appear here — there is no generic fallback.
+ */
 const DEDICATED_ACTS: Partial<Record<ActId, string>> = {
   code_wages:  '/api/generate-code-wages',
   apprentices: '/api/generate-apprentices',
@@ -179,6 +183,16 @@ const DEDICATED_ACTS: Partial<Record<ActId, string>> = {
   factories:   '/api/generate-factories',
   se_act:      '/api/generate-se-act',
 };
+
+/**
+ * States supported by the Shops & Establishments Act backend.
+ * Must match SE_ACT_STATES in server/routes/seActRoute.ts exactly.
+ */
+const SE_ACT_SUPPORTED_STATES = [
+  'Assam', 'Delhi', 'Gujarat', 'Haryana', 'Karnataka', 'Kerala',
+  'Maharashtra', 'Meghalaya', 'Odisha', 'Punjab', 'Rajasthan',
+  'Tamil Nadu', 'Telangana', 'West Bengal',
+] as const;
 
 /**
  * Acts whose registers are fully manual — no master file needed.
@@ -211,25 +225,29 @@ function buildFormData(file: File, actId: ActId, state: string): FormData {
  * Trigger browser download for a manual act (GET endpoint, no master file).
  * Returns metadata so the summary step can still count files.
  */
-function downloadManualAct(actId: ActId): { actId: ActId; fileCount: number } {
+/** Fetch a manual act ZIP from the server and return it as a blob (no download triggered here). */
+async function fetchManualActBlob(actId: ActId): Promise<{ actId: ActId; blob: Blob; fileCount: number }> {
   const endpoint = MANUAL_ACT_ENDPOINTS[actId]!;
-  const a = document.createElement('a');
-  a.href = endpoint;
-  a.click();
-  return { actId, fileCount: ACTS.find(a => a.id === actId)?.fileCount ?? 0 };
+  const res = await fetch(endpoint, { method: 'GET' });
+  if (!res.ok) {
+    let errMsg = `Server error ${res.status}`;
+    try { const j = await res.json(); errMsg = j.error ?? errMsg; } catch { /**/ }
+    throw new Error(`[${actId.toUpperCase()}] ${errMsg}`);
+  }
+  const blob = await res.blob();
+  const act  = ACTS.find(a => a.id === actId);
+  return { actId, blob, fileCount: act?.fileCount ?? 0 };
 }
 
 /**
  * Call each act's endpoint in parallel.
  *
  * Routing rules:
- *  - Manual acts (MANUAL_ACT_ENDPOINTS) → GET download, no file upload.
- *  - Dedicated TS acts (DEDICATED_ACTS) → POST to their own endpoint.
- *  - All others → POST to /api/generate-docs.
+ *  - Manual acts (MANUAL_ACT_ENDPOINTS) → GET download, no master file upload.
+ *  - All other acts (DEDICATED_ACTS) → POST to their own dedicated endpoint.
  *
- * Manual acts are triggered immediately and excluded from the ZIP merge;
- * they download directly as separate ZIPs from the server.
- * Only POST acts return blobs that get merged into the combined ZIP.
+ * All act blobs (manual GET + generated POST) are merged into a single ZIP.
+ * Each act gets its own subfolder named by shortLabel (e.g. CLRA/, BOCW/).
  */
 async function callActEndpoints(
   file: File,
@@ -240,14 +258,20 @@ async function callActEndpoints(
 
   const results = await Promise.all(
     actIds.map(async actId => {
-      const endpoint = DEDICATED_ACTS[actId] ?? '/api/generate-docs';
-      const fd = buildFormData(file, actId, state);
+      const endpoint = DEDICATED_ACTS[actId];
+      if (!endpoint) {
+        throw new Error(
+          `No backend route registered for "${actId}". Deselect this act or contact support.`,
+        );
+      }
 
+      const fd = buildFormData(file, actId, state);
       const res = await fetch(endpoint, { method: 'POST', body: fd });
 
       if (!res.ok) {
-        const errJson = await res.json().catch(() => ({}));
-        throw new Error(`[${actId}] ${errJson.error ?? `Server error ${res.status}`}`);
+        let errMsg = `Server error ${res.status}`;
+        try { const j = await res.json(); errMsg = j.error ?? errMsg; } catch { /**/ }
+        throw new Error(`[${actId.toUpperCase()}] ${errMsg}`);
       }
 
       const fileCount = Number(res.headers.get('X-File-Count') ?? 0);
@@ -610,71 +634,76 @@ function Step4({ company, selectedActs, onBack, onDone, onFileReady }: {
       setStatus('generating');
       setProgress(30);
 
-      // Split manual vs POST acts up front so we can report totals correctly.
+      // Validate SE Act state before firing any requests.
+      if (selectedActs.includes('se_act')) {
+        const stateMatch = SE_ACT_SUPPORTED_STATES.find(
+          s => s.toLowerCase() === company.state.toLowerCase(),
+        );
+        if (!stateMatch) {
+          throw new Error(
+            `Shops & Establishments Act: your company state "${company.state || '(not set)'}" is not supported. ` +
+            `Supported states: ${SE_ACT_SUPPORTED_STATES.join(', ')}.`,
+          );
+        }
+      }
+
+      // Split acts: manual (GET pre-built ZIPs) vs post (generate from master file).
       const manualActIds = selectedActs.filter(id => id in MANUAL_ACT_ENDPOINTS);
       const postActIds   = selectedActs.filter(id => !(id in MANUAL_ACT_ENDPOINTS));
 
-      // Fire GET downloads for all manual acts immediately.
-      manualActIds.forEach(id => downloadManualAct(id));
+      // Fetch all blobs in parallel — manual acts via GET, post acts via POST.
+      const [manualResults, postResults] = await Promise.all([
+        Promise.all(manualActIds.map(id => fetchManualActBlob(id))),
+        callActEndpoints(file, postActIds, company.state),
+      ]);
 
-      const manualFileCount = manualActIds.reduce(
-        (n, id) => n + (ACTS.find(a => a.id === id)?.fileCount ?? 0), 0,
+      setProgress(75);
+
+      // Combine into one flat list: every act gets its own named folder in the ZIP.
+      const allResults: { actId: ActId; blob: Blob; fileCount: number }[] = [
+        ...manualResults,
+        ...postResults,
+      ];
+
+      const totalFileCount = allResults.reduce((n, r) => n + r.fileCount, 0);
+      const totalRowCount  = postResults.reduce((n, r) => Math.max(n, r.rowCount), 0);
+
+      // Always build one merged ZIP with a subfolder per act.
+      const merged = new JSZip();
+
+      await Promise.all(
+        allResults.map(async ({ actId, blob }) => {
+          const actZip = await JSZip.loadAsync(await blob.arrayBuffer());
+          const act    = ACTS.find(a => a.id === actId)!;
+          const folder = merged.folder(act.shortLabel)!;
+          const filePromises: Promise<void>[] = [];
+          actZip.forEach((relativePath, zipEntry) => {
+            if (!zipEntry.dir) {
+              filePromises.push(
+                zipEntry.async('uint8array').then(data => {
+                  folder.file(relativePath, data);
+                }),
+              );
+            }
+          });
+          await Promise.all(filePromises);
+        }),
       );
 
-      // Call each POST-based act's endpoint in parallel.
-      const results = await callActEndpoints(file, postActIds, company.state);
+      setProgress(92);
 
-      setProgress(85);
+      const zipBlob = await merged.generateAsync({
+        type:               'blob',
+        compression:        'DEFLATE',
+        compressionOptions: { level: 6 },
+      });
 
-      // Aggregate totals — manual acts contribute file counts but no blob.
-      const postFileCount = results.reduce((n, r) => n + r.fileCount, 0);
-      const totalFileCount = postFileCount + manualFileCount;
-      const totalRowCount  = results.reduce((n, r) => Math.max(n, r.rowCount), 0);
-
-      // Build merged ZIP from POST-based act blobs only.
-      let zipUrl = '';
-
-      if (results.length > 0) {
-        let zipBlob: Blob;
-
-        if (results.length === 1) {
-          zipBlob = results[0].blob;
-        } else {
-          const merged = new JSZip();
-
-          await Promise.all(
-            results.map(async ({ actId, blob }) => {
-              const actZip = await JSZip.loadAsync(await blob.arrayBuffer());
-              const act    = ACTS.find(a => a.id === actId)!;
-              const folder = merged.folder(act.shortLabel)!;
-              const filePromises: Promise<void>[] = [];
-              actZip.forEach((relativePath, zipEntry) => {
-                if (!zipEntry.dir) {
-                  filePromises.push(
-                    zipEntry.async('uint8array').then(data => {
-                      folder.file(relativePath, data);
-                    }),
-                  );
-                }
-              });
-              await Promise.all(filePromises);
-            }),
-          );
-
-          zipBlob = await merged.generateAsync({
-            type:               'blob',
-            compression:        'DEFLATE',
-            compressionOptions: { level: 6 },
-          });
-        }
-
-        zipUrl = URL.createObjectURL(zipBlob);
-        const timestamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-        const a = document.createElement('a');
-        a.href     = zipUrl;
-        a.download = `${company.name.replace(/\s+/g, '_')}_Registers_${timestamp}.zip`;
-        a.click();
-      }
+      const zipUrl   = URL.createObjectURL(zipBlob);
+      const timestamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+      const a = document.createElement('a');
+      a.href     = zipUrl;
+      a.download = `${company.name.replace(/\s+/g, '_')}_Registers_${timestamp}.zip`;
+      a.click();
 
       setProgress(100);
       setStatus('done');
@@ -908,12 +937,36 @@ export default function DocumentGenerator() {
               // If every selected act is manual, skip steps 3 & 4 entirely.
               const allManual = selectedActs.every(id => id in MANUAL_ACT_ENDPOINTS);
               if (allManual) {
-                selectedActs.forEach(id => downloadManualAct(id));
-                const totalFiles = selectedActs.reduce(
-                  (n, id) => n + (ACTS.find(a => a.id === id)?.fileCount ?? 0), 0,
-                );
-                setDoneInfo({ fileCount: totalFiles, rowCount: 0, zipUrl: '' });
-                setStep(5);
+                // All-manual: fetch all blobs then merge into one ZIP.
+                Promise.all(selectedActs.map(id => fetchManualActBlob(id)))
+                  .then(async results => {
+                    const merged = new JSZip();
+                    await Promise.all(
+                      results.map(async ({ actId, blob }) => {
+                        const actZip = await JSZip.loadAsync(await blob.arrayBuffer());
+                        const act    = ACTS.find(a => a.id === actId)!;
+                        const folder = merged.folder(act.shortLabel)!;
+                        const fps: Promise<void>[] = [];
+                        actZip.forEach((p, e) => {
+                          if (!e.dir) fps.push(e.async('uint8array').then(d => { folder.file(p, d); }));
+                        });
+                        await Promise.all(fps);
+                      }),
+                    );
+                    const zipBlob = await merged.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+                    const zipUrl  = URL.createObjectURL(zipBlob);
+                    const timestamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+                    const a = document.createElement('a');
+                    a.href     = zipUrl;
+                    a.download = `Registers_${timestamp}.zip`;
+                    a.click();
+                    const totalFiles = results.reduce((n, r) => n + r.fileCount, 0);
+                    setDoneInfo({ fileCount: totalFiles, rowCount: 0, zipUrl });
+                    setStep(5);
+                  })
+                  .catch(err => {
+                    alert(`Download failed: ${err.message}`);
+                  });
               } else {
                 setStep(3);
               }

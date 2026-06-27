@@ -27,7 +27,7 @@
  *   Lists all acts and their file counts.
  *
  * ZIP files must be placed at:
- *   server/public/manual_registers/<ZIP_FILENAME>
+ *   public/templates/manual_registers/<ZIP_FILENAME>
  * (see MANUAL_ACTS map below for exact filenames)
  */
 
@@ -42,7 +42,7 @@ const router = express.Router();
 interface ManualAct {
   /** Human-readable name shown in health / error responses */
   label: string;
-  /** Filename inside public/manual_registers/ */
+  /** Filename inside public/templates/manual_registers/ */
   zipFile: string;
   /** Content-Disposition filename sent to the browser */
   downloadName: string;
@@ -86,7 +86,7 @@ const MANUAL_ACTS: Record<string, ManualAct> = {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function resolveZipPath(zipFile: string): string {
-  return path.join(process.cwd(), 'public', 'manual_registers', zipFile);
+  return path.join(process.cwd(), 'public', 'templates', 'manual_registers', zipFile);
 }
 
 function sendManualZip(actKey: string, _req: Request, res: Response): void {
@@ -100,7 +100,7 @@ function sendManualZip(actKey: string, _req: Request, res: Response): void {
 
   if (!fs.existsSync(filePath)) {
     res.status(404).json({
-      error: `ZIP not found for "${act.label}". Place ${act.zipFile} in server/public/manual_registers/.`,
+      error: `ZIP not found for "${act.label}". Place ${act.zipFile} in public/templates/manual_registers/.`,
     });
     return;
   }
