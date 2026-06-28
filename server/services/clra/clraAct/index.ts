@@ -45,24 +45,29 @@
  * ════════════════════════════════════════════════════════════════════════
  */
 
-import fs   from 'fs';
-import path from 'path';
+import fs            from 'fs';
+import path          from 'path';
+import { fileURLToPath } from 'url';
 
-import { readMasterWorkbook }         from '../../shared/masterReader.ts';
-import { ZipFile }                    from '../../shared/zipBuilder.ts';
-import { generateWorkmenRegister }    from './workmenRegister.ts';
-import { generateMusterRoll }         from './musterRoll.ts';
-import { generateWagesRegister }      from './wagesRegister.ts';
-import { generateDeductionsRegister } from './deductionsRegister.ts';
-import { generateFinesRegister }      from './finesRegister.ts';
-import { generateAdvancesRegister }   from './advancesRegister.ts';
-import { generateOvertimeRegister }   from './overtimeRegister.ts';
-import { generateBonusRegister }      from './bonusRegister.ts';
-import { generateGratuityRegister }   from './gratuityRegister.ts';
-import { generateEpfRegister }        from './epfRegister.ts';
-import { generateLwfPtRegister }      from './lwfPtRegister.ts';
+// Use __dirname-equivalent so the path works on Vercel (process.cwd() is unreliable)
+const __filename = fileURLToPath(import.meta.url);
+const __dirname  = path.dirname(__filename);
 
-const TEMPLATES_DIR  = path.join(process.cwd(), 'public', 'templates', 'CLRA_Act_1970');
+import { readMasterWorkbook }         from '../../shared/masterReader.js';
+import { ZipFile }                    from '../../shared/zipBuilder.js';
+import { generateWorkmenRegister }    from './workmenRegister.js';
+import { generateMusterRoll }         from './musterRoll.js';
+import { generateWagesRegister }      from './wagesRegister.js';
+import { generateDeductionsRegister } from './deductionsRegister.js';
+import { generateFinesRegister }      from './finesRegister.js';
+import { generateAdvancesRegister }   from './advancesRegister.js';
+import { generateOvertimeRegister }   from './overtimeRegister.js';
+import { generateBonusRegister }      from './bonusRegister.js';
+import { generateGratuityRegister }   from './gratuityRegister.js';
+import { generateEpfRegister }        from './epfRegister.js';
+import { generateLwfPtRegister }      from './lwfPtRegister.js';
+
+const TEMPLATES_DIR  = path.join(__dirname, '..', '..', '..', '..', 'public', 'templates', 'CLRA_Act_1970');
 // NOTE: folder on disk is "Manual resister" (typo preserved from original zip)
 const MANUAL_SUB_DIR = 'Manual resister';
 

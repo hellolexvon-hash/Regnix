@@ -3,17 +3,32 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "functions": {
-    "api/generate-apprentices.ts": { "maxDuration": 60, "includeFiles": "public/templates/**" },
-    "api/generate-clra.ts":        { "maxDuration": 60, "includeFiles": "public/templates/**" },
-    "api/generate-code-wages.ts":  { "maxDuration": 60, "includeFiles": "public/templates/**" },
-    "api/generate-factories.ts":   { "maxDuration": 60, "includeFiles": "public/templates/**" },
-    "api/generate-se-act.ts":      { "maxDuration": 60, "includeFiles": "public/templates/**" },
-    "api/download-bocw.ts":        { "maxDuration": 30 },
-    "api/download-equal-remuneration.ts": { "maxDuration": 30 },
-    "api/download-ismw.ts":        { "maxDuration": 30 },
+    "api/generate-apprentices.ts": {
+      "maxDuration": 60,
+      "includeFiles": "public/templates/Apprentices_Act_1961/**"
+    },
+    "api/generate-clra.ts": {
+      "maxDuration": 60,
+      "includeFiles": "public/templates/CLRA_Act_1970/**"
+    },
+    "api/generate-code-wages.ts": {
+      "maxDuration": 60,
+      "includeFiles": "public/templates/Code_on_Wages/**"
+    },
+    "api/generate-factories.ts": {
+      "maxDuration": 60,
+      "includeFiles": "public/templates/Factories_Act_1948/**"
+    },
+    "api/generate-se-act.ts": {
+      "maxDuration": 60,
+      "includeFiles": "public/templates/SE_Act/**"
+    },
+    "api/download-bocw.ts":               { "maxDuration": 30 },
+    "api/download-equal-remuneration.ts":  { "maxDuration": 30 },
+    "api/download-ismw.ts":               { "maxDuration": 30 },
     "api/download-maternity-benefit.ts":  { "maxDuration": 30 },
-    "api/download-posh.ts":        { "maxDuration": 30 },
-    "api/health.ts":               { "maxDuration": 10 }
+    "api/download-posh.ts":              { "maxDuration": 30 },
+    "api/health.ts":                     { "maxDuration": 10 }
   },
   "rewrites": [
     { "source": "/api/generate-apprentices",        "destination": "/api/generate-apprentices" },
