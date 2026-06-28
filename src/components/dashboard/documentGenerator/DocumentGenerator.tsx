@@ -10,11 +10,13 @@
  */
 
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import JSZip from 'jszip';
 import * as XLSX from 'xlsx';
 import styles from './DocumentGenerator.module.css';
 import LiveRegister from './LiveRegister';
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES & CONSTANTS
@@ -826,6 +828,8 @@ function Step5({ company, selectedActs, info, onRestart }: {
   info: { fileCount: number; rowCount: number; zipUrl: string };
   onRestart: () => void;
 }) {
+  const navigate = useNavigate();
+
   const reDownload = () => {
     const a = document.createElement('a');
     a.href = info.zipUrl;
@@ -874,11 +878,34 @@ function Step5({ company, selectedActs, info, onRestart }: {
         })}
       </div>
 
+      <div style={{
+        background: '#F5F3FF', border: '1.5px solid #C4B5FD',
+        borderRadius: 12, padding: '14px 18px', marginBottom: 16,
+        display: 'flex', alignItems: 'center', gap: 14,
+      }}>
+        <span style={{ fontSize: 22 }}>🛡️</span>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: '#0F0A1E', marginBottom: 3 }}>
+            Ready for validation?
+          </div>
+          <div style={{ fontSize: 11.5, color: '#8B85A8' }}>
+            Proceed to the 3-level compliance audit to certify your registers.
+          </div>
+        </div>
+        <button
+          className={styles.btnPrimary}
+          onClick={() => navigate('/dashboard/validation')}
+          style={{ whiteSpace: 'nowrap' }}
+        >
+          Start Validation →
+        </button>
+      </div>
+
       <div className={styles.stepActions}>
         <button className={styles.btnSecondary} onClick={reDownload}>
           ⬇ Re-download ZIP
         </button>
-        <button className={styles.btnPrimary} onClick={onRestart}>
+        <button className={styles.btnSecondary} onClick={onRestart}>
           + Start New Audit
         </button>
       </div>

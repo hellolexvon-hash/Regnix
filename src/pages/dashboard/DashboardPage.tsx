@@ -5,13 +5,15 @@ import { DashboardSidebar } from './DashboardSidebar';
 import { DashboardHeader } from './DashboardHeader';
 import ComplianceCalendar from '../../components/dashboard/comlianceCalender/ComplianceCalendar';
 import DocumentGenerator from '../../components/dashboard/documentGenerator/DocumentGenerator';
+import ValidationPage from '../../components/dashboard/documentGenerator/ValidationPage';
 import DashboardHome from './DashboardHome';
 import styles from './DashboardPage.module.css';
 
-function renderView(view: string) {
-  switch (view) {
+function renderView(section: string) {
+  switch (section) {
     case 'calendar':   return <ComplianceCalendar />;
     case 'generator':  return <DocumentGenerator />;
+    case 'validation': return <ValidationPage />;
     default:           return <DashboardHome />;
   }
 }
@@ -23,7 +25,10 @@ export default function DashboardPage() {
   const [collapsed, setCollapsed] = useState(false);
   const [aiOpen, setAiOpen] = useState(false); // default closed to give DocumentGenerator more space
 
-  const activeView = params.sub || params.section || 'dashboard';
+  // Use params.section for the top-level view — NOT params.sub.
+  // This ensures /dashboard/validation/level1 still renders ValidationPage,
+  // which internally reads params.sub to show the correct sub-screen.
+  const activeView = params.section || 'dashboard';
 
   const handleNavigate = (id: string) => {
     if (id === 'dashboard') navigate('/dashboard');
