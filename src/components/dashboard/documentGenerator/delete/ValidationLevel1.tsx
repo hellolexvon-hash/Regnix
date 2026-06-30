@@ -1,400 +1,322 @@
 /**
  * ValidationLevel1.tsx
- *
  * Level 1 — Document Upload & Verification
- *
- * Flow:
- *  1. Drag-drop / click upload area — accepts multiple files (xlsx, pdf, zip)
- *  2. Each file appears in a list with:
- *     - View (inline spreadsheet preview)
- *     - Edit / Rename
- *     - Fix / Mark as Verified (turns the row green)
- *  3. Progress bar: N of M documents fixed
- *  4. Digital Signature canvas — draw signature, or clear & redo
- *  5. Continue → Level 2 (enabled once all docs fixed AND signature drawn)
+ * Signature: type full name + agree self-declaration (no canvas)
  */
 
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import * as XLSX from 'xlsx';
 import s from './Validation.module.css';
-
-export interface UploadedDoc {
-  id: string;
-  file: File;
-  name: string;     // display name (editable)
-  fixed: boolean;   // verified / approved
-  sheets?: SheetPreview[];
-}
-
-interface SheetPreview {
-  name: string;
-  headers: string[];
-  rows: (string | number | null)[][];
-}
+import type { UploadedDoc, SheetPreview } from './validationStore';
 
 interface ValidationLevel1Props {
   onComplete: (docs: UploadedDoc[], signatureDataUrl: string) => void;
-  onBack: () => void;
+  onBack:     () => void;
 }
 
-// ── XLSX preview parser ────────────────────────────────────────────────────────
 async function parseXlsx(file: File): Promise<SheetPreview[]> {
-  const buf  = await file.arrayBuffer();
-  const wb   = XLSX.read(buf, { type: 'array' });
+  const buf = await file.arrayBuffer();
+  const wb  = XLSX.read(buf, { type: 'array' });
   return wb.SheetNames.map(name => {
-    const ws      = wb.Sheets[name];
-    const raw     = XLSX.utils.sheet_to_json<(string | number | null)[]>(ws, { header: 1, defval: null });
-    const headers = (raw[0] ?? []).map(c => String(c ?? ''));
-    const rows    = (raw.slice(1) as (string | number | null)[][]).slice(0, 80);
-    return { name, headers, rows };
+    const ws  = wb.Sheets[name];
+    const raw = XLSX.utils.sheet_to_json<(string | number | null)[]>(ws, { header: 1, defval: null });
+    return {
+      name,
+      headers: ((raw[0] ?? []) as any[]).map((c: any) => String(c ?? '')),
+      rows:    (raw.slice(1) as (string | number | null)[][]).slice(0, 80),
+    };
   });
 }
 
-// ── Signature canvas hook ──────────────────────────────────────────────────────
-function useSignatureCanvas(canvasRef: React.RefObject<HTMLCanvasElement>) {
-  const drawing    = useRef(false);
-  const hasMark    = useRef(false);
-  const [hasSign, setHasSign] = useState(false);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d')!;
-    ctx.lineWidth   = 2;
-    ctx.strokeStyle = '#1E1040';
-    ctx.lineCap     = 'round';
-    ctx.lineJoin    = 'round';
-
-    function getPos(e: MouseEvent | TouchEvent) {
-      const rect = canvas.getBoundingClientRect();
-      const src  = 'touches' in e ? e.touches[0] : e;
-      return { x: src.clientX - rect.left, y: src.clientY - rect.top };
-    }
-    function start(e: MouseEvent | TouchEvent) {
-      e.preventDefault();
-      drawing.current = true;
-      const { x, y } = getPos(e);
-      ctx.beginPath(); ctx.moveTo(x, y);
-    }
-    function move(e: MouseEvent | TouchEvent) {
-      if (!drawing.current) return;
-      e.preventDefault();
-      const { x, y } = getPos(e);
-      ctx.lineTo(x, y); ctx.stroke();
-      hasMark.current = true;
-      setHasSign(true);
-    }
-    function end() { drawing.current = false; }
-
-    canvas.addEventListener('mousedown', start);
-    canvas.addEventListener('mousemove', move);
-    canvas.addEventListener('mouseup', end);
-    canvas.addEventListener('touchstart', start, { passive: false });
-    canvas.addEventListener('touchmove', move, { passive: false });
-    canvas.addEventListener('touchend', end);
-    return () => {
-      canvas.removeEventListener('mousedown', start);
-      canvas.removeEventListener('mousemove', move);
-      canvas.removeEventListener('mouseup', end);
-      canvas.removeEventListener('touchstart', start);
-      canvas.removeEventListener('touchmove', move);
-      canvas.removeEventListener('touchend', end);
-    };
-  }, [canvasRef]);
-
-  function clear() {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    canvas.getContext('2d')!.clearRect(0, 0, canvas.width, canvas.height);
-    hasMark.current = false;
-    setHasSign(false);
-  }
-
-  return { hasSign, clear };
-}
-
-// ── Component ─────────────────────────────────────────────────────────────────
 export default function ValidationLevel1({ onComplete, onBack }: ValidationLevel1Props) {
-  const [docs, setDocs]             = useState<UploadedDoc[]>([]);
-  const [dragging, setDragging]     = useState(false);
-  const [previewId, setPreviewId]   = useState<string | null>(null);
-  const [renameId, setRenameId]     = useState<string | null>(null);
-  const [renameTmp, setRenameTmp]   = useState('');
+  const [docs, setDocs]               = useState<UploadedDoc[]>([]);
+  const [activeId, setActiveId]       = useState<string | null>(null);
   const [activeSheet, setActiveSheet] = useState(0);
-  const [sigDone, setSigDone]       = useState(false);
-  const fileRef   = useRef<HTMLInputElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const { hasSign, clear: clearSig } = useSignatureCanvas(canvasRef);
+  const [editingId, setEditingId]     = useState<string | null>(null);
+  const [editName, setEditName]       = useState('');
+  const [dragging, setDragging]       = useState(false);
 
-  const fixedCount = docs.filter(d => d.fixed).length;
-  const allFixed   = docs.length > 0 && fixedCount === docs.length;
-  const canContinue = allFixed && sigDone;
+  // Signature state
+  const [sigName, setSigName]         = useState('');
+  const [sigDecl, setSigDecl]         = useState(false);
+  const [sigApplied, setSigApplied]   = useState(false);
 
-  // ── File ingestion ───────────────────────────────────────────────────────────
-  async function addFiles(files: FileList | File[]) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const fixedCount  = docs.filter(d => d.fixed).length;
+  const allFixed    = docs.length > 0 && fixedCount === docs.length;
+  const sigValid    = sigName.trim().length >= 3 && sigDecl;
+  const canContinue = allFixed && sigApplied;
+  const selectedDoc = docs.find(d => d.id === activeId);
+
+  const addFiles = useCallback(async (files: FileList | File[]) => {
     const arr = Array.from(files);
     const newDocs: UploadedDoc[] = await Promise.all(
       arr.map(async file => {
-        const id = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
-        let sheets: SheetPreview[] | undefined;
-        if (file.name.match(/\.(xlsx|xls)$/i)) {
-          try { sheets = await parseXlsx(file); } catch { /* ignore */ }
-        }
+        const id     = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        const sheets = file.name.match(/\.xlsx?$/i) ? await parseXlsx(file).catch(() => undefined) : undefined;
         return { id, file, name: file.name.replace(/\.[^.]+$/, ''), fixed: false, sheets };
       }),
     );
-    setDocs(prev => [...prev, ...newDocs]);
-  }
-
-  function onDrop(e: React.DragEvent) {
-    e.preventDefault(); setDragging(false);
-    addFiles(e.dataTransfer.files);
-  }
+    setDocs(prev => {
+      const merged = [...prev, ...newDocs];
+      if (!activeId && merged.length) setActiveId(merged[0].id);
+      return merged;
+    });
+  }, [activeId]);
 
   function toggleFix(id: string) {
     setDocs(prev => prev.map(d => d.id === id ? { ...d, fixed: !d.fixed } : d));
   }
   function removeDoc(id: string) {
-    setDocs(prev => prev.filter(d => d.id !== id));
-    if (previewId === id) setPreviewId(null);
+    setDocs(prev => {
+      const next = prev.filter(d => d.id !== id);
+      if (activeId === id) setActiveId(next[0]?.id ?? null);
+      return next;
+    });
   }
-  function startRename(doc: UploadedDoc) {
-    setRenameId(doc.id); setRenameTmp(doc.name);
+  function startEdit(doc: UploadedDoc) { setEditingId(doc.id); setEditName(doc.name); }
+  function saveEdit(id: string) {
+    setDocs(prev => prev.map(d => d.id === id ? { ...d, name: editName.trim() || d.name } : d));
+    setEditingId(null);
   }
-  function commitRename() {
-    if (!renameId) return;
-    setDocs(prev => prev.map(d => d.id === renameId ? { ...d, name: renameTmp.trim() || d.name } : d));
-    setRenameId(null);
+  function applySignature() {
+    if (!sigValid) return;
+    setSigApplied(true);
   }
-  function confirmSignature() {
-    if (!hasSign) return;
-    setSigDone(true);
-  }
-  function resetSignature() {
-    clearSig(); setSigDone(false);
-  }
-
   function handleContinue() {
-    const dataUrl = canvasRef.current?.toDataURL() ?? '';
-    onComplete(docs, dataUrl);
+    if (!canContinue) return;
+    onComplete(docs, `typed:${sigName.trim()}`);
   }
-
-  const previewDoc = docs.find(d => d.id === previewId);
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault(); setDragging(false);
+    if (e.dataTransfer.files.length) addFiles(e.dataTransfer.files);
+  }
 
   return (
     <div className={s.page}>
+
       {/* Step bar */}
       <div className={s.stepBar}>
-        {(['L1 Upload', 'L2 Compare', 'L3 Audit'] as const).map((label, i) => (
+        {(['L1 Upload & Sign', 'L2 AI Validation', 'L3 Audit'] as const).map((label, i) => (
           <div key={label} className={s.stepBarItem}>
-            {i > 0 && <div className={`${s.stepLine} ${i === 0 ? s.stepLineDone : ''}`} />}
+            {i > 0 && <div className={s.stepLine} />}
             <div className={`${s.stepDot} ${i === 0 ? s.stepDotActive : ''}`}>{i + 1}</div>
             <span className={`${s.stepLabel} ${i === 0 ? s.stepLabelActive : ''}`}>{label}</span>
           </div>
         ))}
       </div>
 
-      {/* Header */}
       <div className={s.stepCard}>
         <div className={s.stepCardHeader}>
           <div className={s.stepCardIcon}>📁</div>
-          <div>
-            <h2 className={s.stepCardTitle}>Level 1 — Document Upload & Verification</h2>
+          <div className={s.stepCardHeaderText}>
+            <h2 className={s.stepCardTitle}>Level 1 — Document Upload &amp; Verification</h2>
             <p className={s.stepCardSub}>
-              Upload your compliance registers, preview each file, rename if needed, and mark as verified. Sign digitally to complete Level 1.
+              Upload all statutory registers. Preview, rename, and mark each as verified before signing.
             </p>
           </div>
+          {docs.length > 0 && (
+            <div className={s.l2VerifyCount}>
+              <span className={s.l2VerifyNum}>{fixedCount}/{docs.length}</span>
+              <span className={s.l2VerifyLabel}>verified</span>
+            </div>
+          )}
         </div>
 
         {/* Progress */}
         {docs.length > 0 && (
-          <div className={s.uploadProgress}>
-            <span className={s.uploadProgressText}>
-              {fixedCount} of {docs.length} document{docs.length !== 1 ? 's' : ''} verified
-            </span>
-            <span className={s.uploadProgressSub}>
-              {allFixed ? '✓ All verified — sign below to continue' : 'Mark each document as verified after reviewing'}
-            </span>
+          <div className={s.l1Progress}>
+            <div className={s.l1ProgressBar}>
+              <div className={s.l1ProgressFill} style={{ width: `${(fixedCount / docs.length) * 100}%` }} />
+            </div>
+            <span className={s.l1ProgressLabel}>{fixedCount} / {docs.length} verified</span>
           </div>
         )}
 
-        {/* Drop zone */}
+        {/* Upload zone */}
         <div
           className={`${s.dropzone} ${dragging ? s.dropzoneDrag : ''}`}
           onDragOver={e => { e.preventDefault(); setDragging(true); }}
           onDragLeave={() => setDragging(false)}
-          onDrop={onDrop}
-          onClick={() => fileRef.current?.click()}
+          onDrop={handleDrop}
+          onClick={() => fileInputRef.current?.click()}
         >
-          <div className={s.dropzoneIcon}>📂</div>
-          <div className={s.dropzoneText}>Drop registers here or click to browse</div>
-          <div className={s.dropzoneSub}>Accepts .xlsx, .xls, .pdf, .zip</div>
-          <input
-            ref={fileRef} type="file" multiple hidden
-            accept=".xlsx,.xls,.pdf,.zip"
-            onChange={e => e.target.files && addFiles(e.target.files)}
+          <input ref={fileInputRef} type="file" multiple accept=".xlsx,.xls,.pdf,.zip"
+            style={{ display: 'none' }}
+            onChange={e => { if (e.target.files?.length) addFiles(e.target.files); e.target.value = ''; }}
           />
+          <div className={s.dropzoneIcon}>📂</div>
+          <div className={s.dropzoneText}>Drop register files here, or click to browse</div>
+          <div className={s.dropzoneSub}>.xlsx · .xls · .pdf · .zip — multiple files supported</div>
         </div>
 
-        {/* Document list */}
+        {/* Doc list + preview */}
         {docs.length > 0 && (
-          <div className={s.docList}>
-            <div className={s.sectionDivider}>Uploaded Documents ({docs.length})</div>
-            {docs.map(doc => (
-              <div key={doc.id} className={`${s.docRow} ${doc.fixed ? s.fixed : ''}`}>
-                <div className={s.docRowIcon}>
-                  {doc.file.name.match(/\.pdf$/i) ? '📄' : doc.sheets ? '📊' : '🗂️'}
-                </div>
-                <div className={s.docRowBody}>
-                  {renameId === doc.id ? (
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      <input
-                        className={s.renameInput}
-                        value={renameTmp}
-                        onChange={e => setRenameTmp(e.target.value)}
-                        onKeyDown={e => e.key === 'Enter' && commitRename()}
-                        autoFocus
-                      />
-                      <button className={`${s.iconBtn} ${s.iconBtnGreen}`} onClick={commitRename}>✓</button>
-                    </div>
-                  ) : (
-                    <>
-                      <div className={s.docRowName}>{doc.name}</div>
-                      <div className={s.docRowMeta}>
-                        {(doc.file.size / 1024).toFixed(1)} KB
-                        {doc.sheets && ` · ${doc.sheets.length} sheet${doc.sheets.length !== 1 ? 's' : ''}`}
-                      </div>
-                    </>
-                  )}
-                </div>
-
-                <div className={s.docRowActions}>
-                  {/* View */}
-                  {doc.sheets && (
-                    <button
-                      className={s.iconBtn}
-                      title="Preview"
-                      onClick={() => { setPreviewId(previewId === doc.id ? null : doc.id); setActiveSheet(0); }}
-                    >
-                      👁
-                    </button>
-                  )}
-                  {/* Rename */}
-                  <button
-                    className={s.iconBtn} title="Rename"
-                    onClick={() => startRename(doc)}
-                  >
-                    ✏️
-                  </button>
-                  {/* Fix / Verify */}
-                  <button
-                    className={`${s.iconBtn} ${doc.fixed ? s.iconBtnGreen : ''}`}
-                    title={doc.fixed ? 'Unmark as verified' : 'Mark as verified'}
-                    onClick={() => toggleFix(doc.id)}
-                  >
-                    {doc.fixed ? '✅' : '☑️'}
-                  </button>
-                  {/* Remove */}
-                  <button
-                    className={`${s.iconBtn} ${s.iconBtnRed}`} title="Remove"
-                    onClick={() => removeDoc(doc.id)}
-                  >
-                    🗑
-                  </button>
-                </div>
-
-                {doc.fixed && <span className={s.fixedBadge}>✓ Verified</span>}
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Inline preview */}
-        {previewDoc?.sheets && (
-          <div className={s.splitPane} style={{ maxHeight: 320 }}>
-            <div className={s.splitPaneHeader}>
-              <span className={s.splitPaneTitle}>{previewDoc.name}</span>
-              <span className={s.splitPaneBadge}>Preview</span>
-              <button
-                className={s.iconBtn} style={{ marginLeft: 'auto' }}
-                onClick={() => setPreviewId(null)}
-              >✕</button>
-            </div>
-            <div className={s.sheetTabs}>
-              {previewDoc.sheets.map((sh, i) => (
-                <button
-                  key={i}
-                  className={`${s.sheetTab} ${activeSheet === i ? s.sheetTabActive : ''}`}
-                  onClick={() => setActiveSheet(i)}
+          <div className={s.l1Layout}>
+            {/* Left */}
+            <div className={s.l1DocList}>
+              {docs.map(doc => (
+                <div
+                  key={doc.id}
+                  className={`${s.l1DocRow} ${activeId === doc.id ? s.l1DocRowActive : ''} ${doc.fixed ? s.l1DocRowFixed : ''}`}
+                  onClick={() => { setActiveId(doc.id); setActiveSheet(0); }}
                 >
-                  {sh.name}
-                </button>
+                  <span className={s.l1DocIcon}>{doc.file.name.match(/\.pdf$/i) ? '📄' : '📊'}</span>
+                  {editingId === doc.id ? (
+                    <input className={s.l1DocNameEdit} value={editName} autoFocus
+                      onChange={e => setEditName(e.target.value)}
+                      onBlur={() => saveEdit(doc.id)}
+                      onKeyDown={e => { if (e.key === 'Enter') saveEdit(doc.id); if (e.key === 'Escape') setEditingId(null); }}
+                      onClick={e => e.stopPropagation()}
+                    />
+                  ) : (
+                    <span className={s.l1DocName} title={doc.name}>{doc.name}</span>
+                  )}
+                  <div className={s.l1DocActions}>
+                    {!editingId && (
+                      <button className={s.l1ActionBtn} title="Rename"
+                        onClick={e => { e.stopPropagation(); startEdit(doc); }}>✏️</button>
+                    )}
+                    <button
+                      className={`${s.l1ActionBtn} ${doc.fixed ? s.l1ActionBtnFixed : s.l1ActionBtnFix}`}
+                      onClick={e => { e.stopPropagation(); toggleFix(doc.id); }}
+                    >{doc.fixed ? '✓' : 'Fix'}</button>
+                    <button className={s.l1ActionBtn}
+                      onClick={e => { e.stopPropagation(); removeDoc(doc.id); }}>✕</button>
+                  </div>
+                </div>
               ))}
             </div>
-            <div className={s.previewPane}>
-              <table className={s.sheetTable}>
-                <thead>
-                  <tr>{previewDoc.sheets[activeSheet]?.headers.map((h, i) => <th key={i}>{h || `Col ${i + 1}`}</th>)}</tr>
-                </thead>
-                <tbody>
-                  {previewDoc.sheets[activeSheet]?.rows.map((row, ri) => (
-                    <tr key={ri}>
-                      {row.map((cell, ci) => <td key={ci}>{cell ?? ''}</td>)}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+
+            {/* Right: preview */}
+            <div className={s.l1Preview}>
+              {selectedDoc?.sheets ? (
+                <>
+                  {selectedDoc.sheets.length > 1 && (
+                    <div className={s.sheetTabs}>
+                      {selectedDoc.sheets.map((sh, i) => (
+                        <button key={i}
+                          className={`${s.sheetTab} ${activeSheet === i ? s.sheetTabActive : ''}`}
+                          onClick={() => setActiveSheet(i)}>{sh.name}</button>
+                      ))}
+                    </div>
+                  )}
+                  <div className={s.previewPane}>
+                    <table className={s.sheetTable}>
+                      <thead><tr>
+                        {selectedDoc.sheets[activeSheet]?.headers.map((h, i) => <th key={i}>{h || `Col ${i + 1}`}</th>)}
+                      </tr></thead>
+                      <tbody>
+                        {selectedDoc.sheets[activeSheet]?.rows.map((row, ri) => (
+                          <tr key={ri}>{row.map((cell, ci) => <td key={ci}>{cell ?? ''}</td>)}</tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className={s.l1FixBar}>
+                    <button className={selectedDoc.fixed ? s.btnSecondary : s.btnGreen}
+                      onClick={() => toggleFix(selectedDoc.id)} style={{ flex: 1 }}>
+                      {selectedDoc.fixed ? '✓ Verified — click to unmark' : '✓ Mark as Verified'}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <div className={s.previewEmpty}>
+                  <div className={s.previewEmptyIcon}>{selectedDoc?.file.name.match(/\.pdf$/i) ? '📄' : '📊'}</div>
+                  <div className={s.previewEmptyText}>
+                    {selectedDoc ? 'PDF preview not available. Mark as verified below.' : 'Select a document to preview'}
+                  </div>
+                  {selectedDoc && (
+                    <button className={selectedDoc.fixed ? s.btnSecondary : s.btnGreen}
+                      style={{ marginTop: 12 }} onClick={() => toggleFix(selectedDoc.id)}>
+                      {selectedDoc.fixed ? '✓ Verified' : '✓ Mark as Verified'}
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         )}
 
-        {/* Digital Signature */}
+        {/* ── Digital Signature — type name + declaration ─────────────────── */}
         {allFixed && (
-          <div>
-            <div className={s.sectionDivider}>Digital Signature</div>
-            {sigDone ? (
-              <div className={s.sigDone}>
-                <span style={{ fontSize: 24 }}>✍️</span>
-                <div>
-                  <div className={s.sigDoneText}>Signature applied</div>
-                  <div style={{ fontSize: 11, color: '#047857' }}>Your digital signature has been recorded.</div>
+          <div className={s.sigSection}>
+            <div className={s.sectionDivider}>Digital Signature &amp; Declaration</div>
+
+            {!sigApplied ? (
+              <>
+                <p className={s.stepCardSub} style={{ marginBottom: 14 }}>
+                  Type your full name as it appears in official records. This constitutes your digital signature under the IT Act 2000.
+                </p>
+
+                {/* Name input */}
+                <div className={s.sigNameWrap}>
+                  <label className={s.sigNameLabel}>Full Name (Authorised Signatory)</label>
+                  <input
+                    className={s.sigNameInput}
+                    type="text"
+                    placeholder="e.g. Amit Kumar"
+                    value={sigName}
+                    onChange={e => setSigName(e.target.value)}
+                    maxLength={80}
+                  />
+                  {sigName.trim().length > 0 && (
+                    <div className={s.sigNamePreview} style={{ fontFamily: 'Georgia, serif' }}>
+                      {sigName}
+                    </div>
+                  )}
                 </div>
-                <button className={s.btnSecondary} style={{ marginLeft: 'auto' }} onClick={resetSignature}>
-                  Redo
-                </button>
-              </div>
-            ) : (
-              <div className={s.sigArea}>
-                <div className={s.sigLabel}>Draw your signature below</div>
-                <canvas
-                  ref={canvasRef}
-                  className={s.sigCanvas}
-                  width={480}
-                  height={120}
-                />
-                <div className={s.sigSub}>Use mouse or touch to sign</div>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button className={s.btnSecondary} onClick={clearSig}>Clear</button>
-                  <button className={s.btnGreen} disabled={!hasSign} onClick={confirmSignature}>
-                    Apply Signature →
+
+                {/* Declaration checkbox */}
+                <label className={s.sigDeclRow}>
+                  <input type="checkbox" checked={sigDecl} onChange={e => setSigDecl(e.target.checked)} />
+                  <span className={s.sigDeclText}>
+                    I, <strong>{sigName.trim() || '[ your name ]'}</strong>, hereby declare that all documents uploaded are authentic, accurate, and created in compliance with applicable Indian labour laws. I understand that this typed name constitutes my legal digital signature and that any misrepresentation is subject to action under the IT Act 2000 and applicable labour legislation.
+                  </span>
+                </label>
+
+                <div className={s.sigActions}>
+                  <button className={s.btnPrimary} disabled={!sigValid} onClick={applySignature}>
+                    ✍ Apply Digital Signature →
                   </button>
                 </div>
+              </>
+            ) : (
+              <div className={s.sigAppliedCard}>
+                <div className={s.sigAppliedIcon}>✅</div>
+                <div>
+                  <div className={s.sigAppliedName} style={{ fontFamily: 'Georgia, serif' }}>{sigName}</div>
+                  <div className={s.sigAppliedMeta}>
+                    Digitally signed on {new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })} · IT Act 2000
+                  </div>
+                </div>
+                <button className={s.sigResetBtn} onClick={() => { setSigApplied(false); setSigDecl(false); }}>
+                  Change
+                </button>
               </div>
             )}
           </div>
         )}
 
+        {/* Actions */}
         <div className={s.stepActions}>
           <button className={s.btnSecondary} onClick={onBack}>← Back</button>
-          <button
-            className={s.btnPrimary}
-            disabled={!canContinue}
-            onClick={handleContinue}
-            title={!canContinue ? 'Verify all documents and apply signature first' : undefined}
-          >
+          <button className={s.btnPrimary} disabled={!canContinue} onClick={handleContinue}
+            title={!canContinue ? (docs.length === 0 ? 'Upload documents first' : !allFixed ? 'Verify all documents' : 'Apply digital signature') : ''}>
             Continue to Level 2 →
           </button>
         </div>
+
+        {!canContinue && docs.length > 0 && (
+          <div className={s.validationBanner}>
+            <span className={s.validationHint}>
+              {!allFixed
+                ? `Verify all ${docs.length} documents (${fixedCount} done)`
+                : !sigApplied ? 'Apply your digital signature to continue' : ''}
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );

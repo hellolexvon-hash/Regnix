@@ -4,75 +4,89 @@
  * Level 3 — Auditor Review
  *
  * States:
- *  'waiting'  — Documents submitted, auditor notified. Animated progress steps.
- *  'approved' — Auditor has approved. Download audit report button.
- *  'rejected' — Auditor has returned with comments. (future)
+ *   waiting  → Animated progress steps auto-advance via timer
+ *   approved → Green hero + Download Audit Report button
  *
- * In production: poll your backend for status updates.
- * For now, a "Simulate Approval" button lets you demo the approved state.
+ * Production: replace the "Simulate Approval" button with a backend poll.
  */
 
 import { useState, useEffect } from 'react';
 import s from './Validation.module.css';
 
 interface ValidationLevel3Props {
-  companyName?: string;
-  submittedAt?: Date;
-  /** Pass true from parent once backend confirms approval */
-  isApproved?: boolean;
-  /** Called when user downloads the audit report */
+  companyName?:      string;
+  submittedAt?:      Date;
+  isApproved?:       boolean;
+  onApprove?:        () => void;   // called when approval is simulated / received
   onDownloadReport?: () => void;
-  onBack?: () => void;
+  onBack?:           () => void;
 }
 
-type AuditStep = {
-  label: string;
-  sublabel: string;
-  state: 'done' | 'active' | 'pending';
-};
+type StepState = 'done' | 'active' | 'pending';
 
-function buildSteps(minutesElapsed: number): AuditStep[] {
+interface AuditStep {
+  label:    string;
+  sublabel: string;
+  state:    StepState;
+}
+
+function buildSteps(minutes: number): AuditStep[] {
   return [
     {
-      label: 'Documents submitted',
+      label:    'Documents submitted',
       sublabel: 'All compliance registers received',
-      state: 'done',
+      state:    'done',
     },
     {
-      label: 'Auditor assigned',
-      sublabel: minutesElapsed >= 2 ? 'Assigned to your compliance auditor' : 'Assigning…',
-      state: minutesElapsed >= 2 ? 'done' : minutesElapsed >= 0 ? 'active' : 'pending',
+      label:    'Auditor assigned',
+      sublabel: minutes >= 2 ? 'Assigned to your compliance auditor' : 'Assigning auditor…',
+      state:    minutes >= 2 ? 'done' : 'active',
     },
     {
-      label: 'Initial review',
-      sublabel: minutesElapsed >= 5 ? 'Documents reviewed for completeness' : 'Reviewing document completeness',
-      state: minutesElapsed >= 5 ? 'done' : minutesElapsed >= 2 ? 'active' : 'pending',
+      label:    'Initial review',
+      sublabel: minutes >= 5 ? 'Documents reviewed for completeness' : 'Reviewing document completeness',
+      state:    minutes >= 5 ? 'done' : minutes >= 2 ? 'active' : 'pending',
     },
     {
-      label: 'Statutory check',
-      sublabel: minutesElapsed >= 15 ? 'Verified against statutory requirements' : 'Cross-checking with statutory requirements',
-      state: minutesElapsed >= 15 ? 'done' : minutesElapsed >= 5 ? 'active' : 'pending',
+      label:    'Statutory check',
+      sublabel: minutes >= 15 ? 'Verified against statutory requirements' : 'Cross-checking statutory requirements',
+      state:    minutes >= 15 ? 'done' : minutes >= 5 ? 'active' : 'pending',
     },
     {
-      label: 'Final report',
+      label:    'Final report',
       sublabel: 'Awaiting auditor sign-off',
-      state: 'pending',
+      state:    'pending',
     },
   ];
 }
 
+function StepBar3({ allDone }: { allDone: boolean }) {
+  return (
+    <div className={s.stepBar}>
+      {(['L1 Upload', 'L2 Compare', 'L3 Audit'] as const).map((label, i) => (
+        <div key={label} className={s.stepBarItem}>
+          {i > 0 && <div className={`${s.stepLine} ${i <= (allDone ? 3 : 1) ? s.stepLineDone : ''}`} />}
+          <div className={`${s.stepDot} ${i < 2 || allDone ? s.stepDotDone : s.stepDotActive}`}>
+            {i < 2 || allDone ? '✓' : '3'}
+          </div>
+          <span className={`${s.stepLabel} ${i === 2 && !allDone ? s.stepLabelActive : ''}`}>{label}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function ValidationLevel3({
-  companyName = 'Your Company',
+  companyName      = 'Your Company',
   submittedAt,
-  isApproved = false,
+  isApproved       = false,
+  onApprove,
   onDownloadReport,
   onBack,
 }: ValidationLevel3Props) {
-  const [elapsed, setElapsed]       = useState(0);   // seconds since submission
-  const [approved, setApproved]     = useState(isApproved);
-  const [demoMode, setDemoMode]     = useState(false);
+  const [elapsed,  setElapsed]  = useState(0);
+  const [approved, setApproved] = useState(isApproved);
 
-  // Count up elapsed time for demo animation
   useEffect(() => {
     if (approved) return;
     const id = setInterval(() => setElapsed(e => e + 1), 1000);
@@ -83,52 +97,45 @@ export default function ValidationLevel3({
     if (isApproved) setApproved(true);
   }, [isApproved]);
 
-  const minutesElapsed = Math.floor(elapsed / 60);
-  const steps = buildSteps(minutesElapsed);
-
-  function formatTime(d: Date) {
-    return d.toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
+  function handleApprove() {
+    setApproved(true);
+    onApprove?.();
   }
 
+  const minutes = Math.floor(elapsed / 60);
+  const steps   = buildSteps(minutes);
+
+  // ── Approved state ──────────────────────────────────────────────────────
   if (approved) {
     return (
       <div className={s.page}>
-        <div className={s.stepBar}>
-          {(['L1 Upload', 'L2 Compare', 'L3 Audit'] as const).map((label, i) => (
-            <div key={label} className={s.stepBarItem}>
-              {i > 0 && <div className={`${s.stepLine} ${s.stepLineDone}`} />}
-              <div className={`${s.stepDot} ${s.stepDotDone}`}>✓</div>
-              <span className={s.stepLabel}>{label}</span>
-            </div>
-          ))}
-        </div>
+        <StepBar3 allDone />
 
         <div className={s.stepCard}>
           <div className={s.approvedHero}>
-            <div className={s.approvedOrb}>✅</div>
+            <div className={s.approvedOrb}>
+              <span style={{ fontSize: 36 }}>✅</span>
+            </div>
             <h2 className={s.approvedTitle}>Audit Report Approved!</h2>
             <p className={s.approvedSub}>
-              Your compliance audit for <strong>{companyName}</strong> has been reviewed and approved by the auditor.
-              All 3 levels of validation are now complete.
+              Your compliance audit for <strong>{companyName}</strong> has been reviewed and approved.
+              All 3 levels of validation are complete.
             </p>
 
-            <button
-              className={s.downloadReportBtn}
-              onClick={onDownloadReport}
-            >
-              <span style={{ fontSize: 20 }}>📋</span>
+            <button className={s.downloadReportBtn} onClick={onDownloadReport}>
+              <span style={{ fontSize: 18 }}>📋</span>
               Download Audit Report
             </button>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%', maxWidth: 420 }}>
-              {([
-                { icon: '✓', label: 'Level 1', desc: 'Documents uploaded & signed', color: '#059669' },
-                { icon: '✓', label: 'Level 2', desc: 'Live register comparison complete', color: '#059669' },
-                { icon: '✓', label: 'Level 3', desc: 'Auditor review approved', color: '#059669' },
-              ]).map(row => (
-                <div key={row.label} className={s.auditStep} style={{ borderColor: '#A7F3D0', background: '#F0FDF4' }}>
-                  <div className={`${s.auditStepDot} ${s.dotDone}`}>{row.icon}</div>
-                  <div className={s.auditStepText}>{row.label} — {row.desc}</div>
+            <div className={s.approvedChecklist}>
+              {[
+                ['Level 1', 'Documents uploaded & digitally signed'],
+                ['Level 2', 'Live register comparison complete'],
+                ['Level 3', 'Auditor review approved'],
+              ].map(([label, desc]) => (
+                <div key={label} className={`${s.auditStep} ${s.done}`}>
+                  <div className={`${s.auditStepDot} ${s.dotDone}`}>✓</div>
+                  <div className={s.auditStepText}>{label} — {desc}</div>
                 </div>
               ))}
             </div>
@@ -138,52 +145,49 @@ export default function ValidationLevel3({
     );
   }
 
+  // ── Waiting state ───────────────────────────────────────────────────────
   return (
     <div className={s.page}>
-      {/* Step bar */}
-      <div className={s.stepBar}>
-        {(['L1 Upload', 'L2 Compare', 'L3 Audit'] as const).map((label, i) => (
-          <div key={label} className={s.stepBarItem}>
-            {i > 0 && <div className={`${s.stepLine} ${i <= 1 ? s.stepLineDone : ''}`} />}
-            <div className={`${s.stepDot} ${i < 2 ? s.stepDotDone : s.stepDotActive}`}>
-              {i < 2 ? '✓' : '3'}
-            </div>
-            <span className={`${s.stepLabel} ${i === 2 ? s.stepLabelActive : ''}`}>{label}</span>
-          </div>
-        ))}
-      </div>
+      <StepBar3 allDone={false} />
 
       <div className={s.stepCard}>
         <div className={s.stepCardHeader}>
           <div className={s.stepCardIcon}>🏛️</div>
-          <div>
+          <div className={s.stepCardHeaderText}>
             <h2 className={s.stepCardTitle}>Level 3 — Auditor Review</h2>
             <p className={s.stepCardSub}>
               Your documents have been submitted for independent audit review.
-              {submittedAt && ` Submitted on ${formatTime(submittedAt)}.`}
+              {submittedAt && ` Submitted on ${submittedAt.toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}.`}
             </p>
           </div>
         </div>
 
-        {/* Animated waiting state */}
+        {/* Animated waiting orb */}
         <div className={s.auditWait}>
           <div className={s.auditOrb}>
-            🏛️
+            <span style={{ fontSize: 30, position: 'relative', zIndex: 1 }}>🏛️</span>
             <div className={s.auditOrbRing} />
             <div className={s.auditOrbRing2} />
           </div>
+
           <h3 className={s.auditWaitTitle}>Awaiting Auditor Review</h3>
           <p className={s.auditWaitSub}>
             An independent compliance auditor is reviewing your documents.
-            You will receive a notification once the audit report is ready.
+            You will be notified once the audit report is ready.
             This typically takes 1–3 business days.
           </p>
 
           {/* Progress steps */}
           <div className={s.auditSteps}>
             {steps.map((step, i) => (
-              <div key={i} className={`${s.auditStep} ${step.state === 'done' ? s.done : step.state === 'active' ? s.active : ''}`}>
-                <div className={`${s.auditStepDot} ${step.state === 'done' ? s.dotDone : step.state === 'active' ? s.dotActive : s.dotPend}`}>
+              <div
+                key={i}
+                className={`${s.auditStep} ${step.state === 'done' ? s.done : step.state === 'active' ? s.active : ''}`}
+              >
+                <div className={`${s.auditStepDot}
+                  ${step.state === 'done'   ? s.dotDone   : ''}
+                  ${step.state === 'active' ? s.dotActive : ''}
+                  ${step.state === 'pending' ? s.dotPend  : ''}`}>
                   {step.state === 'done' ? '✓' : step.state === 'active' ? '●' : i + 1}
                 </div>
                 <div style={{ flex: 1 }}>
@@ -191,28 +195,28 @@ export default function ValidationLevel3({
                   <div className={s.auditStepTime}>{step.sublabel}</div>
                 </div>
                 {step.state === 'active' && (
-                  <div style={{ fontSize: 10, color: '#7C3AED', fontWeight: 600 }}>In Progress</div>
+                  <div className={s.auditStepInProgress}>In Progress</div>
                 )}
               </div>
             ))}
           </div>
 
-          <div style={{ fontSize: 11, color: '#B0ABCA', marginTop: 8 }}>
-            Time elapsed: {Math.floor(elapsed / 60)}m {elapsed % 60}s
+          <div className={s.auditElapsed}>
+            Time elapsed: {minutes}m {elapsed % 60}s
           </div>
         </div>
 
-        {/* Dev / demo controls */}
-        <div style={{ padding: '12px 16px', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 10, display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{ fontSize: 20 }}>💡</span>
-          <div style={{ flex: 1, fontSize: 11.5, color: '#92400E', lineHeight: 1.5 }}>
-            <strong>Demo:</strong> In production, the approval status updates automatically.
+        {/* Demo / simulate approval */}
+        <div className={s.demoBox}>
+          <span style={{ fontSize: 18 }}>💡</span>
+          <div className={s.demoText}>
+            <strong>Demo mode:</strong> In production, the approval status updates automatically from the backend.
             Click below to simulate auditor approval.
           </div>
           <button
             className={s.btnGreen}
-            style={{ margin: 0, fontSize: 11.5, padding: '7px 14px' }}
-            onClick={() => setApproved(true)}
+            style={{ fontSize: 11.5, padding: '7px 14px', margin: 0 }}
+            onClick={handleApprove}
           >
             Simulate Approval
           </button>

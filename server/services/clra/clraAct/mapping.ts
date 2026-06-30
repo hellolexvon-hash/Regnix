@@ -15,17 +15,27 @@ import { MASTER_COLUMNS, ATTENDANCE_DAY_COLUMNS } from '../../shared/masterColum
 export const CLRA_ACT_COLUMNS = {
 
   // ── ESTABLISHMENT ────────────────────────────────────────────────────────
-  establishmentName:            MASTER_COLUMNS.establishmentName,       // 391 (OA)
+  // FIXED: col 391/392 ("Contractor Name..." / "Name of principal employer and
+  // his address") are EMPTY in every row of the master. Col 30 holds the real
+  // "Name and address of the principal employer" value and is non-empty.
+  establishmentName:            30,                                      // AD — Name and address of the principal employer
   registrationNumber:           MASTER_COLUMNS.registrationNumber,      // 2   (B)
   licenceNumber:                MASTER_COLUMNS.licenceNumber,           // 3   (C)
-  address:                      MASTER_COLUMNS.address,                 // 392 (OB)
+  address:                      30,                                      // AD — reuse col 30 (combined name+address; col 392 is empty)
 
   // ── EMPLOYEE PERSONAL ────────────────────────────────────────────────────
   employeeName:                 101,   // CW — Employee Full Name (fallback; col 401/OK may be empty)
   employeeCode:                 MASTER_COLUMNS.employeeCode,            // 9  (I)
   regnixId:                     20,    // T  — Regnix ID
-  guardianName:                 73,    // BU — Father / Husband Name
-  dateOfBirth:                  87,    // CI — Date of Birth
+  // FIXED: col 73 ("Name and Father's/husband's name") holds shuffled
+  // age/sex data, not a name, in every sampled row. Col 131/132
+  // (PF Nominee Name / Relationship = "Father") is the most reliable
+  // proxy for guardian name available in the master.
+  guardianName:                 131,   // EA — Nominee Name (PF) [proxy; relation usually "Father" — verify col 132 if used for legal forms]
+  // FIXED: col 87 ("Date of Birth (DD-MM-YYYY)") holds marital-status
+  // strings ("Single"/"Married") in every sampled row — not a date.
+  // Col 104 ("Date of Birth") holds the real ISO date in every row.
+  dateOfBirth:                  104,   // CZ — Date of Birth (verified real date data; col 87 is corrupted)
   age:                          74,    // BV — Age and sex / Gender (age field)
   gender:                       516,   // SV — Gender
   maritalStatus:                88,    // CJ — Marital Status

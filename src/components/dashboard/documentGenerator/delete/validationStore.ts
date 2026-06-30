@@ -73,9 +73,7 @@ export function useValidationStore() {
     ..._store,
 
     setLevelState(level: 0 | 1 | 2, state: LevelState) {
-      const next: [LevelState, LevelState, LevelState] = [
-        ..._store.levelStates,
-      ] as [LevelState, LevelState, LevelState];
+      const next: [LevelState, LevelState, LevelState] = [..._store.levelStates] as [LevelState, LevelState, LevelState];
       next[level] = state;
       setField('levelStates', next);
     },

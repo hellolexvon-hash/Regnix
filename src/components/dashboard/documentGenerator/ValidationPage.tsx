@@ -11,11 +11,11 @@
  *   /dashboard/validation/level3     → Level 3 auditor waiting
  *
  * Uses useNavigate + useParams so the browser back button works correctly.
- * DashboardPage already has:  <Route path="/dashboard/:section/:sub" element={<DashboardPage />} />
+ * DashboardPage already has:
+ *   <Route path="/dashboard/:section/:sub" element={<DashboardPage />} />
  * so these sub-paths resolve automatically.
  */
 
-import { useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useValidationStore } from './validationStore';
 import ValidationLanding from './ValidationLanding';
@@ -33,8 +33,8 @@ export default function ValidationPage({
   companyName      = 'Your Company',
   liveRegisterFile = null,
 }: ValidationPageProps) {
-  const navigate   = useNavigate();
-  const { sub }    = useParams<{ sub?: string }>();
+  const navigate = useNavigate();
+  const { sub }  = useParams<{ sub?: string }>();
 
   const {
     levelStates,
@@ -75,7 +75,10 @@ export default function ValidationPage({
     }
   }
 
-  function handleLevel1Complete(docs: Parameters<typeof setUploadedDocs>[0], sig: string) {
+  function handleLevel1Complete(
+    docs: Parameters<typeof setUploadedDocs>[0],
+    sig: string,
+  ) {
     setUploadedDocs(docs);
     setSignatureUrl(sig);
     setLevelState(0, 'done');
@@ -93,8 +96,8 @@ export default function ValidationPage({
   function handleDownloadReport() {
     // Production: fetch signed PDF from backend
     const link     = document.createElement('a');
-    link.href     = '#';
-    link.download = `Audit_Report_${companyName.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.pdf`;
+    link.href      = '#';
+    link.download  = `Audit_Report_${companyName.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.pdf`;
     link.click();
   }
 

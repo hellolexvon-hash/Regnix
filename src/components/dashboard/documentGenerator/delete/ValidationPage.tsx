@@ -2,96 +2,100 @@
  * ValidationPage.tsx
  *
  * Top-level orchestrator for the 3-level compliance validation workflow.
+ * Mounted at /dashboard/validation (and sub-paths via DashboardPage).
  *
- * Manages:
- *  - Which screen is shown (landing | level1 | level2 | level3)
- *  - Carries state across levels (docs, signature, live register file)
- *  - Level state tracking (pending/active/done/waiting)
+ * Routing strategy:
+ *   /dashboard/validation            → landing (level overview)
+ *   /dashboard/validation/level1     → Level 1 upload & verify
+ *   /dashboard/validation/level2     → Level 2 live comparison
+ *   /dashboard/validation/level3     → Level 3 auditor waiting
  *
- * Usage:
- *  <ValidationPage
- *    companyName="Acme Corp"
- *    liveRegisterFile={masterFile}   // optional: the master .xlsx used during generation
- *  />
+ * Uses useNavigate + useParams so the browser back button works correctly.
+ * DashboardPage already has:  <Route path="/dashboard/:section/:sub" element={<DashboardPage />} />
+ * so these sub-paths resolve automatically.
  */
 
-import { useState } from 'react';
-import ValidationLanding, { type LevelState } from './ValidationLanding';
-import ValidationLevel1, { type UploadedDoc } from './ValidationLevel1';
-import ValidationLevel2 from './ValidationLevel2';
-import ValidationLevel3 from './ValidationLevel3';
-
-type Screen = 'landing' | 'level1' | 'level2' | 'level3';
+import { useEffect } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { useValidationStore } from './validationStore';
+import ValidationLanding from './ValidationLanding';
+import ValidationLevel1  from './ValidationLevel1';
+import ValidationLevel2  from './ValidationLevel2';
+import ValidationLevel3  from './ValidationLevel3';
 
 interface ValidationPageProps {
-  companyName?: string;
-  /** The master .xlsx file used during register generation — shown in Level 2 right pane */
+  companyName?:      string;
+  /** The master .xlsx used during register generation — passed into Level 2 right pane */
   liveRegisterFile?: File | null;
 }
 
 export default function ValidationPage({
-  companyName = 'Your Company',
+  companyName      = 'Your Company',
   liveRegisterFile = null,
 }: ValidationPageProps) {
-  const [screen, setScreen]   = useState<Screen>('landing');
-  const [levelStates, setLevelStates] = useState<[LevelState, LevelState, LevelState]>([
-    'pending', 'pending', 'pending',
-  ]);
-  const [uploadedDocs, setUploadedDocs]     = useState<UploadedDoc[]>([]);
-  const [signatureUrl, setSignatureUrl]     = useState<string>('');
-  const [submittedAt, setSubmittedAt]       = useState<Date | undefined>();
-  const [isApproved, setIsApproved]         = useState(false);
+  const navigate   = useNavigate();
+  const { sub }    = useParams<{ sub?: string }>();
 
-  function setLevelState(level: 0 | 1 | 2, state: LevelState) {
-    setLevelStates(prev => {
-      const next: [LevelState, LevelState, LevelState] = [...prev] as [LevelState, LevelState, LevelState];
-      next[level] = state;
-      return next;
-    });
+  const {
+    levelStates,
+    uploadedDocs,
+    signatureUrl,
+    submittedAt,
+    isApproved,
+    setLevelState,
+    setUploadedDocs,
+    setSignatureUrl,
+    setSubmittedAt,
+    setApproved,
+  } = useValidationStore();
+
+  // Sync URL → keep /dashboard/validation canonical for the landing screen
+  const screen = sub ?? 'landing';
+
+  function goTo(path: 'landing' | 'level1' | 'level2' | 'level3') {
+    if (path === 'landing') {
+      navigate('/dashboard/validation', { replace: false });
+    } else {
+      navigate(`/dashboard/validation/${path}`, { replace: false });
+    }
   }
 
-  // ── Navigation ───────────────────────────────────────────────────────────────
+  // ── Level handlers ──────────────────────────────────────────────────────────
 
   function handleStartLevel(level: 1 | 2 | 3) {
     if (level === 1) {
       setLevelState(0, 'active');
-      setScreen('level1');
+      goTo('level1');
     } else if (level === 2) {
       setLevelState(1, 'active');
-      setScreen('level2');
+      goTo('level2');
     } else {
       setLevelState(2, 'waiting');
-      setScreen('level3');
+      goTo('level3');
     }
   }
 
-  function handleLevel1Complete(docs: UploadedDoc[], sig: string) {
+  function handleLevel1Complete(docs: Parameters<typeof setUploadedDocs>[0], sig: string) {
     setUploadedDocs(docs);
     setSignatureUrl(sig);
     setLevelState(0, 'done');
     setLevelState(1, 'pending');
-    setScreen('landing');
+    goTo('landing');
   }
 
   function handleLevel2Complete() {
     setLevelState(1, 'done');
     setLevelState(2, 'pending');
-    const now = new Date();
-    setSubmittedAt(now);
-    setScreen('landing');
-  }
-
-  function handleLevel3Back() {
-    setScreen('landing');
+    setSubmittedAt(new Date());
+    goTo('landing');
   }
 
   function handleDownloadReport() {
-    // In production: fetch signed report from backend
-    const link = document.createElement('a');
+    // Production: fetch signed PDF from backend
+    const link     = document.createElement('a');
     link.href     = '#';
     link.download = `Audit_Report_${companyName.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.pdf`;
     link.click();
-    alert('Audit report download triggered. Connect to your backend to serve the actual PDF.');
   }
 
   // ── Render ──────────────────────────────────────────────────────────────────
@@ -102,7 +106,7 @@ export default function ValidationPage({
         onComplete={handleLevel1Complete}
         onBack={() => {
           setLevelState(0, uploadedDocs.length > 0 ? 'active' : 'pending');
-          setScreen('landing');
+          goTo('landing');
         }}
       />
     );
@@ -115,7 +119,7 @@ export default function ValidationPage({
         liveRegisterFile={liveRegisterFile}
         companyName={companyName}
         onComplete={handleLevel2Complete}
-        onBack={() => setScreen('landing')}
+        onBack={() => goTo('landing')}
       />
     );
   }
@@ -124,10 +128,11 @@ export default function ValidationPage({
     return (
       <ValidationLevel3
         companyName={companyName}
-        submittedAt={submittedAt}
+        submittedAt={submittedAt ?? undefined}
         isApproved={isApproved}
+        onApprove={() => setApproved(true)}
         onDownloadReport={handleDownloadReport}
-        onBack={handleLevel3Back}
+        onBack={() => goTo('landing')}
       />
     );
   }

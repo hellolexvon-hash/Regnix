@@ -2,8 +2,11 @@
  * ValidationLanding.tsx
  *
  * Entry screen for the 3-level compliance audit workflow.
- * Shows overall audit progress + three level cards.
- * "Start Validation" → T&C + Self-Declaration modal → onStartLevel callback.
+ * Layout:
+ *   - Single horizontal progress bar (L1 → L2 → L3) at top
+ *   - Three level rows in a vertical list — each shows status chip, title,
+ *     description, and one right-aligned action button
+ *   - Overall progress as plain "X/3 levels complete" text
  */
 
 import { useState } from 'react';
@@ -19,22 +22,19 @@ interface ValidationLandingProps {
 
 const LEVEL_META = [
   {
+    icon:        '📁',
     title:       'Document Upload & Verification',
     description: 'Upload all generated compliance registers. Rename, preview, and mark each document as verified. Apply your digital signature to complete Level 1.',
-    icon:        '📁',
-    badgeLabel:  'Level 1',
   },
   {
+    icon:        '🔍',
     title:       'Live Register Comparison',
     description: 'View your uploaded documents side-by-side with the Live Register. Cross-verify entries, confirm accuracy, and certify compliance.',
-    icon:        '🔍',
-    badgeLabel:  'Level 2',
   },
   {
+    icon:        '🏛️',
     title:       'Auditor Review',
     description: 'Documents submitted to the assigned auditor. Track review progress in real time. Download the signed audit report once approved.',
-    icon:        '🏛️',
-    badgeLabel:  'Level 3',
   },
 ] as const;
 
@@ -42,7 +42,7 @@ function statusLabel(state: LevelState): { text: string; cls: string } {
   if (state === 'done')    return { text: '✓ Completed',         cls: s.statusDone    };
   if (state === 'active')  return { text: '● In Progress',       cls: s.statusActive  };
   if (state === 'waiting') return { text: '⏳ Awaiting Auditor', cls: s.statusWaiting };
-  return                          { text: '— Not Started',        cls: s.statusPending };
+  return                          { text: '— Not Started',       cls: s.statusPending };
 }
 
 export default function ValidationLanding({
@@ -52,7 +52,7 @@ export default function ValidationLanding({
 }: ValidationLandingProps) {
   const [termsTarget, setTermsTarget] = useState<1 | 2 | 3 | null>(null);
 
-  const doneCount = levelStates.filter(s => s === 'done').length;
+  const doneCount = levelStates.filter(st => st === 'done').length;
 
   function isLocked(idx: number): boolean {
     if (idx === 0) return false;
@@ -66,115 +66,119 @@ export default function ValidationLanding({
     }
   }
 
+  function levelRowClass(state: LevelState, locked: boolean): string {
+    const classes = [s.levelRow];
+    if (state === 'done')                            classes.push(s.levelRowDone);
+    if (state === 'active' || state === 'waiting')   classes.push(s.levelRowActive);
+    if (locked)                                      classes.push(s.levelRowLocked);
+    return classes.join(' ');
+  }
+
+  function numberClass(state: LevelState): string {
+    if (state === 'done')   return `${s.levelRowNumber} ${s.levelRowNumberDone}`;
+    if (state === 'active' || state === 'waiting') return `${s.levelRowNumber} ${s.levelRowNumberActive}`;
+    return s.levelRowNumber;
+  }
+
+  function progressDotClass(state: LevelState): string {
+    if (state === 'done')   return `${s.progressDot} ${s.progressDotDone}`;
+    if (state === 'active' || state === 'waiting') return `${s.progressDot} ${s.progressDotActive}`;
+    return s.progressDot;
+  }
+
+  function progressLabelClass(state: LevelState): string {
+    if (state === 'done')   return `${s.progressStepLabel} ${s.progressStepLabelDone}`;
+    if (state === 'active' || state === 'waiting') return `${s.progressStepLabel} ${s.progressStepLabelActive}`;
+    return s.progressStepLabel;
+  }
+
   return (
     <div className={s.page}>
+      <div className={s.pageInner}>
 
-      {/* ── Validation step bar ─────────────────────────────────────────── */}
-      <div className={s.stepBar}>
-        {([1, 2, 3] as const).map((n, i) => (
-          <div key={n} className={s.stepBarItem}>
-            {i > 0 && (
-              <div className={`${s.stepLine} ${levelStates[i - 1] === 'done' ? s.stepLineDone : ''}`} />
-            )}
-            <div className={`${s.stepDot}
-              ${levelStates[i] === 'done'                                     ? s.stepDotDone   : ''}
-              ${levelStates[i] === 'active' || levelStates[i] === 'waiting'   ? s.stepDotActive : ''}`}>
-              {levelStates[i] === 'done' ? '✓' : n}
+        {/* ── Progress header ─────────────────────────────────────────────── */}
+        <div className={s.progressHeader}>
+          <div className={s.progressHeaderLeft}>
+            <span className={s.progressTitle}>Compliance Audit — {companyName}</span>
+
+            <div className={s.progressTrack}>
+              {([0, 1, 2] as const).map((idx) => (
+                <div key={idx} className={s.progressStep}>
+                  {idx > 0 && (
+                    <div className={
+                      levelStates[idx - 1] === 'done'
+                        ? `${s.progressConnector} ${s.progressConnectorDone}`
+                        : s.progressConnector
+                    } />
+                  )}
+                  <div className={progressDotClass(levelStates[idx])}>
+                    {levelStates[idx] === 'done' ? '✓' : idx + 1}
+                  </div>
+                  <span className={progressLabelClass(levelStates[idx])}>
+                    Level {idx + 1}
+                  </span>
+                </div>
+              ))}
             </div>
-            <span className={`${s.stepLabel} ${levelStates[i] === 'active' || levelStates[i] === 'waiting' ? s.stepLabelActive : ''}`}>
-              Level {n}
-            </span>
-          </div>
-        ))}
-      </div>
-
-      {/* ── Header card ─────────────────────────────────────────────────── */}
-      <div className={s.stepCard}>
-        <div className={s.stepCardHeader}>
-          <div className={s.stepCardIcon}>🛡️</div>
-          <div className={s.stepCardHeaderText}>
-            <h2 className={s.stepCardTitle}>Compliance Audit — {companyName}</h2>
-            <p className={s.stepCardSub}>
-              {doneCount === 0
-                ? 'Start your 3-level compliance validation to certify your registers.'
-                : doneCount < 3
-                ? `${doneCount} of 3 levels completed. Continue to the next level.`
-                : 'All 3 levels completed. Your audit report is ready to download.'}
-            </p>
           </div>
 
-          {/* Overall progress ring */}
-          <div className={s.progressRing}>
-            <svg width="54" height="54" viewBox="0 0 54 54">
-              <circle cx="27" cy="27" r="22" fill="none" stroke="#E5E2F0" strokeWidth="5" />
-              <circle
-                cx="27" cy="27" r="22" fill="none"
-                stroke="#7C3AED" strokeWidth="5"
-                strokeDasharray={`${(doneCount / 3) * 138.2} 138.2`}
-                strokeLinecap="round"
-                transform="rotate(-90 27 27)"
-                style={{ transition: 'stroke-dasharray 600ms ease' }}
-              />
-              <text x="27" y="32" textAnchor="middle" fontSize="13" fontWeight="700" fill="#0F0A1E">
-                {doneCount}/3
-              </text>
-            </svg>
-          </div>
+          <span className={s.progressSummary}>
+            <span className={s.progressSummaryCount}>{doneCount}/3</span> levels complete
+          </span>
         </div>
 
-        {/* ── Level cards ─────────────────────────────────────────────── */}
-        <div className={s.levelGrid}>
+        {/* ── Level rows ─────────────────────────────────────────────────── */}
+        <div className={s.landingGrid}>
           {LEVEL_META.map((meta, idx) => {
             const state  = levelStates[idx];
             const locked = isLocked(idx);
             const { text: statusText, cls: statusCls } = statusLabel(state);
+            const level = (idx + 1) as 1 | 2 | 3;
 
             return (
-              <div
-                key={idx}
-                className={`${s.levelCard}
-                  ${state === 'done'                                   ? s.levelDone    : ''}
-                  ${state === 'active' || state === 'waiting'          ? s.levelActive  : ''}
-                  ${locked                                             ? s.levelLocked  : ''}`}
-              >
-                {/* Badge */}
-                <span className={`${s.levelBadge} ${state === 'done' ? s.badgeDone : ''}`}>
-                  {state === 'done' ? '✓ Done' : meta.badgeLabel}
-                </span>
+              <div key={idx} className={levelRowClass(state, locked)}>
+                <div className={numberClass(state)}>
+                  {state === 'done' ? '✓' : idx + 1}
+                </div>
 
-                <div className={s.levelIcon}>{meta.icon}</div>
-                <div className={s.levelTitle}>{meta.title}</div>
-                <div className={s.levelDesc}>{meta.description}</div>
+                <span className={s.levelRowIcon}>{meta.icon}</span>
 
-                <span className={`${s.levelStatus} ${statusCls}`}>{statusText}</span>
+                <div className={s.levelRowContent}>
+                  <p className={s.levelRowTitle}>{meta.title}</p>
+                  <p className={s.levelRowDesc}>{meta.description}</p>
+                </div>
 
-                {!locked && state !== 'done' && state !== 'waiting' && (
-                  <button
-                    className={s.startBtn}
-                    onClick={() => setTermsTarget((idx + 1) as 1 | 2 | 3)}
-                  >
-                    {state === 'active' ? 'Continue →' : 'Start Validation →'}
-                  </button>
-                )}
+                <div className={s.levelRowRight}>
+                  <span className={`${s.levelRowStatus} ${statusCls}`}>
+                    {statusText}
+                  </span>
 
-                {locked && (
-                  <div className={s.lockedHint}>
-                    🔒 Complete Level {idx} first
-                  </div>
-                )}
+                  {!locked && state !== 'done' && state !== 'waiting' && (
+                    <button
+                      className={s.btnPrimary}
+                      onClick={() => setTermsTarget(level)}
+                    >
+                      {state === 'active' ? 'Continue →' : 'Start →'}
+                    </button>
+                  )}
 
-                {state === 'waiting' && (
-                  <div className={s.waitingHint}>
-                    ⏳ Awaiting auditor response
-                  </div>
-                )}
+                  {locked && (
+                    <span className={s.lockedNote}>
+                      🔒 Complete Level {idx} first
+                    </span>
+                  )}
+
+                  {state === 'waiting' && (
+                    <span className={s.lockedNote}>⏳ Awaiting response</span>
+                  )}
+                </div>
               </div>
             );
           })}
         </div>
       </div>
 
-      {/* ── T&C modal ───────────────────────────────────────────────────── */}
+      {/* ── T&C modal ────────────────────────────────────────────────────── */}
       {termsTarget && (
         <TermsModal
           level={termsTarget}
