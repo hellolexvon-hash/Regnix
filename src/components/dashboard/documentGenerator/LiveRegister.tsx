@@ -175,6 +175,7 @@ export default function LiveRegister({
   // ── Window state ────────────────────────────────────────────────────────────
   const [winState,    setWinState]    = useState<WindowState>('closed');
   const [minimized,   setMinimized]   = useState(false);
+  const [isFloating,  setIsFloating]  = useState(false); // false = true full screen (default)
 
   // ── Data ────────────────────────────────────────────────────────────────────
   const [sheets,      setSheets]      = useState<SheetData[]>([]);
@@ -219,6 +220,24 @@ export default function LiveRegister({
       return () => clearTimeout(t);
     }
   }, [open, minimized]);
+
+  // ── Reset to full screen each time the window is freshly opened ────────────
+  useEffect(() => {
+    if (winState === 'open') setIsFloating(false);
+  }, [open]);
+
+  // ── Escape key closes the window (standard full-screen-app convention) ────
+  // Uses a ref so the effect doesn't need handleClose to be declared yet —
+  // handleClose is assigned to this ref further down, after it's defined.
+  const closeRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    if (winState === 'closed') return;
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') closeRef.current();
+    }
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [winState]);
 
   // ── Auto-load uploaded file ─────────────────────────────────────────────────
   useEffect(() => {
@@ -533,6 +552,7 @@ export default function LiveRegister({
     setWinState('closing');
     setTimeout(onClose, 360);
   };
+  closeRef.current = handleClose;
 
   const handleMinimize = () => {
     setWinState('minimizing');
@@ -560,6 +580,7 @@ export default function LiveRegister({
     winState === 'open'      ? lr.windowOpen      : '',
     winState === 'closing'   ? lr.windowClosing   : '',
     winState === 'minimizing'? lr.windowMinimizing: '',
+    isFloating                ? lr.windowFloating  : '',
   ].filter(Boolean).join(' ');
 
   return createPortal(
@@ -581,7 +602,10 @@ export default function LiveRegister({
             <div className={lr.trafficLights}>
               <button className={`${lr.tl} ${lr.tlClose}`}  onClick={handleClose}    aria-label="Close" />
               <button className={`${lr.tl} ${lr.tlMin}`}    onClick={handleMinimize} aria-label="Minimise" />
-              <button className={`${lr.tl} ${lr.tlMax}`}    aria-label="Zoom" />
+              <button className={`${lr.tl} ${lr.tlMax}`}
+                onClick={() => setIsFloating(f => !f)}
+                aria-label={isFloating ? 'Enter Full Screen' : 'Exit Full Screen'}
+                title={isFloating ? 'Enter Full Screen' : 'Exit Full Screen'} />
             </div>
 
             <div className={lr.titleCenter}>

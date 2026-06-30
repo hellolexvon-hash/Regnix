@@ -11,9 +11,10 @@
  *   • Table: ☐ · Icon · Name · Type · Size · Modified · Status · Actions
  *   • Per-row actions: 👁 Preview, ✅ Verify toggle, ··· dropdown
  *   • Dropdown: Preview / Open Folder / Rename / Mark Verified / Move to / Delete
- *   • Preview panel (right): Excel → scrollable sheet table with tab bar
- *                             PDF   → styled document card
- *                             other → generic icon card
+ *   • The 👁 "see" button launches a FULL-SCREEN professional viewer:
+ *       — .xlsx / .xls  → LiveRegister  (full audit/search/filter spreadsheet workspace)
+ *       — .pdf          → PdfViewer     (self-hosted pdf.js renderer, zero external services)
+ *       — other types   → lightweight slide-in side panel (unchanged)
  *   • New Folder — inline creation in table
  *   • Bulk select → sticky dark bar (Mark Verified, Delete, Deselect)
  *   • Drag-and-drop onto the shell (files or folders via drag)
@@ -26,6 +27,8 @@ import * as XLSX from 'xlsx';
 import JSZip from 'jszip';
 import s from './Validation.module.css';
 import type { UploadedDoc, SheetPreview } from './validationStore';
+import LiveRegister from './LiveRegister';
+import PdfViewer from './PdfViewer';
 
 interface ValidationLevel1Props {
   onComplete: (docs: UploadedDoc[], signatureDataUrl: string) => void;
@@ -284,6 +287,10 @@ export default function ValidationLevel1({ onComplete, onBack }: ValidationLevel
   const [newFolderName,  setNewFolderName]  = useState('');
   const [extracting,     setExtracting]     = useState<string | null>(null); // zip name being extracted
 
+  /* Full-screen viewer launch — set when the 👁 button opens a register or PDF */
+  const [registerViewerId, setRegisterViewerId] = useState<string | null>(null);
+  const [pdfViewerId,      setPdfViewerId]       = useState<string | null>(null);
+
   /* Signature */
   const [sigName,    setSigName]    = useState('');
   const [sigDecl,    setSigDecl]    = useState(false);
@@ -318,6 +325,22 @@ export default function ValidationLevel1({ onComplete, onBack }: ValidationLevel
   const sigValid      = sigName.trim().length >= 3 && sigDecl;
   const canContinue   = allFixed && sigApplied;
   const previewEntry  = entries.find(e => e.id === previewId);
+
+  /* Resolve the entry + a real File object for the full-screen viewers.
+     Entries extracted from a ZIP only have a Blob, not a File, so we wrap
+     the Blob in a File for components that expect the File interface
+     (LiveRegister / PdfViewer both just need a Blob-like with arrayBuffer(),
+     but typing them as File keeps the prop contracts simple and consistent
+     with files uploaded directly, not via ZIP). */
+  const registerEntry = entries.find(e => e.id === registerViewerId);
+  const registerFile  = registerEntry
+    ? (registerEntry.file ?? new File([registerEntry.blob!], `${registerEntry.name}${registerEntry.ext}`))
+    : null;
+
+  const pdfEntry = entries.find(e => e.id === pdfViewerId);
+  const pdfFile  = pdfEntry
+    ? (pdfEntry.file ?? new File([pdfEntry.blob!], `${pdfEntry.name}${pdfEntry.ext}`, { type: 'application/pdf' }))
+    : null;
 
   /* Breadcrumb chain from root to currentFolder */
   const breadcrumb: FmEntry[] = [];
@@ -452,7 +475,28 @@ export default function ValidationLevel1({ onComplete, onBack }: ValidationLevel
     }
   }
 
+  /**
+   * The 👁 "see" action. Routes by file type:
+   *   — Excel (.xlsx/.xls) → full-screen LiveRegister (audit/search/filter workspace)
+   *   — PDF                → full-screen PdfViewer (self-hosted pdf.js renderer)
+   *   — everything else    → lightweight inline slide-in side panel (unchanged)
+   */
   function openPreview(id: string) {
+    const entry = entries.find(e => e.id === id);
+    if (!entry || entry.kind === 'folder') return;
+
+    if (entry.fileType === 'xlsx' || entry.fileType === 'xls') {
+      setRegisterViewerId(id);
+      setOpenMenuId(null);
+      return;
+    }
+    if (entry.fileType === 'pdf') {
+      setPdfViewerId(id);
+      setOpenMenuId(null);
+      return;
+    }
+
+    // Fallback: inline side panel for images / docs / unknown types
     setPreviewId(prev => prev === id ? null : id);
     setActiveSheet(0);
     setOpenMenuId(null);
@@ -466,6 +510,8 @@ export default function ValidationLevel1({ onComplete, onBack }: ValidationLevel
   function removeEntry(id: string) {
     setEntries(prev => deleteEntryAndDescendants(prev, id));
     if (previewId === id) setPreviewId(null);
+    if (registerViewerId === id) setRegisterViewerId(null);
+    if (pdfViewerId === id) setPdfViewerId(null);
     setSelected(prev => { const n = new Set(prev); n.delete(id); return n; });
     setOpenMenuId(null);
   }
@@ -927,11 +973,17 @@ export default function ValidationLevel1({ onComplete, onBack }: ValidationLevel
                                 </button>
                               )}
 
-                              {/* Preview (files only) */}
+                              {/* Preview — opens full screen for Excel/PDF, inline panel otherwise */}
                               {!isFolder && (
                                 <button
                                   className={`${s.fmActionIconBtn} ${s.fmActionIconBtnPrimary}`}
-                                  title="Preview"
+                                  title={
+                                    entry.fileType === 'xlsx' || entry.fileType === 'xls'
+                                      ? 'Open in full-screen Live Register'
+                                      : entry.fileType === 'pdf'
+                                      ? 'Open in full-screen PDF viewer'
+                                      : 'Preview'
+                                  }
                                   onClick={() => openPreview(entry.id)}
                                 >
                                   👁
@@ -982,7 +1034,11 @@ export default function ValidationLevel1({ onComplete, onBack }: ValidationLevel
                                       <button className={s.fmDropdownItem}
                                         onClick={() => openPreview(entry.id)}>
                                         <span className={s.fmDropdownItemIcon}>👁</span>
-                                        Preview
+                                        {entry.fileType === 'xlsx' || entry.fileType === 'xls'
+                                          ? 'Open Full Screen'
+                                          : entry.fileType === 'pdf'
+                                          ? 'Open Full Screen'
+                                          : 'Preview'}
                                       </button>
                                     )}
 
@@ -1114,7 +1170,9 @@ export default function ValidationLevel1({ onComplete, onBack }: ValidationLevel
                         </div>
                       </>
                     ) : previewEntry.fileType === 'pdf' ? (
-                      /* PDF */
+                      /* PDF — this inline panel is only a fallback; openPreview()
+                         normally routes PDFs straight to the full-screen PdfViewer.
+                         Offer a one-click way to open that proper viewer here too. */
                       <div className={s.fmPreviewPdfPlaceholder}>
                         <div className={s.fmPreviewPdfDoc}>
                           <div className={s.fmPreviewPdfDocHeader} />
@@ -1129,9 +1187,14 @@ export default function ValidationLevel1({ onComplete, onBack }: ValidationLevel
                         <div className={s.fmPreviewPdfLabel}>📄</div>
                         <div className={s.fmPreviewPdfName}>{previewEntry.name}{previewEntry.ext}</div>
                         <div className={s.fmPreviewPdfDesc}>
-                          PDF preview is not available in-browser without a PDF viewer plugin.<br />
-                          Download the file to view its contents.
+                          Open this document in the full-screen PDF workspace for page navigation, zoom, search, and printing.
                         </div>
+                        <button
+                          className={`${s.btnPrimary} ${s.btnSmall}`}
+                          onClick={() => { setPreviewId(null); setPdfViewerId(previewEntry.id); }}
+                        >
+                          🖥 Open Full Screen
+                        </button>
                       </div>
                     ) : previewEntry.fileType === 'img' ? (
                       /* Image */
@@ -1301,6 +1364,28 @@ export default function ValidationLevel1({ onComplete, onBack }: ValidationLevel
         )}
 
       </div>
+
+      {/* ════════════════════════════════════════════════════════════════════
+          FULL-SCREEN VIEWERS — launched by the 👁 "see" action
+          Both render via React Portal onto document.body and take over the
+          entire viewport (full screen by default; the green traffic light
+          toggles a windowed mode for users who prefer it).
+          ════════════════════════════════════════════════════════════════════ */}
+
+      {/* Excel / Live Register full-screen audit workspace */}
+      <LiveRegister
+        open={registerViewerId !== null}
+        onClose={() => setRegisterViewerId(null)}
+        uploadedFile={registerFile}
+      />
+
+      {/* PDF full-screen self-hosted renderer */}
+      <PdfViewer
+        open={pdfViewerId !== null}
+        onClose={() => setPdfViewerId(null)}
+        file={pdfFile}
+        fileName={pdfEntry ? `${pdfEntry.name}${pdfEntry.ext}` : 'Document.pdf'}
+      />
     </div>
   );
 }

@@ -15,12 +15,17 @@
 .backdropOut { background: rgba(8, 6, 20, 0);   backdrop-filter: blur(0px); }
 
 /* ── Window ───────────────────────────────────────────────────────────────── */
+/* Default mode is TRUE FULL SCREEN — inset:0 — so the viewer fills the
+   entire viewport edge-to-edge, like a dedicated document workspace rather
+   than a floating dialog. The "Zoom" traffic-light button toggles a
+   windowed mode (.windowFloating) for users who prefer the classic
+   macOS-style inset window. */
 .window {
   position: fixed;
-  inset: 20px;
+  inset: 0;
   z-index: 9999;
   background: #141420;
-  border-radius: 14px;
+  border-radius: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -34,16 +39,31 @@
   transform: scale(0.78) translateY(40px);
   transform-origin: center bottom;
   transition: none;
-  will-change: transform, opacity;
+  will-change: transform, opacity, inset, border-radius;
+}
+
+/* Windowed (floating) mode — toggled via the green "Zoom" traffic light */
+.windowFloating {
+  inset: 20px;
+  border-radius: 14px;
+  transition:
+    inset         320ms cubic-bezier(0.4, 0, 0.2, 1),
+    border-radius 320ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.window.windowOpen.windowFloating,
+.window.windowOpen:not(.windowFloating) {
+  transition:
+    opacity       280ms ease-out,
+    transform     480ms cubic-bezier(0.22, 1.2, 0.36, 1),
+    inset         320ms cubic-bezier(0.4, 0, 0.2, 1),
+    border-radius 320ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* macOS spring open */
 .windowOpen {
   opacity: 1;
   transform: scale(1) translateY(0);
-  transition:
-    opacity    280ms ease-out,
-    transform  480ms cubic-bezier(0.22, 1.2, 0.36, 1);
 }
 
 /* macOS close — shrinks back down to dock */
