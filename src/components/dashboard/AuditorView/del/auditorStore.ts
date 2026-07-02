@@ -110,7 +110,7 @@ const SEED_COMPANIES: CompanyReview[] = [
       ['PF Form 5A', 'PF'], ['Employee Compensation Policy', 'Labour'],
     ], [3]),
     issues: [
-      { id: 'i1', docName: 'ESIC ECR', severity: 'major', rule: 'Missing or invalid IP Number.', rootCause: 'Two IP numbers in the ECR file do not match the ESIC portal master; likely a mid-month joinee not yet mapped.', resolvedL2: false },
+      { id: 'i1', docName: 'ESIC ECR', severity: 'major', rule: 'IP number sequence validation', rootCause: 'Two IP numbers in the ECR file do not match the ESIC portal master; likely a mid-month joinee not yet mapped.', resolvedL2: false },
     ],
     l2Score: 91, l2CompletedAt: daysAgo(1, 14, 20), status: 'pending', assignedTo: null,
     decisionRemarks: '', decidedAt: null,
@@ -138,8 +138,8 @@ const SEED_COMPANIES: CompanyReview[] = [
       ['Contract Labour Licence', 'Contract Labour'], ['Employee Compensation Policy', 'Labour'],
     ], [1, 8]),
     issues: [
-      { id: 'i2', docName: 'PF Consolidated Statement', severity: 'critical', rule: 'Employer or employee PF contribution mismatch.', rootCause: 'Employer contribution total is ₹18,400 short of the payroll-derived figure for March.', resolvedL2: false },
-      { id: 'i3', docName: 'Contract Labour Licence', severity: 'major', rule: 'Licence expired, suspended, cancelled, or inactive.', rootCause: 'Licence expired 11 days before the audit period end date; renewal appears to be in process.', resolvedL2: false },
+      { id: 'i2', docName: 'PF Consolidated Statement', severity: 'critical', rule: 'Contribution amount reconciliation', rootCause: 'Employer contribution total is ₹18,400 short of the payroll-derived figure for March.', resolvedL2: false },
+      { id: 'i3', docName: 'Contract Labour Licence', severity: 'major', rule: 'Licence validity window', rootCause: 'Licence expired 11 days before the audit period end date; renewal appears to be in process.', resolvedL2: false },
     ],
     l2Score: 79, l2CompletedAt: daysAgo(3, 9, 40), status: 'in_review', assignedTo: 'demo-auditor', decisionRemarks: '', decidedAt: null,
   },
@@ -166,7 +166,7 @@ const SEED_COMPANIES: CompanyReview[] = [
       ['Employee Compensation Policy', 'Insurance'], ['PF Form 5A', 'PF'],
     ], [6]),
     issues: [
-      { id: 'i4', docName: 'Employee Compensation Policy', severity: 'minor', rule: 'Policy renewal or endorsement pending despite active operations.', rootCause: 'Policy document on file shows last year\'s renewal; current-year certificate not yet uploaded.', resolvedL2: false },
+      { id: 'i4', docName: 'Employee Compensation Policy', severity: 'minor', rule: 'Policy renewal date check', rootCause: 'Policy document on file shows last year\'s renewal; current-year certificate not yet uploaded.', resolvedL2: false },
     ],
     l2Score: 88, l2CompletedAt: daysAgo(7, 10, 30), status: 'changes_requested', assignedTo: 'demo-auditor',
     decisionRemarks: 'Please upload the current-year Employee Compensation policy certificate and resubmit for final sign-off.',
@@ -194,8 +194,8 @@ const SEED_COMPANIES: CompanyReview[] = [
       ['ESIC ECR', 'ESIC'], ['Wage Slip Register', 'Wages'], ['Contract Labour Licence', 'Contract Labour'],
     ], [1, 5]),
     issues: [
-      { id: 'i5', docName: 'PF Consolidated Statement', severity: 'major', rule: 'Employee count mismatch with payroll or PF Challan.', rootCause: 'Consolidated statement lists 421 members; live payroll register shows 417 active employees for the period.', resolvedL2: false },
-      { id: 'i6', docName: 'Contract Labour Licence', severity: 'minor', rule: 'Tampered or altered licence.', rootCause: 'Licensing officer seal is present but faint/partially illegible on the scanned copy.', resolvedL2: true },
+      { id: 'i5', docName: 'PF Consolidated Statement', severity: 'major', rule: 'Headcount reconciliation', rootCause: 'Consolidated statement lists 421 members; live payroll register shows 417 active employees for the period.', resolvedL2: false },
+      { id: 'i6', docName: 'Contract Labour Licence', severity: 'minor', rule: 'Signatory seal check', rootCause: 'Licensing officer seal is present but faint/partially illegible on the scanned copy.', resolvedL2: true },
     ],
     l2Score: 84, l2CompletedAt: daysAgo(2, 17, 0), status: 'pending', assignedTo: null,
     decisionRemarks: '', decidedAt: null,

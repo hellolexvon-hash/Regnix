@@ -206,15 +206,6 @@ export const IconTable = ({ size, ...p }: IconProps) => (
   </svg>
 );
 
-export const IconListChecks = ({ size, ...p }: IconProps) => (
-  <svg {...base(size, p)}>
-    <path d="m4 6.5 1.5 1.5L8 5" />
-    <path d="m4 12.5 1.5 1.5L8 11" />
-    <path d="m4 18.5 1.5 1.5L8 17" />
-    <path d="M11.5 6.5h8.5M11.5 12.5h8.5M11.5 18.5h8.5" />
-  </svg>
-);
-
 export const IconSpinner = ({ size, ...p }: IconProps) => (
   <svg {...base(size, p)} style={{ animation: 'ar-spin 0.8s linear infinite' }}>
     <path d="M12 3a9 9 0 1 0 9 9" />

@@ -21,11 +21,10 @@ import type { Auditor, CompanyReview, IssueSeverity, ReviewDoc } from './auditor
 import PdfViewer from '../documentGenerator/PdfViewer';
 import LiveRegister from '../documentGenerator/LiveRegister';
 import { buildMockDocumentPdf, buildMockLiveRegisterFile, getTallyFields } from './mockFiles';
-import { resolveRuleSet } from './ruleLibrary';
 import {
   IconArrowLeft, IconFileText, IconFlag, IconPenLine, IconCheckCircle, IconUndo,
   IconXCircle, IconAlertTriangle, IconTable, IconChevronDown, IconChevronRight,
-  IconClock, IconEye, IconShieldCheck, IconListChecks,
+  IconClock, IconEye, IconShieldCheck,
 } from './icons';
 
 interface AuditorCompanyReviewProps {
@@ -74,7 +73,6 @@ export default function AuditorCompanyReview({
   const [submitting, setSubmitting] = useState(false);
 
   const [expandedDocId, setExpandedDocId] = useState<string | null>(null);
-  const [checklistDocId, setChecklistDocId] = useState<string | null>(null);
   const [openDoc, setOpenDoc] = useState<{ doc: ReviewDoc; blob: Blob } | null>(null);
   const [liveRegisterOpen, setLiveRegisterOpen] = useState(false);
 
@@ -111,11 +109,6 @@ export default function AuditorCompanyReview({
 
   function toggleExpand(docId: string) {
     setExpandedDocId(cur => (cur === docId ? null : docId));
-    setChecklistDocId(null);
-  }
-
-  function toggleChecklist(docId: string) {
-    setChecklistDocId(cur => (cur === docId ? null : docId));
   }
 
   return (
@@ -211,11 +204,6 @@ export default function AuditorCompanyReview({
               const expanded = expandedDocId === doc.id;
               const fields = expanded ? getTallyFields(doc, company) : [];
               const mismatchCount = fields.filter(f => !f.match).length;
-              const ruleSet = expanded ? resolveRuleSet(doc.name) : null;
-              const flaggedRules = expanded
-                ? new Set(company.issues.filter(i => i.docName === doc.name).map(i => i.rule))
-                : null;
-              const checklistOpen = checklistDocId === doc.id;
               return (
                 <div key={doc.id} className={s.arDocBlock}>
                   <button className={s.arDocRow} onClick={() => toggleExpand(doc.id)}>
@@ -276,38 +264,6 @@ export default function AuditorCompanyReview({
                           ))}
                         </tbody>
                       </table>
-
-                      {ruleSet && (
-                        <div className={s.arChecklistSection}>
-                          <button className={s.arChecklistToggle} onClick={() => toggleChecklist(doc.id)}>
-                            <IconListChecks size={13} />
-                            <span>
-                              {checklistOpen ? 'Hide' : 'View'} full audit checklist — {ruleSet.category}
-                              <span className={s.arChecklistCount}>{ruleSet.rules.length} checks</span>
-                            </span>
-                            {checklistOpen ? <IconChevronDown size={13} /> : <IconChevronRight size={13} />}
-                          </button>
-
-                          {checklistOpen && (
-                            <div className={s.arChecklistBox}>
-                              {ruleSet.rules.map((rule, i) => {
-                                const flagged = flaggedRules?.has(rule) ?? false;
-                                return (
-                                  <div
-                                    key={i}
-                                    className={flagged ? `${s.arChecklistRow} ${s.arChecklistRowFlagged}` : s.arChecklistRow}
-                                  >
-                                    <span className={flagged ? s.arChecklistIconFlag : s.arChecklistIconOk}>
-                                      {flagged ? <IconAlertTriangle size={12} /> : <IconCheckCircle size={12} />}
-                                    </span>
-                                    <span className={s.arChecklistText}>{rule}</span>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </div>
-                      )}
                     </div>
                   )}
                 </div>
