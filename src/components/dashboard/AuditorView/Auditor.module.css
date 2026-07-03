@@ -1608,3 +1608,373 @@
   .arHeader { flex-wrap: wrap; }
   .arDecisionBtn { min-width: 100%; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   COMMAND CENTER (.cc*) — executive overview: health cards, risk matrix,
+   compliance funnel, monthly trend. Reuses .adPage / .adHeader / .adTitle /
+   .adSub / .adEmpty* from the dashboard list view above.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.ccPage {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  max-width: 1280px;
+}
+
+/* ── Health cards ─────────────────────────────────────────────────────────── */
+.ccCardGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.ccCard {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  background: #FFFFFF;
+  border: 1px solid #EEECF8;
+  border-left: 3px solid #E5E7EB;
+  border-radius: 12px;
+  padding: 14px 16px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+
+.ccCardIcon {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  background: #F3F0FF;
+  color: #6C3BD5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.ccCardNum {
+  display: block;
+  font-size: 19px;
+  font-weight: 800;
+  color: #111827;
+  line-height: 1.2;
+}
+
+.ccCardLabel {
+  display: block;
+  font-size: 10.5px;
+  color: #9CA3AF;
+  font-weight: 600;
+}
+
+.ccToneGreen   { border-left-color: #059669; }
+.ccToneGreen   .ccCardIcon { background: #ECFDF5; color: #059669; }
+.ccToneAmber   { border-left-color: #D97706; }
+.ccToneAmber   .ccCardIcon { background: #FFFBEB; color: #D97706; }
+.ccToneRed     { border-left-color: #DC2626; }
+.ccToneRed     .ccCardIcon { background: #FEF2F2; color: #DC2626; }
+.ccToneNeutral { border-left-color: #6C3BD5; }
+
+/* ── Two-column row: risk matrix + funnel ────────────────────────────────── */
+.ccRow2 {
+  display: grid;
+  grid-template-columns: 1.35fr 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+.ccPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: #FFFFFF;
+  border: 1px solid #EEECF8;
+  border-radius: 14px;
+  padding: 20px 22px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+
+.ccPanelHead { display: flex; flex-direction: column; gap: 3px; }
+.ccPanelTitle { font-size: 14px; font-weight: 800; color: #111827; margin: 0; }
+.ccPanelSub { font-size: 11px; color: #9CA3AF; margin: 0; line-height: 1.5; }
+
+/* ── Badges (shared: matrix row labels + drill-down header) ──────────────── */
+.ccBadge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 9.5px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 99px;
+  white-space: nowrap;
+}
+.ccBadgeCritical { background: #FEE2E2; color: #B91C1C; }
+.ccBadgeHigh     { background: #FFEDD5; color: #C2410C; }
+.ccBadgeMedium   { background: #FEF3C7; color: #92400E; }
+.ccBadgeLow      { background: #D1FAE5; color: #065F46; }
+
+/* ── Risk matrix ──────────────────────────────────────────────────────────── */
+.ccMatrixScroll {
+  overflow-x: auto;
+}
+
+.ccMatrixTable {
+  border-collapse: separate;
+  border-spacing: 6px;
+  width: 100%;
+}
+
+.ccMatrixCorner { width: 90px; }
+
+.ccMatrixColHead {
+  font-size: 9.5px;
+  font-weight: 700;
+  color: #6B7280;
+  text-align: center;
+  padding: 0 4px 6px;
+  white-space: nowrap;
+  max-width: 110px;
+}
+
+.ccMatrixRowHead {
+  text-align: left;
+  padding-right: 8px;
+  white-space: nowrap;
+}
+
+.ccMatrixCellWrap { padding: 0; }
+
+.ccMatrixCell {
+  width: 100%;
+  min-width: 46px;
+  height: 38px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  font-family: inherit;
+  transition: transform 100ms, filter 100ms;
+}
+.ccMatrixCell:hover:not(:disabled) { filter: brightness(0.95); }
+.ccMatrixCell:disabled { cursor: default; }
+
+.ccCellEmpty  { background: #F7F8FA; color: #D1D5DB; }
+.ccCellSoft   { background: #FEF3C7; color: #92400E; }
+.ccCellMid    { background: #FED7AA; color: #9A3412; }
+.ccCellStrong { background: #FCA5A5; color: #7F1D1D; }
+
+.ccMatrixCellSelected {
+  border-color: #111827;
+  transform: scale(1.05);
+}
+
+/* ── Drill-down panel ─────────────────────────────────────────────────────── */
+.ccDrill {
+  border-top: 1px dashed #E5E7EB;
+  padding-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ccDrillHead {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-wrap: wrap;
+}
+
+.ccDrillHeadText {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #374151;
+}
+
+.ccDrillClose {
+  margin-left: auto;
+  background: none;
+  border: none;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #6C3BD5;
+  cursor: pointer;
+  font-family: inherit;
+}
+.ccDrillClose:hover { text-decoration: underline; }
+
+.ccDrillList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 340px;
+  overflow-y: auto;
+}
+
+.ccDrillCard {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: left;
+  background: #FAFAFB;
+  border: 1px solid #F3F4F6;
+  border-radius: 10px;
+  padding: 12px 14px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 120ms, border-color 120ms;
+}
+.ccDrillCard:hover { background: #F5F4FA; border-color: #DDD6FE; }
+
+.ccDrillCardTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.ccDrillName { font-size: 12.5px; font-weight: 700; color: #111827; }
+.ccDrillOwner { font-size: 10px; color: #9CA3AF; font-weight: 600; white-space: nowrap; }
+
+.ccDrillMeta { font-size: 10.5px; color: #6B7280; }
+
+.ccDrillIssues {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ccDrillIssueChip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10.5px;
+  color: #991B1B;
+  line-height: 1.4;
+}
+.ccDrillIssueChip svg { flex-shrink: 0; }
+
+.ccDrillNoIssues {
+  font-size: 10.5px;
+  color: #059669;
+  font-weight: 600;
+}
+
+.ccDrillCta {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #6C3BD5;
+  align-self: flex-end;
+}
+
+/* ── Compliance funnel ────────────────────────────────────────────────────── */
+.ccFunnel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.ccFunnelStage {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.ccFunnelBarTrack {
+  background: #F3F4F6;
+  border-radius: 8px;
+  overflow: hidden;
+  height: 30px;
+}
+
+.ccFunnelBarFill {
+  height: 100%;
+  min-width: 40px;
+  background: linear-gradient(90deg, #6C3BD5, #8B5CF6);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 10px;
+  transition: width 300ms ease;
+}
+
+.ccFunnelCount {
+  font-size: 11.5px;
+  font-weight: 800;
+  color: #FFFFFF;
+}
+
+.ccFunnelMeta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ccFunnelLabel { font-size: 11px; font-weight: 700; color: #374151; }
+.ccFunnelPct { font-size: 10px; color: #9CA3AF; white-space: nowrap; }
+
+/* ── Monthly trend ────────────────────────────────────────────────────────── */
+.ccTimelineWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ccTimelineSvg {
+  width: 100%;
+  height: 150px;
+  display: block;
+  overflow: visible;
+}
+
+.ccTimelineAxis { stroke: #E5E7EB; stroke-width: 1; }
+.ccTimelineBar { fill: #F3F0FF; }
+.ccTimelineLine { stroke: #6C3BD5; stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; }
+.ccTimelineDot { fill: #6C3BD5; stroke: #FFFFFF; stroke-width: 1.5; }
+
+.ccTimelineXAxis {
+  display: flex;
+  justify-content: space-between;
+  padding: 0 24px;
+}
+
+.ccTimelineXLabel {
+  font-size: 10px;
+  font-weight: 600;
+  color: #9CA3AF;
+}
+
+.ccTimelineLegend {
+  display: flex;
+  gap: 18px;
+}
+
+.ccLegendItem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10.5px;
+  color: #6B7280;
+  font-weight: 600;
+}
+
+.ccLegendDot {
+  width: 9px;
+  height: 9px;
+  border-radius: 3px;
+  display: inline-block;
+}
+.ccLegendDotScore  { background: #6C3BD5; }
+.ccLegendDotIssues { background: #DDD6FE; }
+
+/* ── Mobile ───────────────────────────────────────────────────────────────── */
+@media (max-width: 900px) {
+  .ccCardGrid { grid-template-columns: repeat(2, 1fr); }
+  .ccRow2 { grid-template-columns: 1fr; }
+}

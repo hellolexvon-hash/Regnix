@@ -24,15 +24,18 @@ import s from './Auditor.module.css';
 import AuditorAuth from './AuditorAuth';
 import AuditorDashboard from './AuditorDashboard';
 import AuditorCompanyReview from './AuditorCompanyReview';
+import AuditorCommandCenter from './AuditorCommandCenter';
 import { useAuditorStore, type ReviewStatus } from './auditorStore';
 import {
   IconScale, IconHome, IconInbox, IconEye, IconCheckCircle, IconUndo,
   IconXCircle, IconFolder, IconShieldCheck, IconBell, IconChevronDown, IconLogOut,
+  IconLayers,
 } from './icons';
 
-type NavKey = 'overview' | 'pending' | 'in_review' | 'approved' | 'changes_requested' | 'rejected' | 'all';
+type NavKey = 'command_center' | 'overview' | 'pending' | 'in_review' | 'approved' | 'changes_requested' | 'rejected' | 'all';
 
 const NAV_ITEMS: { key: NavKey; label: string; icon: JSX.Element }[] = [
+  { key: 'command_center',     label: 'Command Center',    icon: <IconLayers size={15} /> },
   { key: 'overview',           label: 'Overview',          icon: <IconHome size={15} /> },
   { key: 'pending',            label: 'Review Queue',      icon: <IconInbox size={15} /> },
   { key: 'in_review',          label: 'In Review',         icon: <IconEye size={15} /> },
@@ -43,6 +46,7 @@ const NAV_ITEMS: { key: NavKey; label: string; icon: JSX.Element }[] = [
 ];
 
 const VIEW_COPY: Record<NavKey, { title: string; sub: string }> = {
+  command_center:    { title: 'Command Center',    sub: 'Portfolio health, risk, funnel, and trend — one screen.' },
   overview:          { title: 'Overview',          sub: 'Everything on your desk, at a glance.' },
   pending:           { title: 'Review Queue',       sub: 'Companies that passed Level 2 and are waiting to be claimed.' },
   in_review:         { title: 'In Review',          sub: 'Companies you are currently reviewing.' },
@@ -53,6 +57,7 @@ const VIEW_COPY: Record<NavKey, { title: string; sub: string }> = {
 };
 
 function filterByNav(companies: ReturnType<typeof useAuditorStore>['companies'], nav: NavKey, auditorId: string) {
+  if (nav === 'command_center') return companies; // unused for this view, rendered separately
   if (nav === 'overview') {
     return companies.filter(c => c.status === 'pending' || (c.status === 'in_review' && c.assignedTo === auditorId));
   }
@@ -71,6 +76,7 @@ export default function AuditorPage() {
   const navCounts = useMemo(() => {
     const c = store.companies;
     return {
+      command_center:     0,
       overview:           c.filter(x => x.status === 'pending' || (x.status === 'in_review' && x.assignedTo === auditor?.id)).length,
       pending:            c.filter(x => x.status === 'pending').length,
       in_review:          c.filter(x => x.status === 'in_review').length,
@@ -184,6 +190,12 @@ export default function AuditorPage() {
               onBack={() => setOpenCompanyId(null)}
               onClaim={id => store.claimCompany(id)}
               onDecide={(id, decision, remarks) => store.decide(id, decision, remarks)}
+            />
+          ) : nav === 'command_center' ? (
+            <AuditorCommandCenter
+              companies={store.companies}
+              auditors={store.auditors}
+              onOpenCompany={id => setOpenCompanyId(id)}
             />
           ) : (
             <AuditorDashboard
