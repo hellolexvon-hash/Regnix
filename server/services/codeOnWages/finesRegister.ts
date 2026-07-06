@@ -51,13 +51,18 @@ function writeCompanyMeta(
   companyInfo: MasterData['companyInfo'],
   employees: MasterData['employees'],
 ): void {
-  fillCellAddress(ws, 'C3', getString(companyInfo, M.establishmentName));
-  fillCellAddress(ws, 'J3', getString(companyInfo, M.registrationNumber));
-  fillCellAddress(ws, 'C4', getString(companyInfo, M.address));
+  // FIXED: labels ("Establishment Name:", "Address:", "Nature of Industry:",
+  // "Wage Period:") live on rows 4-7, not 3-6. "Establishment Name" and
+  // "Address" also share ONE merged value cell (C4:E5), so both lines go
+  // into the single C4 anchor rather than two separate cells.
+  const establishment = getString(companyInfo, M.establishmentName);
+  const address = getString(companyInfo, M.address);
+  fillCellAddress(ws, 'C4', address ? `${establishment}\n${address}` : establishment);
+  fillCellAddress(ws, 'J4', getString(companyInfo, M.registrationNumber));
   const payDate = employees.map((r) => getDate(r, M.dateOfPayment)).find((v): v is Date => v instanceof Date);
-  fillCellAddress(ws, 'J4', String((payDate ?? new Date()).getFullYear()));
-  fillCellAddress(ws, 'C5', getString(companyInfo, M.natureOfIndustry));  // col 38 ← CORRECTED
-  fillCellAddress(ws, 'C6', monthYearLabel(employees));
+  fillCellAddress(ws, 'J5', String((payDate ?? new Date()).getFullYear()));
+  fillCellAddress(ws, 'C6', getString(companyInfo, M.natureOfIndustry));  // col 38 ← CORRECTED
+  fillCellAddress(ws, 'C7', monthYearLabel(employees));
 }
 
 export async function generateFinesRegister(
@@ -69,6 +74,10 @@ export async function generateFinesRegister(
     dataStartRow: DATA_START_ROW,
     dataEndRow:   DATA_END_ROW,
     totalRow:     TOTAL_ROW,
+    // FIXED: row 19 in this template is the statutory footnote text, not a
+    // dedicated totals row, so we always insert one extra row for totals
+    // rather than overwriting the footnote.
+    reserveTotalRow: true,
     usedColumns:  USED_COLUMNS,
     metaWriter: (ws) => writeCompanyMeta(ws, masterData.companyInfo, masterData.employees),
     rowWriter: (emp, _, oneIndex) => {

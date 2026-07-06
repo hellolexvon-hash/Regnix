@@ -20,11 +20,13 @@
     "express": "^4.21.2",
     "jszip": "^3.10.1",
     "multer": "^2.1.1",
+    "particles.js": "^2.0.0",
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^5.6.205",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.22.0",
+    "three": "^0.185.1",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
@@ -35,6 +37,7 @@
     "@types/node": "^25.8.0",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
+    "@types/three": "^0.185.0",
     "@vitejs/plugin-react": "^5.0.0",
     "concurrently": "^9.1.2",
     "tsx": "^4.21.0",

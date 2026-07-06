@@ -3,6 +3,19 @@
  *
  * Generates Form II — Muster Roll cum Wage Register [See Rule 27(1)]
  *
+ * ⚠ FIXED: this generator's column layout (85 columns, UAN/PF at C5/C6, day
+ * columns at C20-C50, wage block at C51-C85) only matches the LARGER 85-column
+ * template. The file that was actually wired up in
+ * public/templates/Code_on_Wages/Form II Muster Roll cum Wage Register.xlsx
+ * was a different, older 64-column template (no UAN/PF/PT/ESI/LWF/tax/govt
+ * breakdown) — every column from C5 onward landed on the wrong field. Replace
+ * that template file with the 85-column version (the one that was supplied
+ * separately as "Form_II_Muster_Roll_cum_Wage_Register_1_.xlsx") before this
+ * code will produce correct output. Row layout also differs: the correct
+ * template's data rows run 12–29 (18-row capacity) with the total written
+ * into the first blank row after the data (row 30), not rows 12–19/20 as
+ * previously assumed.
+ *
  * ════════════════════════════════════════════════════════════════════════
  * COLUMN MAP  (template col → master col via CODE_ON_WAGES_COLUMNS)
  *
@@ -12,23 +25,23 @@
  *  C4  → establishmentName          391
  *  C5  → uanNumber                  13
  *  C6  → pfMemberId                 237
- *  C7  → baseWorkLocation           526
- *  C8  → baseWorkLocation           526  (same — Deputed)
+ *  C7  → baseWorkLocation           48   ← RE-CORRECTED (was 526, "Address of Employer")
+ *  C8  → baseWorkLocation           48   (same — Deputed)
  *  C9  → workingAreaProject         400
- *  C10 → projectName                44
+ *  C10 → projectName                (no matching master column found)
  *  C11 → employeeName               401  (duplicate — full name)
- *  C12 → endClientName              525
+ *  C12 → endClientName              392  ← RE-CORRECTED (was 525, the contractor's own name)
  *  C13 → ageAndSexGender            74
  *  C14 → employeeAge                239
  *  C15 → designation                47
  *  C16 → skillCategory              64
- *  C17 → dateOfEntryIntoService     270
+ *  C17 → dateOfEntryIntoService     66   ← RE-CORRECTED (was 270, "EPF Date of Joining")
  *  C18 → workingHoursFromTo         415
  *  C19 → restMealIntervals          416
  *  C20–C50 → day1–day31             144–174
  *  C51 → totalDaysWorked            246
- *  C52 → lopLoss                    312
- *  C53 → minWageBasic               52
+ *  C52 → lopLoss                    275  ← RE-CORRECTED (was 312, a ₹ figure; template col is "Loss of pay (LOP)" days)
+ *  C53 → basicWage                  284  ← RE-CORRECTED (was minWageBasic 52; template col is "Basic rates of wages payable")
  *  C54 → actualRateOfWages          197
  *  C55 → da                         229
  *  C56 → hra                        230
@@ -39,28 +52,25 @@
  *  C61 → statutoryBonus             234
  *  C62 → otAmount                   207
  *  C63 → otherAllowances            335
- *  C64 → additionalComponent        336
+ *  C64 → additionalComponent        236  ← RE-CORRECTED (was 336, "Society Deduction")
  *  C65 → grossSalary                273
  *  C66 → employeePf                 262
  *  C67 → esicEmployee               243
  *  C68 → insuranceEE                337
  *  C69 → ptAmount                   251
  *  C70 → employeeLwf                248
- *  C71 → incomeTax                  339
- *  C72 → otherDeduction/misc        335
+ *  C71 → incomeTax                  356  ← RE-CORRECTED (was 339, "Subsistance allowance")
+ *  C72 → otherDeduction/misc        310  ← RE-CORRECTED (was 335, duplicate of otherAllowances)
  *  C73 → totalDeduction             292
  *  C74 → totalDeduction             292  (Advances/Fines/Damages bucket)
- *  C75 → govtBasicWage              561
- *  C76 → govtDA                     562
- *  C77 → govtHRA                    563
- *  C78 → govtOther                  564
- *  C79 → govtTotal                  565
- *  C80 → diffActualGovt             566
+ *  C75-C80 → govt* comparison       561-566 (not present in this master layout; left blank)
  *  C81 → dateOfPayment              311
  *  C82 → bankName                   244
  *  C83 → bankAccountNumber          276
  *  C84 → signature                  398
  *  C85 → remarks                    503
+ *
+ * NEW: C50 (Minimum rates of wages payable) was never populated — added below.
  *
  * TO CHANGE A COLUMN: edit codeOnWages/mapping.ts
  * ════════════════════════════════════════════════════════════════════════
@@ -74,8 +84,10 @@ import { fillCellAddress } from '../shared/templateFiller.js';
 
 const SHEET_TITLE    = 'FormII-MusterCumWage';   // ≤31 chars
 const DATA_START_ROW = 12;
-const DATA_END_ROW   = 19;
-const TOTAL_ROW      = 20;
+const DATA_END_ROW   = 29;  // RE-CORRECTED (was 19): the 85-col template's
+                             // pre-built data rows actually run 12-29 (18 rows)
+const TOTAL_ROW       = 30; // RE-CORRECTED (was 20): first blank row after the
+                             // data block, before the signature line at row 33
 const USED_COLUMNS   = 85;
 const DAY_START_COL  = 20; // template col 20 = Day 1, col 50 = Day 31
 
@@ -91,11 +103,18 @@ function writeCompanyMeta(
   companyInfo: MasterData['companyInfo'],
   employees: MasterData['employees'],
 ): void {
-  fillCellAddress(ws, 'K4', getString(companyInfo, M.establishmentName));
-  fillCellAddress(ws, 'T4', getString(companyInfo, M.registrationNumber));
-  fillCellAddress(ws, 'K5', getString(companyInfo, M.address));
-  fillCellAddress(ws, 'K6', getString(companyInfo, M.natureOfIndustry)); // 38 ← CORRECTED
-  fillCellAddress(ws, 'K7', monthYearLabel(employees));
+  // FIXED: in the correct 85-column template the value placeholders sit at
+  // columns M/V (13/22), not K/T (11/20) — those were the 64-column
+  // template's positions. "Establishment Name" and "Address" also share one
+  // merged value cell (M4:Q5), so both lines go into the single M4 anchor.
+  const establishment = getString(companyInfo, M.establishmentName);
+  const address = getString(companyInfo, M.address);
+  fillCellAddress(ws, 'M4', address ? `${establishment}\n${address}` : establishment);
+  fillCellAddress(ws, 'V4', getString(companyInfo, M.registrationNumber));
+  const payDate = employees.map((r) => getDate(r, M.dateOfPayment)).find((v): v is Date => v instanceof Date);
+  fillCellAddress(ws, 'V5', String((payDate ?? new Date()).getFullYear()));
+  fillCellAddress(ws, 'M6', getString(companyInfo, M.natureOfIndustry)); // 38 ← CORRECTED
+  fillCellAddress(ws, 'M7', monthYearLabel(employees));
 }
 
 export async function generateMusterRollCumWageRegister(
@@ -167,8 +186,9 @@ export async function generateMusterRollCumWageRegister(
       );
 
       row[51] = getNumber(emp, M.totalDaysWorked);        // 246
-      row[52] = getNumber(emp, M.lopLoss);                // 312
-      row[53] = getString(emp, M.minWageBasic);           // 52
+      row[52] = getNumber(emp, M.lopLoss);                // 275 ← RE-CORRECTED
+      row[50] = getString(emp, M.minWageBasic);           // 52  ← NEW: was never written before
+      row[53] = basic;                                    // 284 ← RE-CORRECTED (was minWageBasic)
       row[54] = getString(emp, M.actualRateOfWages);      // 197
       row[55] = da;                                       // 229
       row[56] = hra;                                      // 230
@@ -187,7 +207,7 @@ export async function generateMusterRollCumWageRegister(
       row[69] = pt;                                       // 251
       row[70] = lwf;                                      // 248
       row[71] = tax;                                      // 339
-      row[72] = misc;                                     // 335 (misc deductions)
+      row[72] = misc;                                     // 310 (misc deductions) — comment corrected, code was already right
       row[73] = totalDedn;                                // 292 (Advances/Fines/Damages)
       row[74] = totalDedn;                                // 292 Total Deductions
       row[75] = round2(getNumber(emp, M.govtBasicWage));  // 561
@@ -206,7 +226,7 @@ export async function generateMusterRollCumWageRegister(
     },
     totalWriter: (ws, totalRow, rows) => {
       fillCellAddress(ws, `A${totalRow}`, 'Total');
-      fillCellAddress(ws, `BC${totalRow}`, sumColumn(rows, 65)); // gross
+      fillCellAddress(ws, `BM${totalRow}`, sumColumn(rows, 65)); // gross ← FIXED (was BC, which is column 55 not 65)
       fillCellAddress(ws, `BV${totalRow}`, sumColumn(rows, 74)); // total deductions
     },
   });

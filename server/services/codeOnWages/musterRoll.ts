@@ -46,9 +46,12 @@ function writeCompanyMeta(
   companyInfo: MasterData['companyInfo'],
   employees: MasterData['employees'],
 ): void {
-  fillCellAddress(ws, 'C3', getString(companyInfo, M.establishmentName));
-  fillCellAddress(ws, 'C4', getString(companyInfo, M.address));
-  fillCellAddress(ws, 'C5', monthYearLabel(employees));
+  // FIXED: this template's "Establishment Name:" label is on row 4 (not 3),
+  // and row 5 is "Department:" — a per-employee field, not company-level
+  // info — so unlike the other forms there is no "Address" slot to fill
+  // here at all. "Month & Year:" is row 6.
+  fillCellAddress(ws, 'C4', getString(companyInfo, M.establishmentName));
+  fillCellAddress(ws, 'C6', monthYearLabel(employees));
 }
 
 export async function generateMusterRoll(

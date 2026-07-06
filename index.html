@@ -1,15 +1,423 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Regnix — by Lexvon</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet" />
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Regnix</title>
+
+<!-- Favicon / tab icons -->
+<link rel="icon" type="image/svg+xml" href="/public/logo/regnix-mark.svg" />
+<link rel="icon" type="image/png" href="/public/logo/regnix-mark.png" />
+<link rel="apple-touch-icon" href="/public/logo/regnix-mark.svg" />
+<meta name="theme-color" content="#060a12" />
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet" />
+
+<!-- particles.js (background constellation network) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/particles.js/2.0.0/particles.min.js"></script>
+<!-- three.js (foreground particle-text formation) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+<style>
+  :root{
+    --bg:#060a12;
+    --blue:#3aa8ff;
+    --cyan:#7ef9ff;
+    --violet:#8b6cf9;
+    --ink:#eaf6ff;
+    --dim:#7d92ad;
+  }
+  *{ box-sizing:border-box; }
+
+  #regnix-loader{
+    position:fixed; inset:0;
+    z-index:9999;
+    background:radial-gradient(ellipse at 50% 40%, #0b1220 0%, #060a12 60%, #030509 100%);
+    display:flex; align-items:center; justify-content:center;
+    transition:opacity .9s ease;
+    font-family:'DM Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  }
+  #regnix-loader.fade-out{ opacity:0; pointer-events:none; }
+
+  #particles-js{
+    position:absolute; inset:0;
+    width:100%; height:100%;
+    opacity:0;
+    transition:opacity 1.4s ease;
+  }
+  #particles-js.show{ opacity:1; }
+
+  #regnix-canvas{
+    position:absolute; inset:0;
+    width:100%; height:100%;
+    display:block;
+  }
+
+  .loader-caption{
+    position:absolute;
+    left:50%; top:50%;
+    transform:translate(-50%, 92px);
+    text-align:center;
+    opacity:0;
+    transition:opacity 1s ease, transform 1s ease;
+    pointer-events:none;
+  }
+  .loader-caption.show{ opacity:1; transform:translate(-50%, 78px); }
+  .loader-caption .tag{
+    margin:0; font-family:'Syne', sans-serif; font-size:13px; letter-spacing:.42em;
+    text-transform:uppercase; color:var(--cyan); font-weight:700;
+  }
+  .loader-caption .sub{
+    margin:10px 0 0; font-size:13px; letter-spacing:.06em; color:var(--dim);
+  }
+
+  .loader-progress{
+    position:absolute; left:50%; bottom:64px;
+    transform:translateX(-50%);
+    width:220px; height:2px;
+    background:rgba(122,159,255,.15);
+    border-radius:2px; overflow:hidden;
+  }
+  .loader-progress i{
+    position:absolute; inset:0; width:0%;
+    background:linear-gradient(90deg, var(--blue), var(--cyan));
+    box-shadow:0 0 12px 1px rgba(122,220,255,.7);
+    animation:regnix-progress 3.2s cubic-bezier(.2,.7,.3,1) forwards;
+  }
+  @keyframes regnix-progress{
+    0%{ width:0%; } 70%{ width:82%; } 100%{ width:100%; }
+  }
+
+  .loader-skip{
+    position:absolute; right:22px; bottom:22px;
+    font-size:11px; letter-spacing:.08em; color:var(--dim);
+    background:transparent; border:1px solid rgba(122,159,255,.25);
+    padding:8px 14px; border-radius:999px; cursor:pointer;
+    transition:all .25s ease;
+    font-family:'DM Sans', sans-serif;
+  }
+  .loader-skip:hover{
+    color:var(--ink); border-color:rgba(122,220,255,.6);
+    box-shadow:0 0 16px rgba(58,168,255,.25);
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    #regnix-loader{ transition:none; }
+    .loader-progress i{ animation:none; width:100%; }
+  }
+
+  /* keep the real app invisible + non-interactive until the loader hands off */
+  #root{
+    opacity:0;
+    transition:opacity .8s ease;
+  }
+  #root.app-ready{
+    opacity:1;
+  }
+</style>
+</head>
+<body>
+
+  <!-- ============ REGNIX LOADER ============ -->
+  <div id="regnix-loader">
+    <div id="particles-js"></div>
+    <canvas id="regnix-canvas"></canvas>
+
+    <div class="loader-caption">
+      <p class="tag">Regnix</p>
+      <p class="sub">Initializing workspace…</p>
+    </div>
+
+    <div class="loader-progress"><i></i></div>
+    <button class="loader-skip" id="skipBtn">Skip</button>
+  </div>
+
+  <!-- ============ REACT APP MOUNTS HERE ============ -->
+  <div id="root"></div>
+  <script type="module" src="/src/main.tsx"></script>
+
+  <script>
+  (function(){
+
+    var SESSION_KEY = 'regnix-loader-seen';
+    var loaderEl = document.getElementById('regnix-loader');
+
+    function revealApp(){
+      var rootEl = document.getElementById('root');
+      rootEl.classList.add('app-ready');
+    }
+
+    // already seen this session -> skip straight to the app, do zero particle/GL work
+    if (sessionStorage.getItem(SESSION_KEY) === 'true') {
+      loaderEl.style.display = 'none';
+      revealApp();
+      return;
+    }
+
+    /* =========================================================
+       1) BACKGROUND CONSTELLATION NETWORK (particles.js)
+    ========================================================= */
+    particlesJS('particles-js', {
+      particles: {
+        number: { value: 70, density: { enable: true, value_area: 900 } },
+        color: { value: ['#3aa8ff', '#7ef9ff'] },
+        shape: { type: 'circle' },
+        opacity: {
+          value: 0.35, random: true,
+          anim: { enable: true, speed: 0.4, opacity_min: 0.08, sync: false }
+        },
+        size: { value: 2, random: true },
+        line_linked: {
+          enable: true, distance: 130,
+          color: '#2f6fb0', opacity: 0.22, width: 1
+        },
+        move: {
+          enable: true, speed: 0.5, direction: 'none',
+          random: true, straight: false, out_mode: 'out'
+        }
+      },
+      interactivity: {
+        detect_on: 'window',
+        events: {
+          onhover: { enable: true, mode: 'grab' },
+          onclick: { enable: false },
+          resize: true
+        },
+        modes: {
+          grab: { distance: 140, line_linked: { opacity: 0.4 } }
+        }
+      },
+      retina_detect: true
+    });
+
+    setTimeout(function(){
+      document.getElementById('particles-js').classList.add('show');
+    }, 60);
+
+    /* =========================================================
+       2) PARTICLE WORDMARK FORMATION (three.js)
+    ========================================================= */
+    var canvas = document.getElementById('regnix-canvas');
+    var renderer = new THREE.WebGLRenderer({ canvas: canvas, alpha: true, antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+
+    var scene = new THREE.Scene();
+    var camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 3000);
+    camera.position.set(0, 0, 620);
+
+    function makeDotTexture(){
+      var c = document.createElement('canvas');
+      c.width = c.height = 64;
+      var ctx = c.getContext('2d');
+      var g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+      g.addColorStop(0, 'rgba(255,255,255,1)');
+      g.addColorStop(0.35, 'rgba(180,225,255,0.9)');
+      g.addColorStop(1, 'rgba(120,180,255,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, 64, 64);
+      return new THREE.CanvasTexture(c);
+    }
+    var dotTexture = makeDotTexture();
+
+    function sampleTextPoints(text, opts){
+      opts = opts || {};
+      var w = opts.width || 900, h = opts.height || 220;
+      var fontSize = opts.fontSize || 150;
+      var step = opts.step || 4;
+
+      var tc = document.createElement('canvas');
+      tc.width = w; tc.height = h;
+      var tctx = tc.getContext('2d');
+      tctx.fillStyle = '#000';
+      tctx.fillRect(0, 0, w, h);
+      tctx.fillStyle = '#fff';
+      tctx.textAlign = 'center';
+      tctx.textBaseline = 'middle';
+      tctx.font = '700 ' + fontSize + 'px "Syne", Arial, sans-serif';
+      tctx.fillText(text, w / 2, h / 2 + 8);
+
+      var data = tctx.getImageData(0, 0, w, h).data;
+      var pts = [];
+      for (var y = 0; y < h; y += step) {
+        for (var x = 0; x < w; x += step) {
+          var idx = (y * w + x) * 4;
+          if (data[idx] > 120) {
+            pts.push([
+              (x - w / 2) * 0.62,
+              -(y - h / 2) * 0.62,
+              (Math.random() - 0.5) * 14
+            ]);
+          }
+        }
+      }
+      return pts;
+    }
+
+    var textPoints = sampleTextPoints('REGNIX', { width: 900, height: 220, fontSize: 150, step: 4 });
+    var count = textPoints.length;
+
+    var targetPositions = new Float32Array(count * 3);
+    var startPositions  = new Float32Array(count * 3);
+    var currentPositions = new Float32Array(count * 3);
+    var colors = new Float32Array(count * 3);
+
+    var cBlue   = new THREE.Color('#3aa8ff');
+    var cCyan   = new THREE.Color('#8ff2ff');
+    var cViolet = new THREE.Color('#8b6cf9');
+
+    for (var i = 0; i < count; i++) {
+      var p = textPoints[i];
+      targetPositions[i * 3]     = p[0];
+      targetPositions[i * 3 + 1] = p[1];
+      targetPositions[i * 3 + 2] = p[2];
+
+      var r = 380 + Math.random() * 260;
+      var theta = Math.random() * Math.PI * 2;
+      var phi = Math.acos((Math.random() * 2) - 1);
+      startPositions[i * 3]     = r * Math.sin(phi) * Math.cos(theta);
+      startPositions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+      startPositions[i * 3 + 2] = r * Math.cos(phi) - 120;
+
+      currentPositions[i * 3]     = startPositions[i * 3];
+      currentPositions[i * 3 + 1] = startPositions[i * 3 + 1];
+      currentPositions[i * 3 + 2] = startPositions[i * 3 + 2];
+
+      var mixT = (p[0] + 280) / 560;
+      mixT = Math.max(0, Math.min(1, mixT));
+      var col = cBlue.clone().lerp(cCyan, mixT).lerp(cViolet, 0.12 * Math.random());
+      colors[i * 3] = col.r; colors[i * 3 + 1] = col.g; colors[i * 3 + 2] = col.b;
+    }
+
+    var geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(currentPositions, 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+    var material = new THREE.PointsMaterial({
+      size: 3.4,
+      map: dotTexture,
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.95,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      sizeAttenuation: true
+    });
+
+    var pointCloud = new THREE.Points(geometry, material);
+    scene.add(pointCloud);
+
+    var ambientCount = 250;
+    var ambientGeo = new THREE.BufferGeometry();
+    var ambientPos = new Float32Array(ambientCount * 3);
+    for (var a = 0; a < ambientCount; a++) {
+      ambientPos[a * 3]     = (Math.random() - 0.5) * 1400;
+      ambientPos[a * 3 + 1] = (Math.random() - 0.5) * 900;
+      ambientPos[a * 3 + 2] = -300 - Math.random() * 500;
+    }
+    ambientGeo.setAttribute('position', new THREE.BufferAttribute(ambientPos, 3));
+    var ambientMat = new THREE.PointsMaterial({
+      size: 2, map: dotTexture, color: '#3aa8ff',
+      transparent: true, opacity: 0.25, depthWrite: false,
+      blending: THREE.AdditiveBlending
+    });
+    var ambientCloud = new THREE.Points(ambientGeo, ambientMat);
+    scene.add(ambientCloud);
+
+    var clock = new THREE.Clock();
+    var FORM_DURATION = 2.3;
+    var HOLD_DURATION = 1.6;
+    var FADE_START = FORM_DURATION + HOLD_DURATION;
+
+    var rafId = null;
+    var finished = false;
+
+    function easeOutBack(t){
+      var c1 = 1.70158, c3 = c1 + 1;
+      return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+    }
+
+    var captionEl = document.querySelector('.loader-caption');
+    var captionShown = false;
+
+    function animate(){
+      rafId = requestAnimationFrame(animate);
+      var t = clock.getElapsedTime();
+
+      if (t <= FORM_DURATION) {
+        var progress = Math.min(t / FORM_DURATION, 1);
+        var eased = easeOutBack(progress > 0.94 ? 0.94 : progress);
+        var posAttr = geometry.attributes.position;
+        for (var i = 0; i < count; i++) {
+          var ix = i * 3, iy = i * 3 + 1, iz = i * 3 + 2;
+          posAttr.array[ix] = startPositions[ix] + (targetPositions[ix] - startPositions[ix]) * eased;
+          posAttr.array[iy] = startPositions[iy] + (targetPositions[iy] - startPositions[iy]) * eased;
+          posAttr.array[iz] = startPositions[iz] + (targetPositions[iz] - startPositions[iz]) * eased;
+        }
+        posAttr.needsUpdate = true;
+        pointCloud.rotation.y = (1 - progress) * 0.6;
+        camera.position.z = 620 - progress * 40;
+      } else {
+        var settleT = t - FORM_DURATION;
+        var posAttr2 = geometry.attributes.position;
+        for (var j = 0; j < count; j++) {
+          var jx = j * 3, jy = j * 3 + 1, jz = j * 3 + 2;
+          var wob = Math.sin(settleT * 1.4 + j * 0.15) * 0.6;
+          posAttr2.array[jx] = targetPositions[jx];
+          posAttr2.array[jy] = targetPositions[jy] + wob * 0.3;
+          posAttr2.array[jz] = targetPositions[jz] + Math.sin(settleT + j) * 1.2;
+        }
+        posAttr2.needsUpdate = true;
+        material.size = 3.4 + Math.sin(settleT * 2.2) * 0.35;
+        pointCloud.rotation.y = Math.sin(settleT * 0.3) * 0.03;
+
+        if (!captionShown) {
+          captionShown = true;
+          captionEl.classList.add('show');
+        }
+      }
+
+      ambientCloud.rotation.y += 0.0006;
+      ambientCloud.rotation.x += 0.0002;
+
+      renderer.render(scene, camera);
+
+      if (!finished && t >= FADE_START + 0.9) {
+        finishLoader();
+      }
+    }
+    animate();
+
+    window.addEventListener('resize', function(){
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    /* =========================================================
+       3) COMPLETION — fade the loader, reveal the React app
+    ========================================================= */
+    function finishLoader(){
+      if (finished) return;
+      finished = true;
+      if (rafId) cancelAnimationFrame(rafId);
+
+      sessionStorage.setItem(SESSION_KEY, 'true');
+      loaderEl.classList.add('fade-out');
+      revealApp();
+
+      setTimeout(function(){
+        loaderEl.style.display = 'none';
+        window.dispatchEvent(new CustomEvent('regnixLoaderComplete'));
+      }, 950);
+    }
+
+    document.getElementById('skipBtn').addEventListener('click', finishLoader);
+
+  })();
+  </script>
+
+</body>
 </html>

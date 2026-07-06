@@ -8,13 +8,6 @@ import styles from './AuthPage.module.css';
 
 const INDUSTRIES = ['Manufacturing','IT / Software','BFSI','Healthcare','Retail','Logistics','Construction','Education','Hospitality','Other'];
 
-const LogoSVG = () => (
-  <svg viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <path d="M3 4.5C3 3.67 3.67 3 4.5 3H9C11.48 3 13.5 5.02 13.5 7.5C13.5 9.98 11.48 12 9 12H7.5V15H5.25V12H4.5C3.67 12 3 11.33 3 10.5V4.5Z" fill="white"/>
-    <path d="M9 12H10.5L13.5 15H11L9 12Z" fill="rgba(255,255,255,0.6)"/>
-  </svg>
-);
-
 export default function SignupPage() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
@@ -42,10 +35,13 @@ export default function SignupPage() {
   return (
     <div className={styles.page}>
       <div className={styles.left}>
-        <div className={styles.leftGrid} aria-hidden />
-        <div className={styles.leftBlob} aria-hidden />
+        <div className={styles.leftPattern} aria-hidden />
+        <div className={styles.leftGlow} aria-hidden />
+        <div className={styles.leftGlow2} aria-hidden />
         <Link to="/" className={styles.logoLink}>
-          <span className={styles.logoMark}><LogoSVG /></span>
+          <span className={styles.logoMark}>
+            <img src="/regnix-markw.png" alt="Regnix logo" className={styles.logoImg} />
+          </span>
           <span className={styles.logoName}>Regnix</span>
           <span className={styles.logoDot}>·</span>
           <span className={styles.logoSub}>by Lexvon</span>
@@ -59,7 +55,10 @@ export default function SignupPage() {
           <p className={styles.leftSub}>Compliance, audit, legal, payroll, and HR operations — unified in one intelligent workspace.</p>
           <div className={styles.leftPoints}>
             {['AI-powered compliance engine','Legal document analysis & drafting','Audit planning & continuous monitoring','Payroll & statutory filing automation','Vendor & employee lifecycle tracking'].map(p => (
-              <div key={p} className={styles.leftPoint}><span className={styles.pointDot} />{p}</div>
+              <div key={p} className={styles.leftPoint}>
+                <span className={styles.pointCheck}>✓</span>
+                {p}
+              </div>
             ))}
           </div>
         </div>
@@ -72,9 +71,24 @@ export default function SignupPage() {
             <p className={styles.formSub}>Already have an account? <Link to="/login" className={styles.formLink}>Sign in</Link></p>
           </div>
 
-          <div className={styles.typeToggle}>
-            <button className={`${styles.typeBtn} ${accountType==='company'?styles.typeActive:''}`} onClick={() => setAccountType('company')} type="button">🏢 Company</button>
-            <button className={`${styles.typeBtn} ${accountType==='client'?styles.typeActive:''}`} onClick={() => setAccountType('client')} type="button">👤 Client / Consultant</button>
+          <div className={styles.typeToggle} data-active={accountType}>
+            <span className={styles.typeToggleThumb} aria-hidden />
+            <button
+              className={`${styles.typeBtn} ${accountType==='company'?styles.typeActive:''}`}
+              onClick={() => setAccountType('company')}
+              type="button"
+              aria-pressed={accountType==='company'}
+            >
+              🏢 Company
+            </button>
+            <button
+              className={`${styles.typeBtn} ${accountType==='client'?styles.typeActive:''}`}
+              onClick={() => setAccountType('client')}
+              type="button"
+              aria-pressed={accountType==='client'}
+            >
+              👤 Client / Consultant
+            </button>
           </div>
           <p className={styles.typeHint}>{accountType==='company' ? 'For enterprises & organizations managing their own compliance.' : 'For consultants & advisors managing compliance for multiple clients.'}</p>
 
@@ -82,23 +96,25 @@ export default function SignupPage() {
             <Input label="Full Name" placeholder="Rahul Sharma" value={form.name} onChange={set('name')} required />
             <Input label="Work Email" type="email" placeholder="rahul@company.com" value={form.email} onChange={set('email')} required />
 
-            {accountType === 'company' && (<>
-              <Input label="Company Name" placeholder="Acme Pvt. Ltd." value={form.companyName} onChange={set('companyName')} required />
-              <div className={styles.row}>
-                <div className={styles.fieldWrap}>
-                  <label className={styles.fieldLabel}>Industry</label>
-                  <select className={styles.select} value={form.industry} onChange={set('industry')} required>
-                    <option value="">Select industry</option>
-                    {INDUSTRIES.map(i => <option key={i} value={i}>{i}</option>)}
-                  </select>
+            <div key={accountType} className={styles.fieldGroup}>
+              {accountType === 'company' && (<>
+                <Input label="Company Name" placeholder="Acme Pvt. Ltd." value={form.companyName} onChange={set('companyName')} required />
+                <div className={styles.row}>
+                  <div className={styles.fieldWrap}>
+                    <label className={styles.fieldLabel}>Industry</label>
+                    <select className={styles.select} value={form.industry} onChange={set('industry')} required>
+                      <option value="">Select industry</option>
+                      {INDUSTRIES.map(i => <option key={i} value={i}>{i}</option>)}
+                    </select>
+                  </div>
+                  <Input label="GSTIN (optional)" placeholder="22AAAAA0000A1Z5" value={form.gstin} onChange={set('gstin')} />
                 </div>
-                <Input label="GSTIN (optional)" placeholder="22AAAAA0000A1Z5" value={form.gstin} onChange={set('gstin')} />
-              </div>
-            </>)}
+              </>)}
 
-            {accountType === 'client' && (
-              <Input label="Firm / Practice Name" placeholder="Your consulting firm" value={form.companyName} onChange={set('companyName')} />
-            )}
+              {accountType === 'client' && (
+                <Input label="Firm / Practice Name" placeholder="Your consulting firm" value={form.companyName} onChange={set('companyName')} />
+              )}
+            </div>
 
             <div className={styles.row}>
               <Input label="Password" type="password" placeholder="Min. 8 characters" value={form.password} onChange={set('password')} required />

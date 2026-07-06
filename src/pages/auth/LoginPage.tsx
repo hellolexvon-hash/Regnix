@@ -5,16 +5,6 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import styles from './AuthPage.module.css';
 
-const LogoSVG = () => (
-  <svg viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <path
-      d="M3 4.5C3 3.67 3.67 3 4.5 3H9C11.48 3 13.5 5.02 13.5 7.5C13.5 9.98 11.48 12 9 12H7.5V15H5.25V12H4.5C3.67 12 3 11.33 3 10.5V4.5Z"
-      fill="white"
-    />
-    <path d="M9 12H10.5L13.5 15H11L9 12Z" fill="rgba(255,255,255,0.6)" />
-  </svg>
-);
-
 export default function LoginPage() {
   const navigate = useNavigate();
   const { login, isAuthenticated } = useAuth();
@@ -48,12 +38,13 @@ export default function LoginPage() {
   return (
     <div className={styles.page}>
       <div className={styles.left}>
-        <div className={styles.leftGrid} aria-hidden />
-        <div className={styles.leftBlob} aria-hidden />
+        <div className={styles.leftPattern} aria-hidden />
+        <div className={styles.leftGlow} aria-hidden />
+        <div className={styles.leftGlow2} aria-hidden />
 
         <Link to="/" className={styles.logoLink}>
           <span className={styles.logoMark}>
-            <LogoSVG />
+            <img src="/regnix-markw.png" alt="Regnix logo" className={styles.logoImg} />
           </span>
           <span className={styles.logoName}>Regnix</span>
           <span className={styles.logoDot}>·</span>
@@ -80,7 +71,7 @@ export default function LoginPage() {
               'Team workflow updates',
             ].map((p) => (
               <div key={p} className={styles.leftPoint}>
-                <span className={styles.pointDot} />
+                <span className={styles.pointCheck}>✓</span>
                 {p}
               </div>
             ))}
