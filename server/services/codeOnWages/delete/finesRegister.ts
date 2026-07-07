@@ -51,13 +51,16 @@ function writeCompanyMeta(
   companyInfo: MasterData['companyInfo'],
   employees: MasterData['employees'],
 ): void {
-  fillCellAddress(ws, 'C3', getString(companyInfo, M.establishmentName));
-  fillCellAddress(ws, 'J3', getString(companyInfo, M.registrationNumber));
-  fillCellAddress(ws, 'C4', getString(companyInfo, M.address));
+  // The template's labels live on rows 4-7.
+  // Establishment name and address share the merged value cell C4:E5.
+  const establishment = getString(companyInfo, M.establishmentName);
+  const address = getString(companyInfo, M.address);
+  fillCellAddress(ws, 'C4', address ? `${establishment}\n${address}` : establishment);
+  fillCellAddress(ws, 'J4', getString(companyInfo, M.registrationNumber));
   const payDate = employees.map((r) => getDate(r, M.dateOfPayment)).find((v): v is Date => v instanceof Date);
-  fillCellAddress(ws, 'J4', String((payDate ?? new Date()).getFullYear()));
-  fillCellAddress(ws, 'C5', getString(companyInfo, M.natureOfIndustry));  // col 38 ← CORRECTED
-  fillCellAddress(ws, 'C6', monthYearLabel(employees));
+  fillCellAddress(ws, 'J5', String((payDate ?? new Date()).getFullYear()));
+  fillCellAddress(ws, 'C6', getString(companyInfo, M.natureOfIndustry));
+  fillCellAddress(ws, 'C7', monthYearLabel(employees));
 }
 
 export async function generateFinesRegister(
@@ -81,20 +84,20 @@ export async function generateFinesRegister(
       return {
         1:  oneIndex,
         2:  getString(emp, M.employeeCode),
-        3:  getString(emp, M.employeeName),        // 401 ← CORRECTED
+        3:  getString(emp, M.employeeName),
         4:  getString(emp, M.department),
         5:  getString(emp, M.designation),
-        6:  formatDate(getDate(emp, M.dateOfOffence)),          // 295
-        7:  getString(emp, M.actOmissionForFine),               // 301
-        8:  formatDate(getDate(emp, M.dateOffenceNoticed)),     // 299 ← CORRECTED
-        9:  formatDate(getDate(emp, M.dateShowCauseNotice)),    // 406 ← CORRECTED
-        10: formatDate(getDate(emp, M.dateFineOrder)),          // 300
-        11: getString(emp, M.wagePeriodOfFine),                 // 432
-        12: fineAmt,                                            // 215
-        13: formatDate(getDate(emp, M.dateOfRecovery)),         // 303
-        14: recovered,                                          // 304
-        15: balance,                                            // 436
-        16: getString(emp, M.finesRemarks) || getString(emp, M.remarks), // 217
+        6:  formatDate(getDate(emp, M.dateOfOffence)),
+        7:  getString(emp, M.actOmissionForFine),
+        8:  formatDate(getDate(emp, M.dateOffenceNoticed)),
+        9:  formatDate(getDate(emp, M.dateShowCauseNotice)),
+        10: formatDate(getDate(emp, M.dateFineOrder)),
+        11: getString(emp, M.wagePeriodOfFine),
+        12: fineAmt,
+        13: formatDate(getDate(emp, M.dateOfRecovery)),
+        14: recovered,
+        15: balance,
+        16: getString(emp, M.finesRemarks) || getString(emp, M.remarks),
       };
     },
     totalWriter: (ws, totalRow, rows) => {

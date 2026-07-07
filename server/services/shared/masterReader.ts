@@ -111,6 +111,23 @@ export function getDate(row: Record<number, unknown> | null | undefined, col: nu
   return coerceDate(value);
 }
 
+/**
+ * Employee name (master col 401) is frequently blank in data rows.
+ * Column 101 has been confirmed as the reliable fallback across acts.
+ * Use this instead of getString(row, 401) anywhere employee name is read.
+ */
+export function getEmployeeName(
+  row: Record<number, unknown> | null | undefined,
+  primaryCol = 401,
+  fallbackCol = 101,
+): string {
+  const primary = getString(row, primaryCol);
+  if (primary) {
+    return primary;
+  }
+  return getString(row, fallbackCol);
+}
+
 export function isEmptyRow(row: ExcelJS.Row | Record<number, unknown> | null | undefined): boolean {
   if (!row) {
     return true;
@@ -179,7 +196,7 @@ function readEmployeeRows(sheet: ExcelJS.Worksheet): MasterRow[] {
 }
 
 function deriveCompanyInfo(rows: MasterRow[]): Record<number, CellValue> {
-  const priorityColumns = [391, 392, 394, 176, 2, 9, 401, 47, 45];
+  const priorityColumns = [391, 392, 38, 176, 2, 9, 401, 101, 47, 45];
   const companyInfo: Record<number, CellValue> = {};
 
   for (const col of priorityColumns) {

@@ -38,8 +38,8 @@ export const CODE_ON_WAGES_COLUMNS = {
   totalDaysWorked:       MASTER_COLUMNS.totalDaysWorked,    // 246
   totalDaysPresent:      MASTER_COLUMNS.totalDaysPresent,   // 199
   totalDaysAbsent:       MASTER_COLUMNS.totalDaysAbsent,    // 200
-  lwpDays:               MASTER_COLUMNS.lwpDays,            // 275 ← RE-CORRECTED (275 = "Leave Without Pay (LWP) Days"; 201 = "Total Week Offs/Holidays/leaves", unrelated)
-  otHoursMusterRoll:     MASTER_COLUMNS.otHoursMusterRoll,  // 440 ← RE-CORRECTED (275 is LWP Days, not OT hours; 440 = "Total Overtime Hours Worked")
+  lwpDays:               MASTER_COLUMNS.lwpDays,            // 201
+  otHoursMusterRoll:     MASTER_COLUMNS.otHoursMusterRoll,  // 275 ← Form VI OT col CORRECTED
 
   // ── WAGES / PAYROLL ───────────────────────────────────────────────────────
   basicWage:             MASTER_COLUMNS.basicWage,          // 284 ← CORRECTED
@@ -62,13 +62,13 @@ export const CODE_ON_WAGES_COLUMNS = {
   bankAccountNumber:     MASTER_COLUMNS.bankAccountNumber,   // 276
 
   // ── OVERTIME REGISTER (Form III) ──────────────────────────────────────────
-  normalRateOfWages:     MASTER_COLUMNS.normalRateOfWages, // 225 ← RE-CORRECTED ("Normal rate of wages" ₹/hr; OT rate col 187/226 = exactly 2× this value, confirming unit match. Col 204 is a DAILY rate, wrong unit for Form III)
+  normalRateOfWages:     MASTER_COLUMNS.dailyRateOfWages,   // 204 ← Form III CORRECTED (daily rate)
   otRatePerHour:         MASTER_COLUMNS.otRatePerHour,      // 187
   otHoursWeek1:          MASTER_COLUMNS.otHoursWeek1,       // 183
   otHoursWeek2:          MASTER_COLUMNS.otHoursWeek2,       // 184
   otHoursWeek3:          MASTER_COLUMNS.otHoursWeek3,       // 185
   otHoursWeek4:          MASTER_COLUMNS.otHoursWeek4,       // 186
-  totalOtHours:          MASTER_COLUMNS.totalOtHours,       // 440 ← RE-CORRECTED (col 440 is literally labelled "Total Overtime Hours Worked"; col 190 is "Total Hours worked" — all hours, not OT)
+  totalOtHours:          MASTER_COLUMNS.totalOtHours,       // 190 ← CORRECTED (was 440/224)
   overtimeRemarks:       MASTER_COLUMNS.overtimeRemarks,    // 514
 
   // ── FINES (Form I) ────────────────────────────────────────────────────────
@@ -92,8 +92,8 @@ export const CODE_ON_WAGES_COLUMNS = {
   replyReceived:         MASTER_COLUMNS.replyReceived,      // 435
   dateOfOrder:           MASTER_COLUMNS.dateOfOrder,        // 305
   amountOrdered:         MASTER_COLUMNS.amountOrdered,      // 306
-  wagePeriodRecovery:    MASTER_COLUMNS.wagePeriodRecovery, // 307 ← RE-CORRECTED (306/304 both wrong; 307 = "Wage Period of Recovery MW Damages")
-  amountRecoveredDamage: MASTER_COLUMNS.amountRecoveredDamage, // 304 ← RE-CORRECTED (304 = "Amount Recovered Till Date", a number; 307 is text)
+  wagePeriodRecovery:    MASTER_COLUMNS.wagePeriodRecovery, // 304 ← CORRECTED (was 307)
+  amountRecoveredDamage: MASTER_COLUMNS.amountRecoveredDamage, // 307 ← CORRECTED (was 304)
   cumulativeDeductedDamage: MASTER_COLUMNS.cumulativeDeductedDamage, // 308
   pctWagesDeductedDamage: MASTER_COLUMNS.pctWagesDeductedDamage,    // 309
   damageRemarks:         MASTER_COLUMNS.damageRemarks,     // 213
@@ -107,17 +107,17 @@ export const CODE_ON_WAGES_COLUMNS = {
   // ── MUSTER CUM WAGE REGISTER (Form II Muster) ─────────────────────────────
   uanNumber:             MASTER_COLUMNS.uanNumber,          // 13
   pfMemberId:            MASTER_COLUMNS.pfMemberId,         // 237
-  baseWorkLocation:      MASTER_COLUMNS.baseWorkLocation,   // 48 ← RE-CORRECTED (col 526 is "Address of Employer"; 48 is literally "Work Location")
+  baseWorkLocation:      MASTER_COLUMNS.baseWorkLocation,   // 526
   workingAreaProject:    MASTER_COLUMNS.workingAreaProject,  // 400
-  projectName:           MASTER_COLUMNS.projectName,        // NOTE: no "Project Name" column exists in this master layout; col 44 ("Nature of employment/designation") is NOT a project name. Left unmapped until a real source column is added.
-  endClientName:         MASTER_COLUMNS.endClientName,      // 392 ← RE-CORRECTED (col 525 is "Name of Employer/Proprietor" — the CONTRACTOR's own name, not the end client; 392 = "Name of the principal employer and his address", i.e. the actual end client)
+  projectName:           MASTER_COLUMNS.projectName,        // 44
+  endClientName:         MASTER_COLUMNS.endClientName,      // 525
   ageAndSexGender:       MASTER_COLUMNS.ageAndSexGender,    // 74
   employeeAge:           MASTER_COLUMNS.employeeAge,        // 239
   skillCategory:         MASTER_COLUMNS.skillCategory,      // 64
-  dateOfEntryIntoService: MASTER_COLUMNS.dateOfEntryIntoService, // 66 ← RE-CORRECTED (col 270 is "EPF Date of Joining"; 66 is literally "Date of entry into service")
+  dateOfEntryIntoService: MASTER_COLUMNS.dateOfEntryIntoService, // 270
   workingHoursFromTo:    MASTER_COLUMNS.workingHoursFromTo, // 415
   restMealIntervals:     MASTER_COLUMNS.restMealIntervals,  // 416
-  lopLoss:               MASTER_COLUMNS.lopLoss,            // 275 ← RE-CORRECTED (col 312 is a rupee amount "Total Damages/Loss of pay"; the template column "Loss of pay (LOP)" pairs with days-worked, so it needs the LWP-Days figure, col 275 — same column as lwpDays above)
+  lopLoss:               MASTER_COLUMNS.lopLoss,            // 312
   minWageBasic:          MASTER_COLUMNS.minWageBasic,       // 52
   actualRateOfWages:     MASTER_COLUMNS.actualRateOfWages,  // 197
   medicalAllowance:      MASTER_COLUMNS.medicalAllowance,   // 231
@@ -125,10 +125,10 @@ export const CODE_ON_WAGES_COLUMNS = {
   nfh:                   MASTER_COLUMNS.nfh,                // 414
   statutoryBonus:        MASTER_COLUMNS.statutoryBonus,     // 234
   otherAllowances:       MASTER_COLUMNS.otherAllowances,    // 335
-  additionalComponent:   MASTER_COLUMNS.additionalComponent, // 236 ← RE-CORRECTED (col 336 is "Society Deduction", unrelated; 236 = "Additional Salary Component, If any")
+  additionalComponent:   MASTER_COLUMNS.additionalComponent, // 336
   insuranceEE:           MASTER_COLUMNS.insuranceEE,        // 337
   employeeLwf:           MASTER_COLUMNS.employeeLwf,        // 248
-  incomeTax:             MASTER_COLUMNS.incomeTax,          // 356 ← RE-CORRECTED (col 339 is "Subsistance allowance"; 356 = "TDS Amount")
+  incomeTax:             MASTER_COLUMNS.incomeTax,          // 339
   govtBasicWage:         MASTER_COLUMNS.govtBasicWage,      // 561
   govtDA:                MASTER_COLUMNS.govtDA,             // 562
   govtHRA:               MASTER_COLUMNS.govtHRA,            // 563

@@ -29,6 +29,7 @@ export interface RegisterLayout {
   usedColumns: number;
   /** Which template sheet to clone (default: 1) */
   templateSheetIndex?: number;
+  reserveTotalRow?: boolean;
   metaWriter: (ws: ExcelJS.Worksheet, companyInfo: MasterData['companyInfo']) => void;
   rowWriter: (
     employee: MasterData['employees'][number],
@@ -36,6 +37,17 @@ export interface RegisterLayout {
     oneIndex: number,
   ) => RowValues;
   totalWriter: (ws: ExcelJS.Worksheet, totalRow: number, rows: RowValues[]) => void;
+}
+
+function copyInsertedRowStyle(
+  ws: ExcelJS.Worksheet,
+  layout: RegisterLayout,
+  insertedIndex: number,
+): void {
+  const templateSpan = Math.max(1, layout.dataEndRow - layout.dataStartRow + 1);
+  const sourceRowNumber = layout.dataStartRow + (insertedIndex % templateSpan);
+  const targetRowNumber = layout.totalRow + insertedIndex;
+  copyRowStyle(ws, sourceRowNumber, targetRowNumber, layout.usedColumns);
 }
 
 export async function generateSingleSheetRegister(
@@ -55,14 +67,14 @@ export async function generateSingleSheetRegister(
   layout.metaWriter(ws, masterData.companyInfo);
 
   const capacity = layout.dataEndRow - layout.dataStartRow + 1;
-  const extraRows = Math.max(0, masterData.employees.length - capacity);
+  const neededExtra = Math.max(0, masterData.employees.length - capacity);
+  const extraRows = neededExtra + (layout.reserveTotalRow ? 1 : 0);
 
-  // Insert extra rows before the total row, copying style from the last data row
   if (extraRows > 0) {
     const emptyRows: ExcelJS.Row[] = [];
     ws.spliceRows(layout.totalRow, 0, ...Array.from({ length: extraRows }, () => emptyRows));
     for (let i = 0; i < extraRows; i += 1) {
-      copyRowStyle(ws, layout.dataEndRow, layout.totalRow + i, layout.usedColumns);
+      copyInsertedRowStyle(ws, layout, i);
     }
   }
 

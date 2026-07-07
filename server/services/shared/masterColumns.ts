@@ -78,8 +78,9 @@ export const MASTER_COLUMNS = {
   totalDaysWorked:             246, // IL — Total days worked
   totalDaysPresent:            199, // GQ — Total days Present         ← Form VI col 36
   totalDaysAbsent:             200, // GR — Total days Absent          ← Form VI col 37
-  lwpDays:                     201, // GS — Total Week-offs/Holidays/Leaves (used as LOP) ← Form VI col 38
+  totalWeekOffsHolidaysLeaves: 201, // GS — Total number of Week Offs/Holidays/leaves ← Form VI col 38 (was misnamed "lwpDays")
   overtimeDaysCount:           202, // GT — Overtime Days
+  lwpDays:                     275, // JO — Leave Without Pay (LWP) Days   ← FIXED (was 201; 201 is "Week Offs/Holidays/leaves", a different field)
 
   // ── PAYROLL / WAGES ──────────────────────────────────────────────────────
   basicWage:                   284, // JX — Basic Wage               ← CORRECTED (was wrong)
@@ -90,6 +91,7 @@ export const MASTER_COLUMNS = {
   additionalSalaryComponent:   236, // IB — Additional Salary Component
   grossSalary:                 273, // JM — Gross Salary (Monthly)   ← CORRECTED
   netSalary:                   274, // JN — Net Salary (Monthly)     ← CORRECTED (was 275/208)
+  netPaymentsAmountPaid:       208, // GZ — Net payments/ Amount paid  ← ADDED (distinct real field from netSalary; needed by musterRollCumWageRegister's actual template, confirmed via its embedded legend row)
   normalRateOfWages:           225, // HQ — Normal rate of wages
   dailyRateOfWages:            204, // GV — Daily rate of wages / piece rate ← Form III normalWage CORRECTED
 
@@ -99,19 +101,19 @@ export const MASTER_COLUMNS = {
   otHoursWeek2:                184, // GB — OT Hours Week 2
   otHoursWeek3:                185, // GC — OT Hours Week 3
   otHoursWeek4:                186, // GD — OT Hours Week 4
-  totalOtHours:                190, // GH — Total Hours Worked       ← CORRECTED (was 224/440)
+  totalOtHours:                440, // PX — Total Overtime Hours Worked  ← FIXED (was 190, which is generic "Total Hours worked", not OT-specific)
   otAmount:                    207, // GY — Overtime Amount
   otAmountFormIV:              227, // HS — Total Overtime Earning   ← Form IV OT col CORRECTED
   overtimeRemarks:             514, // ST — Register of Overtime Remarks
 
   // ── OT HOURS FOR MUSTER ROLL (Form VI col 39) ────────────────────────────
-  otHoursMusterRoll:           275, // JO — LWP Days (used as OT Hours in Form VI) ← CORRECTED
+  otHoursMusterRoll:           440, // PX — Total Overtime Hours Worked (Form VI col 39) ← FIXED (was 275, which is "Leave Without Pay (LWP) Days" — an unrelated field)
 
   // ── DEDUCTIONS ───────────────────────────────────────────────────────────
   employeePf:                  262, // JB — EPF Contri remitted      ← CORRECTED (was 238)
   esicEmployee:                243, // II — ESIC Employee 0.75%      ← CORRECTED
   ptAmount:                    251, // IQ — PT amount
-  advanceRefund:               218, // HJ — Amount of advance given  ← CORRECTED (was 266)
+  advanceRefund:               266, // JF — Amount Refund of advances  ← FIXED (was 218, which is "Amount of advance given" — the initial advance, not the refund)
   otherDeduction:              310, // KX — Other deduction MW
   totalDeduction:              292, // KF — Total Deduction from salary
 
@@ -125,7 +127,7 @@ export const MASTER_COLUMNS = {
   dateOfOffence:               295, // KI — Date of Offence
   actOmissionForFine:          301, // KO — Act/Omission for which Fine Imposed
   dateOffenceNoticed:          299, // KM — Date on which Offence Noticed  ← CORRECTED (was 295)
-  dateShowCauseNotice:         406, // PZ(406)— Date of Show Cause Notice  ← CORRECTED (was 296)
+  dateShowCauseNotice:         296, // KJ — Date of Show Cause Notice  ← FIXED (was 406/"PZ", which doesn't exist at that letter; col 406 is actually "Whether workmen showed cause against deduction", an unrelated Y/N field. Same source column as dateShowCauseDamage below — the master only has one Show Cause Notice date field.)
   dateFineOrder:               300, // KN — Date of Fine Order MW
   wagePeriodOfFine:            432, // PP — Wage Period of Fine MW
   amountOfFine:                215, // HG — Amount of fine imposed
@@ -142,8 +144,8 @@ export const MASTER_COLUMNS = {
   replyReceived:               435, // PS — Reply Received MW
   dateOfOrder:                 305, // KS — Date of Order MW
   amountOrdered:               306, // KT — Amount Ordered (₹) Damages
-  wagePeriodRecovery:          304, // KR — Wage Period of Recovery MW Damages   ← CORRECTED (was 307)
-  amountRecoveredDamage:       307, // KU — Amount Recovered Till Date (Damage)  ← CORRECTED (was 304)
+  wagePeriodRecovery:          307, // KU — Wage Period of Recovery MW Damages   ← FIXED (was 304, which is "Amount Recovered Till Date" — swapped with amountRecoveredDamage below)
+  amountRecoveredDamage:       304, // KR — Amount Recovered Till Date   ← FIXED (was 307, which is "Wage Period of Recovery" — swapped with wagePeriodRecovery above; same source col as amountRecovered in Fines section, master has one such field)
   cumulativeDeductedDamage:    308, // KV — Cumulative Deducted (₹) MW Damages
   pctWagesDeductedDamage:      309, // KW — % of Wages Deducted MW Damages
   damageRemarks:               213, // HE — Register of Deductions Remarks
@@ -152,25 +154,31 @@ export const MASTER_COLUMNS = {
   musterRollRemarks:           176, // FT — Muster Roll Remarks
 
   // ── MUSTER ROLL CUM WAGE REGISTER (Form II Muster) ───────────────────────
-  workingAreaProject:          400, // OJ — Working area/Project
+  workingAreaProject:          48,  // AV — Work Location  ← FLAGGED (was 400, which is "Principal Employer Nature of work done" — that's principalEmployerNatureOfWorkDone below, not a work area/project field. Best guess based on field name; please confirm against the actual Form II Muster template. Other candidates: col 34 AH "Location Contract Work", col 62 BJ "Location / Unit".)
   projectName:                 44,  // AR — Nature of employment/designation (used as Project name)
   endClientName:               525, // TE — Name of Employer / Proprietor (used as End Client)
-  baseWorkLocation:            526, // TF — Address of Employer (used as base work location)
+  baseWorkLocation:             526, // TF — Address of Employer (used as base work location)
   medicalAllowance:            231, // HW — Medical Allowance
   leaveEncashment:             232, // HX — Leave Encashment
-  nfh:                         414, // PH — NFH
+  nfh:                         414, // OX — NFH  (comment letter fixed, column unchanged)
   statutoryBonus:              234, // HZ — Statutory Bonus
-  otherAllowances:             335, // ???
-  additionalComponent:         336, // ???
-  insuranceEE:                 337, // ???
+  otherAllowances:             335, // LW — Others Allowance          ← CONFIRMED (was "???", now verified against reference)
+  additionalComponent:         236, // IB — Additional Salary Component, If any  ← FIXED (was 336, which is "Society Deduction" — a deduction, not an addition; reused same col as additionalSalaryComponent)
+  insuranceEE:                 337, // LY — Employee Insurance deduction  ← CONFIRMED (was "???", now verified against reference)
   employeeLwf:                 248, // IN — Employee LWF
-  incomeTax:                   339, // ???
-  govtBasicWage:               561, // ???
-  govtDA:                      562, // ???
-  govtHRA:                     563, // ???
-  govtOther:                   564, // ???
-  govtTotal:                   565, // ???
-  diffActualGovt:              566, // ???
+  incomeTax:                   356, // MR — TDS Amount                ← FIXED (was 339, which is "Subsistance allowance if any" — completely unrelated field)
+  // The following 6 fields have NO corresponding column in the master workbook —
+  // the reference sheet only goes up to column 560 (UN). There is no "Govt Basic/DA/HRA/
+  // Other/Total/Diff Actual vs Govt" wage comparison field anywhere in the 560-column
+  // reference. These will always read blank until either (a) the master workbook adds
+  // these columns, or (b) these values are computed some other way rather than read
+  // from the master. Flagging rather than guessing a wrong column.
+  govtBasicWage:               561, // NOT IN MASTER — no matching column found (max col is 560)
+  govtDA:                      562, // NOT IN MASTER — no matching column found (max col is 560)
+  govtHRA:                     563, // NOT IN MASTER — no matching column found (max col is 560)
+  govtOther:                   564, // NOT IN MASTER — no matching column found (max col is 560)
+  govtTotal:                   565, // NOT IN MASTER — no matching column found (max col is 560)
+  diffActualGovt:              566, // NOT IN MASTER — no matching column found (max col is 560)
   minWageBasic:                52,  // AZ — Applicable Minimum Wage (Zone/Category)
   actualRateOfWages:           197, // GO — Actual rates of wages payable
   lopLoss:                     312, // KZ — Total Damages / Loss of pay (LOP)

@@ -8,7 +8,7 @@
  *
  *  C1  → Sl No                      (generated)       1
  *  C2  → employeeCode               9
- *  C3  → employeeName               401
+ *  C3  → employeeName               401 (fallback 101 — 401 often blank)
  *  C4  → establishmentName          391
  *  C5  → uanNumber                  13
  *  C6  → pfMemberId                 237
@@ -16,7 +16,7 @@
  *  C8  → baseWorkLocation           526  (same — Deputed)
  *  C9  → workingAreaProject         400
  *  C10 → projectName                44
- *  C11 → employeeName               401  (duplicate — full name)
+ *  C11 → employeeName               401 (fallback 101 — duplicate full name)
  *  C12 → endClientName              525
  *  C13 → ageAndSexGender            74
  *  C14 → employeeAge                239
@@ -67,7 +67,7 @@
  */
 
 import ExcelJS from 'exceljs';
-import { MasterData, getString, getNumber, getDate, formatDate, round2 } from '../shared/masterReader.js';
+import { MasterData, getString, getNumber, getDate, getEmployeeName, formatDate, round2 } from '../shared/masterReader.js';
 import { CODE_ON_WAGES_COLUMNS as M } from './mapping.js';
 import { generateSingleSheetRegister, sumColumn } from './registerEngine.js';
 import { fillCellAddress } from '../shared/templateFiller.js';
@@ -113,7 +113,7 @@ export async function generateMusterRollCumWageRegister(
       const row: Record<number, ExcelJS.CellValue | null> = {
         1:  oneIndex,
         2:  getString(emp, M.employeeCode),           // 9
-        3:  getString(emp, M.employeeName),           // 401
+        3:  getEmployeeName(emp),                       // 401 (fallback 101)
         4:  getString(emp, M.establishmentName),      // 391
         5:  getString(emp, M.uanNumber),              // 13
         6:  getString(emp, M.pfMemberId),             // 237
@@ -121,7 +121,7 @@ export async function generateMusterRollCumWageRegister(
         8:  getString(emp, M.baseWorkLocation),       // 526 (Deputed — same col)
         9:  getString(emp, M.workingAreaProject),     // 400
         10: getString(emp, M.projectName),            // 44
-        11: getString(emp, M.employeeName),           // 401 (full name duplicate)
+        11: getEmployeeName(emp),                       // 401 (fallback 101, full name duplicate)
         12: getString(emp, M.endClientName),          // 525
         13: getString(emp, M.ageAndSexGender),        // 74
         14: getNumber(emp, M.employeeAge),            // 239

@@ -58,13 +58,6 @@ export async function generateCodeOnWages(masterBuffer: Buffer): Promise<CodeOnW
       loadTemplateBuffer('Form II - Deductions.xlsx'), masterData,
     ),
     generateMusterRollCumWageRegister(
-      // ⚠ FIXED: this MUST be the 85-column template (previously supplied as
-      // "Form_II_Muster_Roll_cum_Wage_Register_1_.xlsx"). The file that was
-      // actually sitting at this path was an older, simpler 64-column
-      // template — the two are structurally different and using the wrong
-      // one is what caused columns to land in the wrong fields. Replace the
-      // file on disk with the correct 85-column version (keeping this same
-      // filename), or update the path below to point at it.
       loadTemplateBuffer('Form II Muster Roll cum Wage Register.xlsx'), masterData,
     ),
     generateOvertimeRegister(

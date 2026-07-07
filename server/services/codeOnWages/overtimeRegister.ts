@@ -51,19 +51,13 @@ function writeCompanyMeta(
   companyInfo: MasterData['companyInfo'],
   employees: MasterData['employees'],
 ): void {
-  // FIXED: the template's labels ("Establishment Name:", "Address:", "Nature
-  // of Industry:", "Wage Period:") live on rows 4-7, not 3-6 — every cell
-  // reference here was previously one row too high. Also, "Establishment
-  // Name" and "Address" share ONE merged value cell (C4:E5) rather than two
-  // separate cells, so both lines are written into the single C4 anchor.
-  const establishment = getString(companyInfo, M.establishmentName);
-  const address = getString(companyInfo, M.address);
-  fillCellAddress(ws, 'C4', address ? `${establishment}\n${address}` : establishment);
-  fillCellAddress(ws, 'J4', getString(companyInfo, M.registrationNumber));
+  fillCellAddress(ws, 'C3', getString(companyInfo, M.establishmentName));
+  fillCellAddress(ws, 'J3', getString(companyInfo, M.registrationNumber));
+  fillCellAddress(ws, 'C4', getString(companyInfo, M.address));
   const payDate = employees.map((r) => getDate(r, M.dateOfPayment)).find((v): v is Date => v instanceof Date);
-  fillCellAddress(ws, 'J5', String((payDate ?? new Date()).getFullYear()));
-  fillCellAddress(ws, 'C6', getString(companyInfo, M.natureOfIndustry)); // 38 ← CORRECTED
-  fillCellAddress(ws, 'C7', monthYearLabel(employees));
+  fillCellAddress(ws, 'J4', String((payDate ?? new Date()).getFullYear()));
+  fillCellAddress(ws, 'C5', getString(companyInfo, M.natureOfIndustry)); // 38 ← CORRECTED
+  fillCellAddress(ws, 'C6', monthYearLabel(employees));
 }
 
 export async function generateOvertimeRegister(
@@ -107,7 +101,6 @@ export async function generateOvertimeRegister(
     },
     totalWriter: (ws, totalRow, rows) => {
       fillCellAddress(ws, `A${totalRow}`, 'Total');
-      fillCellAddress(ws, `E${totalRow}`, 'TOTAL \u2192'); // FIXED: label was being cleared and never restored
       fillCellAddress(ws, `H${totalRow}`, sumColumn(rows, 8));
       fillCellAddress(ws, `I${totalRow}`, sumColumn(rows, 9));
       fillCellAddress(ws, `J${totalRow}`, sumColumn(rows, 10));

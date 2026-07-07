@@ -29,14 +29,6 @@ export interface RegisterLayout {
   usedColumns: number;
   /** Which template sheet to clone (default: 1) */
   templateSheetIndex?: number;
-  /**
-   * FIXED: some templates (e.g. Form I - Fines) have NO dedicated totals row
-   * pre-built — `totalRow` in the template is actually the next line of
-   * footer/statutory-note text. For those, set this true so the engine
-   * always inserts one extra blank row for the totals instead of splicing
-   * the footer text out from under itself.
-   */
-  reserveTotalRow?: boolean;
   metaWriter: (ws: ExcelJS.Worksheet, companyInfo: MasterData['companyInfo']) => void;
   rowWriter: (
     employee: MasterData['employees'][number],
@@ -63,8 +55,7 @@ export async function generateSingleSheetRegister(
   layout.metaWriter(ws, masterData.companyInfo);
 
   const capacity = layout.dataEndRow - layout.dataStartRow + 1;
-  const neededExtra = Math.max(0, masterData.employees.length - capacity);
-  const extraRows = neededExtra + (layout.reserveTotalRow ? 1 : 0);
+  const extraRows = Math.max(0, masterData.employees.length - capacity);
 
   // Insert extra rows before the total row, copying style from the last data row
   if (extraRows > 0) {
