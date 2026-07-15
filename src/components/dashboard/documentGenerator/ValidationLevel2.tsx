@@ -532,10 +532,31 @@ async function parseXlsx(file: File): Promise<SheetPreview[]> {
   });
 }
 
-function initDocs(): DocCard[] {
+function normalizeName(v: string): string {
+  return v.toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+function initDocs(uploadedDocs: UploadedDoc[] = []): DocCard[] {
+  const byName = new Map<string, UploadedDoc>();
+  for (const doc of uploadedDocs) {
+    byName.set(normalizeName(doc.name), doc);
+  }
+
   return MASTER_DOCS.map((d, i) => {
     const key   = RULES_KEY_MAP[d.name] ?? (d.name.startsWith('Declaration') ? 'declaration' : 'other-doc');
     const rules = makeRules(key);
+    const seeded = byName.get(normalizeName(d.name));
+    if (seeded) {
+      return {
+        ...d,
+        id: `doc-${i}`,
+        uploadStatus: 'Uploaded',
+        file: seeded.file,
+        sheets: seeded.sheets,
+        validated: false,
+        validationRules: rules,
+      };
+    }
     return { ...d, id: `doc-${i}`, validated: false, validationRules: rules };
   });
 }
@@ -571,7 +592,7 @@ export default function ValidationLevel2({
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   const [activeView,   setActiveView]   = useState<ActiveView>('overview');
-  const [docCards,     setDocCards]     = useState<DocCard[]>(initDocs);
+  const [docCards,     setDocCards]     = useState<DocCard[]>(() => initDocs(docs));
   const [activDocId,   setActivDocId]   = useState<string | null>(null);
   const [issues,       setIssues]       = useState<ComplianceIssue[]>([]);
   const [showTerms,    setShowTerms]    = useState(false);

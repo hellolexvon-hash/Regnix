@@ -44,6 +44,15 @@ export type ReviewStatus =
 
 export type IssueSeverity = 'critical' | 'major' | 'minor';
 
+export interface AuditLogEntry {
+  id:        string;
+  actor:     string;       // full name of whoever performed the action
+  actorRole: 'auditor' | 'system';
+  action:    string;       // e.g. 'review.decide', 'review.claim', 'auditor.signin'
+  detail:    string;       // human-readable summary, shown in Super Admin activity feed
+  createdAt: Date;
+}
+
 export interface CarriedIssue {
   id:         string;
   docName:    string;
@@ -110,7 +119,7 @@ const SEED_COMPANIES: CompanyReview[] = [
       ['PF Form 5A', 'PF'], ['Employee Compensation Policy', 'Labour'],
     ], [3]),
     issues: [
-      { id: 'i1', docName: 'ESIC ECR', severity: 'major', rule: 'IP number sequence validation', rootCause: 'Two IP numbers in the ECR file do not match the ESIC portal master; likely a mid-month joinee not yet mapped.', resolvedL2: false },
+      { id: 'i1', docName: 'ESIC ECR', severity: 'major', rule: 'Missing or invalid IP Number.', rootCause: 'Two IP numbers in the ECR file do not match the ESIC portal master; likely a mid-month joinee not yet mapped.', resolvedL2: false },
     ],
     l2Score: 91, l2CompletedAt: daysAgo(1, 14, 20), status: 'pending', assignedTo: null,
     decisionRemarks: '', decidedAt: null,
@@ -138,8 +147,8 @@ const SEED_COMPANIES: CompanyReview[] = [
       ['Contract Labour Licence', 'Contract Labour'], ['Employee Compensation Policy', 'Labour'],
     ], [1, 8]),
     issues: [
-      { id: 'i2', docName: 'PF Consolidated Statement', severity: 'critical', rule: 'Contribution amount reconciliation', rootCause: 'Employer contribution total is ₹18,400 short of the payroll-derived figure for March.', resolvedL2: false },
-      { id: 'i3', docName: 'Contract Labour Licence', severity: 'major', rule: 'Licence validity window', rootCause: 'Licence expired 11 days before the audit period end date; renewal appears to be in process.', resolvedL2: false },
+      { id: 'i2', docName: 'PF Consolidated Statement', severity: 'critical', rule: 'Employer or employee PF contribution mismatch.', rootCause: 'Employer contribution total is ₹18,400 short of the payroll-derived figure for March.', resolvedL2: false },
+      { id: 'i3', docName: 'Contract Labour Licence', severity: 'major', rule: 'Licence expired, suspended, cancelled, or inactive.', rootCause: 'Licence expired 11 days before the audit period end date; renewal appears to be in process.', resolvedL2: false },
     ],
     l2Score: 79, l2CompletedAt: daysAgo(3, 9, 40), status: 'in_review', assignedTo: 'demo-auditor', decisionRemarks: '', decidedAt: null,
   },
@@ -166,7 +175,7 @@ const SEED_COMPANIES: CompanyReview[] = [
       ['Employee Compensation Policy', 'Insurance'], ['PF Form 5A', 'PF'],
     ], [6]),
     issues: [
-      { id: 'i4', docName: 'Employee Compensation Policy', severity: 'minor', rule: 'Policy renewal date check', rootCause: 'Policy document on file shows last year\'s renewal; current-year certificate not yet uploaded.', resolvedL2: false },
+      { id: 'i4', docName: 'Employee Compensation Policy', severity: 'minor', rule: 'Policy renewal or endorsement pending despite active operations.', rootCause: 'Policy document on file shows last year\'s renewal; current-year certificate not yet uploaded.', resolvedL2: false },
     ],
     l2Score: 88, l2CompletedAt: daysAgo(7, 10, 30), status: 'changes_requested', assignedTo: 'demo-auditor',
     decisionRemarks: 'Please upload the current-year Employee Compensation policy certificate and resubmit for final sign-off.',
@@ -194,8 +203,8 @@ const SEED_COMPANIES: CompanyReview[] = [
       ['ESIC ECR', 'ESIC'], ['Wage Slip Register', 'Wages'], ['Contract Labour Licence', 'Contract Labour'],
     ], [1, 5]),
     issues: [
-      { id: 'i5', docName: 'PF Consolidated Statement', severity: 'major', rule: 'Headcount reconciliation', rootCause: 'Consolidated statement lists 421 members; live payroll register shows 417 active employees for the period.', resolvedL2: false },
-      { id: 'i6', docName: 'Contract Labour Licence', severity: 'minor', rule: 'Signatory seal check', rootCause: 'Licensing officer seal is present but faint/partially illegible on the scanned copy.', resolvedL2: true },
+      { id: 'i5', docName: 'PF Consolidated Statement', severity: 'major', rule: 'Employee count mismatch with payroll or PF Challan.', rootCause: 'Consolidated statement lists 421 members; live payroll register shows 417 active employees for the period.', resolvedL2: false },
+      { id: 'i6', docName: 'Contract Labour Licence', severity: 'minor', rule: 'Tampered or altered licence.', rootCause: 'Licensing officer seal is present but faint/partially illegible on the scanned copy.', resolvedL2: true },
     ],
     l2Score: 84, l2CompletedAt: daysAgo(2, 17, 0), status: 'pending', assignedTo: null,
     decisionRemarks: '', decidedAt: null,
@@ -221,6 +230,7 @@ interface Store {
   credentials:      Record<string, string>; // email -> password (demo only, never do this in prod)
   currentAuditorId: string | null;
   companies:        CompanyReview[];
+  auditLog:         AuditLogEntry[];
 }
 
 const DEMO_AUDITOR: Auditor = {
@@ -233,7 +243,17 @@ let _store: Store = {
   credentials:      { [DEMO_AUDITOR.email]: 'demo1234' },
   currentAuditorId: null,
   companies:        SEED_COMPANIES,
+  auditLog:         [],
 };
+
+function logEvent(actor: string, actorRole: AuditLogEntry['actorRole'], action: string, detail: string) {
+  const entry: AuditLogEntry = {
+    id: `log-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    actor, actorRole, action, detail, createdAt: new Date(),
+  };
+  // newest first, capped so this demo in-memory array doesn't grow unbounded
+  _store = { ..._store, auditLog: [entry, ..._store.auditLog].slice(0, 500) };
+}
 
 type Listener = () => void;
 const _listeners = new Set<Listener>();
@@ -259,6 +279,7 @@ export function useAuditorStore() {
   return {
     auditors:  _store.auditors,
     companies: _store.companies,
+    auditLog:  _store.auditLog,
     currentAuditor,
     isAuthenticated: currentAuditor !== null,
 
@@ -282,19 +303,23 @@ export function useAuditorStore() {
         currentAuditorId: auditor.id,
       };
       notify();
+      logEvent(auditor.fullName, 'auditor', 'auditor.signup', `New auditor account created (${auditor.specialization}, licence ${auditor.licenseId}).`);
       return { ok: true };
     },
 
     signIn(email: string, password: string): { ok: true } | { ok: false; error: string } {
       const key = email.trim().toLowerCase();
       if (!_store.credentials[key]) {
+        logEvent(email, 'auditor', 'auditor.signin_failed', 'Sign-in attempt with an unrecognized email.');
         return { ok: false, error: 'No auditor account found with this email.' };
       }
       if (_store.credentials[key] !== password) {
+        logEvent(email, 'auditor', 'auditor.signin_failed', 'Sign-in attempt with an incorrect password.');
         return { ok: false, error: 'Incorrect password. Please try again.' };
       }
       const auditor = _store.auditors.find(a => a.email === key)!;
       setField('currentAuditorId', auditor.id);
+      logEvent(auditor.fullName, 'auditor', 'auditor.signin', 'Signed in to the Auditor Portal.');
       return { ok: true };
     },
 
@@ -304,21 +329,32 @@ export function useAuditorStore() {
 
     claimCompany(companyId: string) {
       if (!_store.currentAuditorId) return;
+      const auditor = _store.auditors.find(a => a.id === _store.currentAuditorId);
+      const company = _store.companies.find(c => c.id === companyId);
       const companies = _store.companies.map(c =>
         c.id === companyId && c.status === 'pending'
           ? { ...c, status: 'in_review' as ReviewStatus, assignedTo: _store.currentAuditorId }
           : c
       );
       setField('companies', companies);
+      if (auditor && company) {
+        logEvent(auditor.fullName, 'auditor', 'review.claim', `Claimed ${company.name} for review.`);
+      }
     },
 
     decide(companyId: string, decision: 'approved' | 'changes_requested' | 'rejected', remarks: string) {
+      const auditor = _store.auditors.find(a => a.id === _store.currentAuditorId);
+      const company = _store.companies.find(c => c.id === companyId);
       const companies = _store.companies.map(c =>
         c.id === companyId
           ? { ...c, status: decision, decisionRemarks: remarks, decidedAt: new Date(), assignedTo: c.assignedTo ?? _store.currentAuditorId }
           : c
       );
       setField('companies', companies);
+      if (auditor && company) {
+        const label = decision === 'approved' ? 'Approved' : decision === 'rejected' ? 'Rejected' : 'Requested changes on';
+        logEvent(auditor.fullName, 'auditor', `review.${decision}`, `${label} ${company.name}.`);
+      }
     },
   };
 }

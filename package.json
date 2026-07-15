@@ -12,12 +12,16 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.109.0",
     "@types/archiver": "^8.0.0",
     "@vercel/node": "^5.8.21",
     "archiver": "^8.0.0",
     "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
     "exceljs": "^4.4.0",
     "express": "^4.21.2",
+    "html2canvas": "^1.4.1",
+    "jspdf": "^4.2.1",
     "jszip": "^3.10.1",
     "multer": "^2.1.1",
     "particles.js": "^2.0.0",
@@ -27,6 +31,7 @@
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.22.0",
     "three": "^0.185.1",
+    "ws": "^8.21.1",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
@@ -38,6 +43,7 @@
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
     "@types/three": "^0.185.0",
+    "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^5.0.0",
     "concurrently": "^9.1.2",
     "tsx": "^4.21.0",

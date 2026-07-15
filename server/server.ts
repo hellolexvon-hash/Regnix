@@ -2,6 +2,7 @@
  * server.ts — Regnix backend entry point
  */
 
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
@@ -16,6 +17,10 @@ import clraRouter from './routes/clraActRoute.js';
 import factoriesRouter from './routes/factoriesActRoute.js';
 import seActRouter from './routes/seActRoute.js';
 import manualRegistersRouter from './routes/manualRegistersRoute.js';
+import auditorRouter from './routes/auditorRoute.js';
+import validationRouter from './routes/validationRoute.js';
+import superAdminRouter from './routes/superAdminRoute.js';
+import certificateRouter from './routes/certificateRoute.js';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
@@ -54,6 +59,10 @@ app.use('/api', clraRouter);
 app.use('/api', factoriesRouter);
 app.use('/api', seActRouter);
 app.use('/api', manualRegistersRouter);
+app.use('/api', validationRouter);
+app.use('/api', auditorRouter);
+app.use('/api', superAdminRouter);
+app.use('/api', certificateRouter);
 
 if (isProduction && fs.existsSync(path.join(distDir, 'index.html'))) {
   app.get('*', (_req, res) => {
@@ -73,45 +82,34 @@ if (isProduction && fs.existsSync(path.join(distDir, 'index.html'))) {
         '/api/generate-clra',
         '/api/generate-factories',
         '/api/generate-se-act',
-        '/api/generate-se-act/states',
-        '/api/generate-se-act/health',
-        // Manual registers — no master upload needed
         '/api/download-bocw',
-        '/api/download-equal-remuneration',
-        '/api/download-ismw',
         '/api/download-maternity-benefit',
         '/api/download-posh',
-        '/api/manual-registers/health',
+        '/api/download-equal-remuneration',
+        '/api/download-ismw',
+        '/api/validation/state',
+        '/api/validation/submit',
+        '/api/auditor/portal/bootstrap',
+        '/api/auditor/auth/signin',
+        '/api/auditor/auth/signup',
+        '/api/auditor/auth/signout',
+        '/api/auditor/reviews/claim',
+        '/api/auditor/reviews/decision',
+        '/api/auditor/company/:id',
+        '/api/auditor/history',
+        '/api/admin/dashboard',
+        '/api/admin/clients',
+        '/api/admin/auditors',
+        '/api/admin/activity',
+        '/api/certificate/email',
+        '/api/certificate/issue',
       ],
     });
   });
 }
 
-app.use((_req, res) => {
-  res.status(404).json({ error: 'Not found' });
-});
-
 app.use(errorHandler);
 
 app.listen(PORT, () => {
-  console.log(`\x1b[36m✓ Regnix backend → http://localhost:${PORT}\x1b[0m`);
-  console.log('  GET  /api/health');
-  console.log('  POST /api/generate-docs');
-  console.log('  GET  /api/download-template');
-  console.log('  POST /api/generate-code-wages');
-  console.log('  POST /api/generate-apprentices');
-  console.log('  POST /api/generate-clra');
-  console.log('  POST /api/generate-factories');
-  console.log('  POST /api/generate-se-act');
-  console.log('  GET  /api/generate-se-act/states');
-  console.log('  GET  /api/generate-se-act/health');
-  console.log('  ──── Manual registers (no master upload) ────');
-  console.log('  GET  /api/download-bocw');
-  console.log('  GET  /api/download-equal-remuneration');
-  console.log('  GET  /api/download-ismw');
-  console.log('  GET  /api/download-maternity-benefit');
-  console.log('  GET  /api/download-posh');
-  console.log('  GET  /api/manual-registers/health');
+  console.log(`Regnix backend listening on port ${PORT}`);
 });
-
-export default app;

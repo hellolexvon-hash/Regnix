@@ -19,7 +19,7 @@ function renderView(section: string) {
 }
 
 export default function DashboardPage() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, loading } = useAuth();
   const navigate = useNavigate();
   const params = useParams<{ section?: string; sub?: string }>();
   const [collapsed, setCollapsed] = useState(false);
@@ -36,9 +36,10 @@ export default function DashboardPage() {
   };
 
   useEffect(() => {
-    if (!isAuthenticated) navigate('/login');
-  }, [isAuthenticated, navigate]);
+    if (!loading && !isAuthenticated) navigate('/login', { replace: true });
+  }, [isAuthenticated, loading, navigate]);
 
+  if (loading) return null;
   if (!isAuthenticated) return null;
 
   return (

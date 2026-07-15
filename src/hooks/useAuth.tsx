@@ -1,131 +1,141 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+/**
+ * src/hooks/useAuth.tsx
+ *
+ * Real Supabase auth context.
+ * Replaces the previous mock implementation.
+ *
+ * Exposes:
+ *   user         — Supabase User (auth.users row)
+ *   profile      — profiles row (company name, industry, etc.)
+ *   isAuthenticated
+ *   login(email, password)
+ *   signup(data)
+ *   logout()
+ */
+
+import {
+  createContext, useContext, useEffect, useState,
+  useCallback, type ReactNode,
+} from 'react';
+import type { User } from '@supabase/supabase-js';
+import { supabase, type Profile } from '@/lib/supabaseClient';
+
+// ─── Types ───────────────────────────────────────────────────────────────────
 
 export type AccountType = 'company' | 'client';
 
-export interface AuthUser {
-  name: string;
-  email: string;
-  accountType?: AccountType;
-  companyName?: string;
-  industry?: string;
-  gstin?: string;
-  createdAt?: string;
-}
-
-interface SignupFormData {
-  accountType: AccountType;
-  name: string;
-  email: string;
-  password: string;
+export interface SignupFormData {
+  accountType:     AccountType;
+  name:            string;        // full_name
+  email:           string;
+  password:        string;
   confirmPassword: string;
-  companyName?: string;
-  industry?: string;
-  gstin?: string;
+  companyName:     string;
+  industry:        string;
+  gstin:           string;
 }
 
 interface AuthContextValue {
-  user: AuthUser | null;
+  user:            User | null;
+  profile:         Profile | null;
   isAuthenticated: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  signup: (data: SignupFormData) => Promise<void>;
-  logout: () => void;
+  loading:         boolean;
+  login:           (email: string, password: string) => Promise<void>;
+  signup:          (data: SignupFormData) => Promise<void>;
+  logout:          () => Promise<void>;
 }
 
-const AUTH_KEY = 'regnix_auth';
+// ─── Context ─────────────────────────────────────────────────────────────────
 
-const AuthContext = createContext<AuthContextValue | undefined>(undefined);
-
-function readStoredAuth(): AuthUser | null {
-  try {
-    const raw = localStorage.getItem(AUTH_KEY);
-    if (!raw) return null;
-
-    const parsed = JSON.parse(raw);
-    return parsed?.user ?? null;
-  } catch {
-    return null;
-  }
-}
-
-function saveStoredAuth(user: AuthUser) {
-  localStorage.setItem(
-    AUTH_KEY,
-    JSON.stringify({
-      user,
-      token: 'test-token',
-    })
-  );
-}
+const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(() => readStoredAuth());
+  const [user,    setUser]    = useState<User | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const onStorage = () => {
-      setUser(readStoredAuth());
-    };
-
-    window.addEventListener('storage', onStorage);
-    return () => window.removeEventListener('storage', onStorage);
+  // Fetch profile row for a given user id
+  const fetchProfile = useCallback(async (uid: string) => {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', uid)
+      .single();
+    if (!error && data) setProfile(data as Profile);
   }, []);
 
-  const login = async (email: string, password: string) => {
-    const normalizedEmail = email.trim().toLowerCase();
+  // Bootstrap: restore session on page load
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      const u = session?.user ?? null;
+      setUser(u);
+      if (u) fetchProfile(u.id).finally(() => setLoading(false));
+      else   setLoading(false);
+    });
 
-    if (normalizedEmail === 'admin' && password === '123456') {
-      const testUser: AuthUser = {
-        name: 'Admin',
-        email: 'admin',
-        accountType: 'company',
-        createdAt: new Date().toISOString(),
-      };
+    // Listen for auth state changes (sign-in, sign-out, token refresh)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        const u = session?.user ?? null;
+        setUser(u);
+        if (u) fetchProfile(u.id);
+        else   setProfile(null);
+      },
+    );
 
-      saveStoredAuth(testUser);
-      setUser(testUser);
-      return;
-    }
+    return () => subscription.unsubscribe();
+  }, [fetchProfile]);
 
-    throw new Error('Invalid credentials');
-  };
+  // ── Login ──────────────────────────────────────────────────────────────────
+  const login = useCallback(async (email: string, password: string) => {
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw new Error(error.message);
+  }, []);
 
-  const signup = async (data: SignupFormData) => {
-    const newUser: AuthUser = {
-      name: data.name,
-      email: data.email,
-      accountType: data.accountType,
-      companyName: data.companyName?.trim() || undefined,
-      industry: data.industry?.trim() || undefined,
-      gstin: data.gstin?.trim() || undefined,
-      createdAt: new Date().toISOString(),
-    };
+  // ── Signup ─────────────────────────────────────────────────────────────────
+  const signup = useCallback(async (data: SignupFormData) => {
+    const { error } = await supabase.auth.signUp({
+      email:    data.email,
+      password: data.password,
+      options: {
+        // stored in raw_user_meta_data → the DB trigger copies to profiles
+        data: {
+          account_type: data.accountType,
+          full_name:    data.name,
+          company_name: data.companyName || null,
+          industry:     data.industry    || null,
+          gstin:        data.gstin       || null,
+          firm_name:    data.accountType === 'client' ? data.companyName : null,
+        },
+      },
+    });
+    if (error) throw new Error(error.message);
+  }, []);
 
-    saveStoredAuth(newUser);
-    setUser(newUser);
-  };
-
-  const logout = () => {
-    localStorage.removeItem(AUTH_KEY);
+  // ── Logout ─────────────────────────────────────────────────────────────────
+  const logout = useCallback(async () => {
+    await supabase.auth.signOut();
     setUser(null);
-  };
+    setProfile(null);
+  }, []);
 
-  const value = useMemo<AuthContextValue>(
-    () => ({
+  return (
+    <AuthContext.Provider value={{
       user,
+      profile,
       isAuthenticated: !!user,
+      loading,
       login,
       signup,
       logout,
-    }),
-    [user]
+    }}>
+      {children}
+    </AuthContext.Provider>
   );
-
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
-export function useAuth() {
+export function useAuth(): AuthContextValue {
   const ctx = useContext(AuthContext);
-  if (!ctx) {
-    throw new Error('useAuth must be used within AuthProvider');
-  }
+  if (!ctx) throw new Error('useAuth must be used inside <AuthProvider>');
   return ctx;
 }

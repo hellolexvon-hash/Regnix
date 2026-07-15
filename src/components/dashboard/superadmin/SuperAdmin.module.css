@@ -1,0 +1,199 @@
+/* SuperAdmin.module.css
+   Light theme, same family as Auditor.module.css, but amber-accented
+   instead of violet — a deliberate visual signal that this is a
+   higher-privilege console, distinct at a glance from the Auditor Portal.
+*/
+
+:root {
+  --sa-amber: #B45309;
+  --sa-amber-bg: #FFFBEB;
+  --sa-amber-border: #FDE68A;
+  --sa-ink: #111827;
+  --sa-dim: #6B7280;
+  --sa-line: #E5E7EB;
+  --sa-panel: #FFFFFF;
+  --sa-bg: #F7F8FA;
+  --sa-green: #059669;
+  --sa-green-bg: #ECFDF5;
+  --sa-red: #DC2626;
+  --sa-red-bg: #FEF2F2;
+  --sa-blue: #2563EB;
+  --sa-blue-bg: #EFF6FF;
+  --sa-violet: #6C3BD5;
+  --sa-violet-bg: #F3F0FF;
+}
+
+/* ── Auth screen ────────────────────────────────────────────────────── */
+.saAuthPage {
+  min-height: 100vh;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--sa-bg);
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+.saAuthCard {
+  width: 380px; background: var(--sa-panel); border: 1px solid var(--sa-line);
+  border-radius: 14px; padding: 32px 28px; text-align: center;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+.saAuthMark {
+  width: 44px; height: 44px; margin: 0 auto 14px; border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--sa-amber-bg); border: 1px solid var(--sa-amber-border); color: var(--sa-amber);
+}
+.saAuthTitle { margin: 0 0 6px; font-size: 17px; color: var(--sa-ink); }
+.saAuthTitle strong { color: var(--sa-amber); }
+.saAuthSub { margin: 0 0 20px; font-size: 12.5px; color: var(--sa-dim); line-height: 1.5; }
+
+.saAuthError {
+  display: flex; align-items: center; gap: 6px; justify-content: center;
+  background: var(--sa-red-bg); color: var(--sa-red); border: 1px solid #FECACA;
+  border-radius: 8px; padding: 8px 10px; font-size: 12px; margin-bottom: 14px;
+}
+
+.saAuthForm { display: flex; flex-direction: column; gap: 12px; text-align: left; }
+.saField { display: flex; flex-direction: column; gap: 5px; }
+.saLabel { font-size: 11.5px; font-weight: 600; color: var(--sa-ink); }
+.saInput {
+  padding: 9px 11px; border: 1px solid var(--sa-line); border-radius: 8px;
+  font-size: 13.5px; color: var(--sa-ink); background: #fff;
+}
+.saInput:focus { outline: none; border-color: var(--sa-amber); }
+
+.saSubmit {
+  margin-top: 4px; padding: 10px; border: none; border-radius: 8px;
+  background: var(--sa-amber); color: #fff; font-weight: 600; font-size: 13.5px;
+  cursor: pointer; transition: filter 0.15s ease;
+}
+.saSubmit:hover { filter: brightness(0.95); }
+.saSubmit:disabled { opacity: 0.6; cursor: default; }
+
+.saDemoLink {
+  background: none; border: none; color: var(--sa-dim); font-size: 12px;
+  text-decoration: underline; cursor: pointer; padding: 2px;
+}
+.saAuthFoot { margin: 18px 0 0; font-size: 10.5px; color: var(--sa-dim); line-height: 1.5; }
+
+/* ── Shell ──────────────────────────────────────────────────────────── */
+.saShell {
+  min-height: 100vh; background: var(--sa-bg);
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  color: var(--sa-ink);
+}
+
+.saTopbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 24px; background: #fff; border-bottom: 1px solid var(--sa-line);
+}
+.saBrand { display: flex; align-items: center; gap: 9px; }
+.saBrandMark {
+  width: 30px; height: 30px; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--sa-amber-bg); border: 1px solid var(--sa-amber-border); color: var(--sa-amber);
+}
+.saBrandText { font-size: 14px; font-weight: 500; }
+.saBrandText strong { color: var(--sa-amber); }
+
+.saTopbarRight { display: flex; align-items: center; gap: 14px; }
+.saAdminName { font-size: 13px; color: var(--sa-dim); }
+.saSignOutBtn {
+  display: flex; align-items: center; gap: 6px;
+  padding: 7px 13px; border-radius: 8px; border: 1px solid var(--sa-line);
+  background: #fff; color: var(--sa-ink); font-size: 12.5px; cursor: pointer;
+}
+.saSignOutBtn:hover { background: #F7F8FA; }
+
+/* ── Tabs ───────────────────────────────────────────────────────────── */
+.saTabs {
+  display: flex; gap: 4px; padding: 0 24px; background: #fff;
+  border-bottom: 1px solid var(--sa-line);
+}
+.saTab {
+  display: flex; align-items: center; gap: 6px;
+  padding: 12px 14px; border: none; background: none; cursor: pointer;
+  font-size: 13px; color: var(--sa-dim); border-bottom: 2px solid transparent;
+}
+.saTabActive { color: var(--sa-amber); border-bottom-color: var(--sa-amber); font-weight: 600; }
+.saTabCount {
+  background: #F3F4F6; color: var(--sa-dim); font-size: 10.5px;
+  padding: 1px 7px; border-radius: 999px;
+}
+.saTabActive .saTabCount { background: var(--sa-amber-bg); color: var(--sa-amber); }
+
+.saContent { padding: 24px; max-width: 1200px; margin: 0 auto; }
+
+/* ── Stat grid ──────────────────────────────────────────────────────── */
+.saStatGrid {
+  display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; margin-bottom: 18px;
+}
+.saStatCard {
+  display: flex; align-items: center; gap: 10px;
+  background: #fff; border: 1px solid var(--sa-line); border-radius: 12px; padding: 14px;
+}
+.saStatCard[data-warn="true"] { border-color: #FECACA; background: var(--sa-red-bg); }
+.saStatIcon {
+  width: 34px; height: 34px; border-radius: 9px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--sa-amber-bg); color: var(--sa-amber);
+}
+.saStatCard[data-warn="true"] .saStatIcon { background: #FEE2E2; color: var(--sa-red); }
+.saStatNum { display: block; font-size: 18px; font-weight: 700; line-height: 1.2; }
+.saStatLabel { display: block; font-size: 10.5px; color: var(--sa-dim); }
+
+/* ── Panels ─────────────────────────────────────────────────────────── */
+.saPanel { background: #fff; border: 1px solid var(--sa-line); border-radius: 12px; padding: 18px; }
+.saPanelHead { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.saPanelTitle { margin: 0 0 14px; font-size: 13.5px; font-weight: 700; }
+.saPanelHead .saPanelTitle { margin-bottom: 0; }
+
+.saSearch {
+  display: flex; align-items: center; gap: 7px;
+  border: 1px solid var(--sa-line); border-radius: 8px; padding: 7px 11px;
+  color: var(--sa-dim); width: 260px;
+}
+.saSearch input { border: none; outline: none; font-size: 12.5px; flex: 1; color: var(--sa-ink); }
+
+/* ── Funnel ─────────────────────────────────────────────────────────── */
+.saFunnel { display: flex; flex-direction: column; gap: 10px; }
+.saFunnelRow { display: grid; grid-template-columns: 170px 1fr 34px; align-items: center; gap: 12px; }
+.saFunnelBarTrack { height: 8px; background: #F3F4F6; border-radius: 999px; overflow: hidden; }
+.saFunnelBarFill { height: 100%; background: linear-gradient(90deg, var(--sa-amber), #F59E0B); border-radius: 999px; }
+.saFunnelCount { font-size: 12.5px; font-weight: 600; text-align: right; }
+
+/* ── Pills (shared status styling across tabs) ─────────────────────── */
+.saPill {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 999px;
+  white-space: nowrap;
+}
+.saPillPending { background: #FEF3C7; color: #92400E; }
+.saPillReview { background: var(--sa-blue-bg); color: var(--sa-blue); }
+.saPillApproved { background: var(--sa-green-bg); color: var(--sa-green); }
+.saPillChanges { background: var(--sa-violet-bg); color: var(--sa-violet); }
+.saPillRejected { background: var(--sa-red-bg); color: var(--sa-red); }
+
+/* ── Tables ─────────────────────────────────────────────────────────── */
+.saTable { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.saTable th {
+  text-align: left; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.03em;
+  color: var(--sa-dim); font-weight: 600; padding: 8px 10px; border-bottom: 1px solid var(--sa-line);
+}
+.saTable td { padding: 10px; border-bottom: 1px solid #F3F4F6; }
+.saTableStrong { font-weight: 600; }
+.saWarnCell { color: var(--sa-red); font-weight: 700; }
+
+/* ── Activity feed ──────────────────────────────────────────────────── */
+.saActivityList { display: flex; flex-direction: column; }
+.saActivityRow {
+  display: grid; grid-template-columns: 140px 1fr auto; gap: 14px; align-items: baseline;
+  padding: 10px 0; border-bottom: 1px solid #F3F4F6; font-size: 12.5px;
+}
+.saActivityActor { font-weight: 600; }
+.saActivityDetail { color: var(--sa-ink); }
+.saActivityTime { color: var(--sa-dim); font-size: 11px; white-space: nowrap; }
+.saEmptyNote { color: var(--sa-dim); font-size: 13px; padding: 20px 0; text-align: center; }
+
+@media (max-width: 900px) {
+  .saStatGrid { grid-template-columns: repeat(2, 1fr); }
+  .saFunnelRow { grid-template-columns: 140px 1fr 30px; }
+  .saActivityRow { grid-template-columns: 1fr; gap: 4px; }
+}

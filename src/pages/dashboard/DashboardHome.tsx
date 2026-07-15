@@ -1,10 +1,16 @@
+/**
+ * src/pages/dashboard/DashboardHome.tsx
+ * Company name, industry pulled from Supabase profile.
+ * All charts/widgets unchanged visually.
+ */
 
+import { useAuth } from '@/hooks/useAuth';
 import styles from './DashboardHome.module.css';
 
-// ── Mini Components ──────────────────────────────────────────────
+/* ── Mini Components ──────────────────────────────────────────── */
 function GaugeChart({ value, color }: { value: number; color: string }) {
   const r = 52, cx = 60, cy = 62;
-  const circ = Math.PI * r; // half circle
+  const circ  = Math.PI * r;
   const offset = circ - (value / 100) * circ;
   return (
     <svg width="120" height="76" viewBox="0 0 120 76">
@@ -21,14 +27,14 @@ function MiniSparkline() {
   const max = 90, min = 30, w = 140, h = 36;
   const xs = pts.map((_, i) => (i / (pts.length - 1)) * w);
   const ys = pts.map(v => h - ((v - min) / (max - min)) * h);
-  const d = xs.map((x, i) => `${i === 0 ? 'M' : 'L'} ${x} ${ys[i]}`).join(' ');
+  const d  = xs.map((x, i) => `${i === 0 ? 'M' : 'L'} ${x} ${ys[i]}`).join(' ');
   const area = `${d} L ${w} ${h} L 0 ${h} Z`;
   return (
     <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`}>
       <defs>
         <linearGradient id="spark" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#059669" stopOpacity="0.18" />
-          <stop offset="100%" stopColor="#059669" stopOpacity="0" />
+          <stop offset="0%"   stopColor="#059669" stopOpacity="0.18" />
+          <stop offset="100%" stopColor="#059669" stopOpacity="0"    />
         </linearGradient>
       </defs>
       <path d={area} fill="url(#spark)" />
@@ -39,7 +45,7 @@ function MiniSparkline() {
 
 function CalendarMini() {
   const today = 16;
-  const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const days  = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   const cells: (number|null)[] = [null,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,null,null];
   return (
     <div className={styles.calMini}>
@@ -49,14 +55,14 @@ function CalendarMini() {
         <button className={styles.calNav}>›</button>
       </div>
       <div className={styles.calTabs}>
-        {['Monthly Returns','Quarterly Retuns','Annual Filings'].map((t,i) => (
-          <span key={t} className={`${styles.calTab} ${i===0?styles.calTabActive:''}`}>{t}</span>
+        {['Monthly Returns','Quarterly Returns','Annual Filings'].map((t, i) => (
+          <span key={t} className={`${styles.calTab} ${i === 0 ? styles.calTabActive : ''}`}>{t}</span>
         ))}
       </div>
       <div className={styles.calGrid}>
         {days.map(d => <div key={d} className={styles.calDow}>{d}</div>)}
         {cells.map((c, i) => (
-          <div key={i} className={`${styles.calCell} ${c===today?styles.calToday:''} ${c===3||c===24?styles.calDot:''}`}>
+          <div key={i} className={`${styles.calCell} ${c === today ? styles.calToday : ''} ${c === 3 || c === 24 ? styles.calDot : ''}`}>
             {c}
           </div>
         ))}
@@ -91,34 +97,31 @@ function WorkflowRow({ num, text, daysLeft }: { num: number; text: string; daysL
   );
 }
 
-// ── Map SVG (simplified India) ────────────────────────────────────
 function IndiaHeatmap() {
   return (
     <div className={styles.mapContainer}>
       <svg viewBox="0 0 300 380" className={styles.mapSvg}>
-        {/* Simplified India states as colored regions */}
-        <ellipse cx="150" cy="80" rx="60" ry="50" fill="#FCD34D" opacity="0.7" />
+        <ellipse cx="150" cy="80"  rx="60" ry="50" fill="#FCD34D" opacity="0.7" />
         <ellipse cx="100" cy="150" rx="50" ry="55" fill="#EF4444" opacity="0.7" />
         <ellipse cx="195" cy="140" rx="45" ry="40" fill="#FCA5A5" opacity="0.7" />
         <ellipse cx="150" cy="210" rx="55" ry="50" fill="#FCD34D" opacity="0.7" />
-        <ellipse cx="85" cy="240" rx="40" ry="35" fill="#6EE7B7" opacity="0.7" />
+        <ellipse cx="85"  cy="240" rx="40" ry="35" fill="#6EE7B7" opacity="0.7" />
         <ellipse cx="215" cy="220" rx="38" ry="40" fill="#FCA5A5" opacity="0.7" />
         <ellipse cx="150" cy="290" rx="35" ry="40" fill="#FCD34D" opacity="0.7" />
         <ellipse cx="100" cy="310" rx="30" ry="25" fill="#6EE7B7" opacity="0.7" />
         <ellipse cx="195" cy="295" rx="28" ry="30" fill="#EF4444" opacity="0.7" />
         <ellipse cx="150" cy="355" rx="22" ry="22" fill="#FCA5A5" opacity="0.7" />
-        {/* Labels */}
-        <text x="92" y="150" fontSize="9" fill="#0F0A1E" fontWeight="600">North</text>
-        <text x="78" y="240" fontSize="9" fill="#0F0A1E" fontWeight="600">West</text>
+        <text x="92"  y="150" fontSize="9" fill="#0F0A1E" fontWeight="600">North</text>
+        <text x="78"  y="240" fontSize="9" fill="#0F0A1E" fontWeight="600">West</text>
         <text x="155" y="210" fontSize="9" fill="#0F0A1E" fontWeight="600">Central</text>
         <text x="155" y="310" fontSize="9" fill="#0F0A1E" fontWeight="600">South</text>
         <text x="205" y="200" fontSize="9" fill="#0F0A1E" fontWeight="600">East</text>
       </svg>
       <div className={styles.mapLegend}>
         <div className={styles.legendTitle}>Risk Legend</div>
-        {[['#EF4444','High'],['#FCD34D','Medium'],['#FCA5A5','Meder'],['#6EE7B7','Low']].map(([c,l]) => (
+        {[['#EF4444','High'],['#FCD34D','Medium'],['#FCA5A5','Moderate'],['#6EE7B7','Low']].map(([c,l]) => (
           <div key={l} className={styles.legendItem}>
-            <span className={styles.legendDot} style={{background: c}} />
+            <span className={styles.legendDot} style={{ background: c }} />
             <span>{l}</span>
           </div>
         ))}
@@ -127,8 +130,9 @@ function IndiaHeatmap() {
   );
 }
 
-// ── Timeline Bars ─────────────────────────────────────────────────
-function TimelineBar({ label, pastW, nextW, pastColor, nextColor }: { label: string; pastW: number; nextW: number; pastColor: string; nextColor: string }) {
+function TimelineBar({ label, pastW, nextW, pastColor, nextColor }: {
+  label: string; pastW: number; nextW: number; pastColor: string; nextColor: string;
+}) {
   return (
     <div className={styles.tlRow}>
       <div className={styles.tlLabel}>{label}</div>
@@ -140,12 +144,26 @@ function TimelineBar({ label, pastW, nextW, pastColor, nextColor }: { label: str
   );
 }
 
-// ── Main Dashboard ────────────────────────────────────────────────
+/* ── Main Dashboard ────────────────────────────────────────────── */
 export default function DashboardHome() {
-  
+  const { profile } = useAuth();
+
+  const companyName = profile?.company_name || profile?.firm_name || 'Your Organisation';
+  const industry    = profile?.industry || '';
 
   return (
     <div className={styles.page}>
+
+      {/* ── Welcome strip ── */}
+      {profile && (
+        <div className={styles.welcomeStrip}>
+          <span className={styles.welcomeText}>
+            👋 Welcome back, <strong>{profile.full_name.split(' ')[0]}</strong>
+            {companyName ? ` — ${companyName}` : ''}
+            {industry    ? ` · ${industry}`     : ''}
+          </span>
+        </div>
+      )}
 
       {/* ── ROW 1: Compliance Chief Cockpit ── */}
       <section className={styles.section}>
@@ -154,7 +172,6 @@ export default function DashboardHome() {
         </div>
         <div className={styles.cockpitGrid}>
 
-          {/* Health Score */}
           <div className={styles.card}>
             <div className={styles.cardLabel}>COMPLIANCE HEALTH SCORE</div>
             <div className={styles.healthGauge}>
@@ -164,7 +181,6 @@ export default function DashboardHome() {
             <button className={styles.explainBtn}>Explain this score</button>
           </div>
 
-          {/* Audit Readiness */}
           <div className={styles.card}>
             <div className={styles.cardLabel}>AUDIT READINESS</div>
             <div className={styles.healthGauge}>
@@ -177,13 +193,12 @@ export default function DashboardHome() {
             </div>
           </div>
 
-          {/* Workflow Approvals */}
           <div className={styles.card}>
             <div className={styles.cardLabel}>WORKFLOW APPROVALS</div>
             {[
-              { n: 4, t: 'Pending Filings', s: 'Pending Filings | Compilation' },
-              { n: 3, t: 'Critical Validations', s: 'Critical Validations | Description De…' },
-              { n: 1, t: 'Exsping Documents', s: 'Approvals Approvals' },
+              { n: 4, t: 'Pending Filings',       s: 'Pending Filings | Compilation'      },
+              { n: 3, t: 'Critical Validations',   s: 'Critical Validations | Description' },
+              { n: 1, t: 'Expiring Documents',     s: 'Approvals | Review required'        },
             ].map(item => (
               <div key={item.t} className={styles.wfApprovalRow}>
                 <span className={styles.wfApprovalNum}>{item.n}</span>
@@ -195,23 +210,23 @@ export default function DashboardHome() {
             ))}
           </div>
 
-          {/* Workflow Approvals Detail */}
-          <div className={styles.card} style={{ gridColumn: 'span 1' }}>
+          <div className={styles.card}>
             <div className={styles.cardLabelRow}>
               <span className={styles.cardLabel}>WORKFLOW APPROVALS</span>
               <div className={styles.cardDots}>···</div>
             </div>
-            {[1,2,3].map(n => <WorkflowRow key={n} num={n} text="Review Q3 Payroll Audit" daysLeft={2} />)}
+            {[1,2,3].map(n => (
+              <WorkflowRow key={n} num={n} text="Review Q3 Payroll Audit" daysLeft={2} />
+            ))}
           </div>
 
-          {/* Contractor Compliance */}
           <div className={styles.card}>
             <div className={styles.cardLabel}>CONTRACTOR COMPLIANCE OVERVIEW</div>
             <table className={styles.contractorTable}>
               <tbody>
                 <tr><td>Total Contractors:</td><td className={styles.tNum}>540</td></tr>
-                <tr><td>Fully Compliant:</td><td className={styles.tNumGreen}>512</td></tr>
-                <tr><td>Missing Docs:</td><td className={styles.tNumRed}>28</td></tr>
+                <tr><td>Fully Compliant:</td>  <td className={styles.tNumGreen}>512</td></tr>
+                <tr><td>Missing Docs:</td>      <td className={styles.tNumRed}>28</td></tr>
               </tbody>
             </table>
             <button className={styles.detailsBtn}>Details</button>
@@ -226,50 +241,45 @@ export default function DashboardHome() {
         </div>
         <div className={styles.opsGrid}>
 
-          {/* Pending Actions */}
           <div className={styles.card}>
             <div className={styles.cardLabelRow}>
               <span className={styles.cardLabel}>PENDING ACTIONS</span>
               <button className={styles.fixAllBtn}>Fix All</button>
             </div>
             <div className={styles.pendingScroll}>
-              <PendingActionRow num={7} text="Pending Filings" sub="" color="#7C3AED" />
+              <PendingActionRow num={7} text="Pending Filings"       sub=""                                   color="#7C3AED" />
               <button className={styles.viewAllBtn}>View All ∨</button>
-              <PendingActionRow num={5} text="Critical Validations" sub="Approvals Aervors | Descrip…" color="#DC2626" />
-              <PendingActionRow num={5} text="Approvals Required" sub="Approvals Requvels | Times…" color="#DC2626" />
-              <PendingActionRow num={2} text="Employee Manageme…" sub="Employee Liceusen | Times…" color="#D97706" />
-              <PendingActionRow num={2} text="Expring Licenses" sub="Exaping Licenses | Documen…" color="#D97706" />
-              <PendingActionRow num={12} text="Missing Documents" sub="Missing Documents | Missi…" color="#DC2626" />
+              <PendingActionRow num={5} text="Critical Validations"  sub="Approvals Errors | Description…"   color="#DC2626" />
+              <PendingActionRow num={5} text="Approvals Required"    sub="Approvals Required | Timeline…"    color="#DC2626" />
+              <PendingActionRow num={2} text="Employee Management"   sub="Employee Licences | Timeline…"     color="#D97706" />
+              <PendingActionRow num={2} text="Expiring Licences"     sub="Expiring Licences | Documents…"    color="#D97706" />
+              <PendingActionRow num={12} text="Missing Documents"    sub="Missing Documents | Missing…"      color="#DC2626" />
             </div>
           </div>
 
-          {/* Filing Calendar */}
           <div className={styles.card}>
             <div className={styles.cardLabel}>FILING CALENDAR</div>
             <CalendarMini />
           </div>
 
-          {/* Live Registers */}
           <div className={styles.card}>
             <div className={styles.cardLabel}>LIVE REGISTERS & FORMS</div>
             <table className={styles.regsTable}>
               <thead>
                 <tr>
-                  <th>Field name</th>
-                  <th>Data source *</th>
-                  <th>Stat</th>
+                  <th>Register</th>
+                  <th>Source</th>
+                  <th>Status</th>
                 </tr>
               </thead>
               <tbody>
                 {[
-                  ['Sarah Jenkins','Data analyse','Data'],
-                  ['Field usage *','Components','Data'],
-                  ['Recnatita Compli…','Hover tooltip','Data'],
-                  ['Audit Rirkck','Filing Delay','Data'],
-                ].map(([a,b,c]) => (
-                  <tr key={a}>
-                    <td>{a}</td><td>{b}</td><td>{c}</td>
-                  </tr>
+                  ['Code on Wages — Form IV', 'Master Register', 'Generated'],
+                  ['CLRA — Form I',           'Master Register', 'Pending'],
+                  ['Factories Act — Form 25', 'Master Register', 'Generated'],
+                  ['S&E Act — Karnataka',     'Master Register', 'Review'],
+                ].map(([a, b, c]) => (
+                  <tr key={a}><td>{a}</td><td>{b}</td><td>{c}</td></tr>
                 ))}
               </tbody>
             </table>
@@ -284,24 +294,22 @@ export default function DashboardHome() {
         </div>
         <div className={styles.insightsGrid}>
 
-          {/* Heatmap */}
           <div className={styles.card}>
             <div className={styles.cardLabel}>RISK INTELLIGENCE HEATMAP</div>
             <IndiaHeatmap />
           </div>
 
-          {/* Smart Recommendations */}
           <div className={styles.card}>
             <div className={styles.cardLabel}>SMART RECOMMENDATIONS & SELF-HEALING</div>
             <div className={styles.aiInsightsLabel}>Smart AI Insights</div>
             <div className={styles.aiInsightGrid}>
               {[
-                { c:'green', t:'PF mismatch repeated for 3 months in Bengaluro branch' },
-                { c:'red', t:'High audit risk detected for to can be nising Form 19' },
-                { c:'amber', t:'High audit risk detected in Komataka brunch due to missing Form 12' },
-                { c:'red', t:'7 common ervers Identified that can be auto-fixed now' },
+                { c: 'green', t: 'PF mismatch repeated for 3 months in Bengaluru branch' },
+                { c: 'red',   t: 'High audit risk detected — missing Form 19' },
+                { c: 'amber', t: 'Audit risk in Karnataka branch — missing Form 12' },
+                { c: 'red',   t: '7 common errors identified that can be auto-fixed' },
               ].map((ins, i) => (
-                <div key={i} className={`${styles.insightPill} ${styles['ins_'+ins.c]}`}>
+                <div key={i} className={`${styles.insightPill} ${styles['ins_' + ins.c]}`}>
                   <span className={styles.insDot} />
                   {ins.t}
                 </div>
@@ -310,21 +318,20 @@ export default function DashboardHome() {
             <div className={styles.selfHealLabel}>Self-Healing Suggestions</div>
             {[
               'Auto-correct 7 Karnataka missing forms',
-              'Auto-correct 7 Karnataka mand forms',
-              'Auto-correct 3 Karnataka messngs',
+              'Auto-correct 3 PF mismatch entries',
+              'Auto-fill 5 missing employee details',
             ].map((s, i) => (
               <div key={i} className={styles.healRow}>
-                <span className={styles.healNum}>{i+1}</span>
+                <span className={styles.healNum}>{i + 1}</span>
                 <div className={styles.healInfo}>
                   <div className={styles.healTitle}>{s}</div>
-                  <div className={styles.healSub}>Problem description: {i===0?'Ade Karnataka missing forms.':i===1?'Ade Karnataka missing forms eneolec…':'fieo carniibra missing forms.'}</div>
+                  <div className={styles.healSub}>Click Apply Fix to resolve automatically.</div>
                 </div>
                 <button className={styles.applyBtn}>Apply Fix</button>
               </div>
             ))}
           </div>
 
-          {/* Compliance Timeline */}
           <div className={styles.card}>
             <div className={styles.cardLabel}>COMPLIANCE TIMELINE</div>
             <div className={styles.tlLegend}>
@@ -333,15 +340,14 @@ export default function DashboardHome() {
             </div>
             <div className={styles.tlChart}>
               <TimelineBar label="Regulatory Updates" pastW={55} nextW={20} pastColor="#93C5FD" nextColor="#BFDBFE" />
-              <TimelineBar label="Internal Audits" pastW={30} nextW={45} pastColor="#FCA5A5" nextColor="#FCD34D" />
-              <TimelineBar label="Filing Milestones" pastW={70} nextW={60} pastColor="#FCD34D" nextColor="#86EFAC" />
+              <TimelineBar label="Internal Audits"    pastW={30} nextW={45} pastColor="#FCA5A5" nextColor="#FCD34D" />
+              <TimelineBar label="Filing Milestones"  pastW={70} nextW={60} pastColor="#FCD34D" nextColor="#86EFAC" />
             </div>
             <div className={styles.tlAxis}>
               <span>Past</span><span>Next 6</span>
             </div>
           </div>
 
-          {/* Advanced Reporting */}
           <div className={styles.card}>
             <div className={styles.cardLabel}>ADVANCED REPORTING HUB</div>
             <div className={styles.reportSubLabel}>Auto Generated Reports</div>
@@ -349,18 +355,16 @@ export default function DashboardHome() {
               <svg width="110" height="110" viewBox="0 0 110 110">
                 <circle cx="55" cy="55" r="40" fill="none" stroke="#EEEAFF" strokeWidth="18" />
                 <circle cx="55" cy="55" r="40" fill="none" stroke="#7C3AED" strokeWidth="18"
-                  strokeDasharray="100 152" strokeDashoffset="38" strokeLinecap="round" />
+                  strokeDasharray="100 152" strokeDashoffset="38"  strokeLinecap="round" />
                 <circle cx="55" cy="55" r="40" fill="none" stroke="#FCD34D" strokeWidth="18"
-                  strokeDasharray="60 192" strokeDashoffset="-62" strokeLinecap="round" />
+                  strokeDasharray="60 192"  strokeDashoffset="-62" strokeLinecap="round" />
                 <circle cx="55" cy="55" r="40" fill="none" stroke="#059669" strokeWidth="18"
-                  strokeDasharray="45 207" strokeDashoffset="-122" strokeLinecap="round" />
+                  strokeDasharray="45 207"  strokeDashoffset="-122" strokeLinecap="round" />
               </svg>
               <div className={styles.reportLabel}>Smart Reports</div>
             </div>
             <div className={styles.reportBtns}>
-              {['Cross-functional Reports ∨'].map(b => (
-                <button key={b} className={styles.reportDropBtn}>{b}</button>
-              ))}
+              <button className={styles.reportDropBtn}>Cross-functional Reports ∨</button>
             </div>
           </div>
         </div>

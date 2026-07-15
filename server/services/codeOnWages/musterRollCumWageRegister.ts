@@ -58,7 +58,7 @@
  * ════════════════════════════════════════════════════════════════════════
  */
 
-import ExcelJS from 'exceljs';
+import * as ExcelJS from 'exceljs';
 import { MasterData, getString, getNumber, getDate, getEmployeeName, formatDate, round2 } from '../shared/masterReader.js';
 import { CODE_ON_WAGES_COLUMNS as M } from './mapping.js';
 import { generateSingleSheetRegister, sumColumn } from './registerEngine.js';
@@ -142,7 +142,7 @@ export async function generateMusterRollCumWageRegister(
       const totalDedn = round2(getNumber(emp, M.totalDeduction));  // 292
       row[58] = totalDedn;
 
-      const netPaid = round2(getNumber(emp, M.netPaymentsAmountPaid)) ?? round2(
+      const netPaid = round2(getNumber(emp, M.netSalary)) ?? round2(
         (gross ?? 0) - (totalDedn ?? 0),
       );
       row[59] = netPaid;                                           // 208

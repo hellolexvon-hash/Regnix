@@ -1,34 +1,24 @@
+/**
+ * src/pages/dashboard/DashboardSidebar.tsx — unchanged from original.
+ * No Supabase changes needed here; navigation is pure UI.
+ */
+
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import styles from './DashboardSidebar.module.css';
 
-const logoSrc = '/regnix-mark.png'; 
+const logoSrc = '/regnix-mark.png';
 
-interface NavSection {
-  label: string;
-  items: NavItem[];
-}
-
+interface NavSection { label: string; items: NavItem[]; }
 interface NavItem {
-  id: string;
-  icon: JSX.Element;
-  label: string;
-  badge?: string;
-  children?: { id: string; label: string }[];
+  id: string; icon: JSX.Element; label: string;
+  badge?: string; children?: { id: string; label: string }[];
 }
 
 const Icon = ({ d }: { d: string }) => (
-  <svg
-    width="15"
-    height="15"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.8"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    aria-hidden="true"
-  >
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
+    stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"
+    strokeLinejoin="round" aria-hidden="true">
     <path d={d} />
   </svg>
 );
@@ -36,13 +26,11 @@ const Icon = ({ d }: { d: string }) => (
 const NAV: NavSection[] = [
   {
     label: '',
-    items: [
-      {
-        id: 'dashboard',
-        icon: <Icon d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z" />,
-        label: 'Dashboard',
-      },
-    ],
+    items: [{
+      id: 'dashboard',
+      icon: <Icon d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z" />,
+      label: 'Dashboard',
+    }],
   },
   {
     label: 'Compliance',
@@ -50,14 +38,13 @@ const NAV: NavSection[] = [
       {
         id: 'compliance',
         icon: <Icon d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />,
-        label: 'Compliance',
-        badge: '3',
+        label: 'Compliance', badge: '3',
         children: [
-          { id: 'calendar', label: 'Compliance Calendar' },
-          { id: 'generator', label: 'Document Generator' },
-          { id: 'checker', label: 'Applicability Checker' },
-          { id: 'register', label: 'Statutory Register' },
-          { id: 'filing', label: 'Filing Tracker' },
+          { id: 'calendar',   label: 'Compliance Calendar'  },
+          { id: 'generator',  label: 'Document Generator'   },
+          { id: 'checker',    label: 'Applicability Checker'},
+          { id: 'register',   label: 'Statutory Register'   },
+          { id: 'filing',     label: 'Filing Tracker'       },
         ],
       },
       {
@@ -65,20 +52,19 @@ const NAV: NavSection[] = [
         icon: <Icon d="M9 11l3 3L22 4M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11" />,
         label: 'Audit',
         children: [
-          { id: 'planner', label: 'Audit Planner' },
-          { id: 'checklist', label: 'Checklists' },
-          { id: 'findings', label: 'Findings' },
+          { id: 'planner',   label: 'Audit Planner' },
+          { id: 'checklist', label: 'Checklists'    },
+          { id: 'findings',  label: 'Findings'      },
         ],
       },
       {
         id: 'legal',
         icon: <Icon d="M3 6h18M3 12h18M3 18h18" />,
-        label: 'Legal AI',
-        badge: '1',
+        label: 'Legal AI', badge: '1',
         children: [
-          { id: 'notices', label: 'Notices & Summons' },
-          { id: 'analyzer', label: 'AI Analyzer' },
-          { id: 'cases', label: 'Case Tracker' },
+          { id: 'notices',  label: 'Notices & Summons' },
+          { id: 'analyzer', label: 'AI Analyzer'       },
+          { id: 'cases',    label: 'Case Tracker'      },
         ],
       },
     ],
@@ -91,8 +77,8 @@ const NAV: NavSection[] = [
         icon: <Icon d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" />,
         label: 'Payroll & Statutory',
         children: [
-          { id: 'salary', label: 'Salary Structure' },
-          { id: 'pfesic', label: 'PF / ESIC / PT' },
+          { id: 'salary',  label: 'Salary Structure'  },
+          { id: 'pfesic',  label: 'PF / ESIC / PT'    },
           { id: 'payslip', label: 'Payslip Generator' },
         ],
       },
@@ -102,7 +88,7 @@ const NAV: NavSection[] = [
         label: 'Workforce',
         children: [
           { id: 'employees', label: 'Employees' },
-          { id: 'vendors', label: 'Vendors' },
+          { id: 'vendors',   label: 'Vendors'   },
           { id: 'lifecycle', label: 'Lifecycle' },
         ],
       },
@@ -136,17 +122,16 @@ const NAV: NavSection[] = [
 ];
 
 interface Props {
-  collapsed: boolean;
-  onToggle: () => void;
-  activeView: string;
-  onNavigate: (id: string) => void;
+  collapsed:   boolean;
+  onToggle:    () => void;
+  activeView:  string;
+  onNavigate:  (id: string) => void;
 }
 
 export function DashboardSidebar({ collapsed, onToggle, activeView, onNavigate }: Props) {
   const [expanded, setExpanded] = useState<string | null>('compliance');
-
   const navSections = useMemo(() => NAV, []);
-  const toggle = (id: string) => setExpanded((prev) => (prev === id ? null : id));
+  const toggle = (id: string) => setExpanded(prev => prev === id ? null : id);
 
   return (
     <aside className={`${styles.sidebar} ${collapsed ? styles.collapsed : ''}`}>
@@ -155,7 +140,6 @@ export function DashboardSidebar({ collapsed, onToggle, activeView, onNavigate }
           <span className={styles.logoMark}>
             <img src={logoSrc} alt="Regnix logo" className={styles.logoImage} />
           </span>
-
           {!collapsed && (
             <div className={styles.logoText}>
               <span className={styles.logoName}>Regnix</span>
@@ -163,53 +147,38 @@ export function DashboardSidebar({ collapsed, onToggle, activeView, onNavigate }
             </div>
           )}
         </Link>
-
-        <button
-          type="button"
-          className={styles.collapseBtn}
-          onClick={onToggle}
-          title="Toggle sidebar"
-          aria-label="Toggle sidebar"
-        >
+        <button type="button" className={styles.collapseBtn} onClick={onToggle}
+          title="Toggle sidebar" aria-label="Toggle sidebar">
           {collapsed ? '›' : '‹'}
         </button>
       </div>
 
       <nav className={styles.nav} aria-label="Sidebar navigation">
-        {navSections.map((section) => (
+        {navSections.map(section => (
           <div key={section.label || 'root'} className={styles.navSection}>
             {section.label && !collapsed && (
               <div className={styles.sectionLabel}>{section.label}</div>
             )}
-
-            {section.items.map((item) => {
+            {section.items.map(item => {
               const isExpanded = expanded === item.id;
-              const isActive = activeView === item.id;
-
+              const isActive   = activeView === item.id;
               return (
                 <div key={item.id} className={styles.navGroup}>
-                  <button
-                    type="button"
+                  <button type="button"
                     className={`${styles.navItem} ${isActive ? styles.navActive : ''}`}
-                    onClick={() => {
-                      if (item.children) {
-                        toggle(item.id);
-                      } else {
-                        onNavigate(item.id);
-                      }
-                    }}
+                    onClick={() => item.children ? toggle(item.id) : onNavigate(item.id)}
                     title={collapsed ? item.label : undefined}
                     aria-expanded={item.children ? isExpanded : undefined}
                   >
                     <span className={styles.navIcon}>{item.icon}</span>
-
                     {!collapsed && (
                       <>
                         <span className={styles.navLabel}>{item.label}</span>
                         {item.badge && <span className={styles.badge}>{item.badge}</span>}
                         {item.children && (
                           <span className={`${styles.chevron} ${isExpanded ? styles.chevronOpen : ''}`}>
-                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none"
+                              stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
                               <polyline points="9 18 15 12 9 6" />
                             </svg>
                           </span>
@@ -217,13 +186,10 @@ export function DashboardSidebar({ collapsed, onToggle, activeView, onNavigate }
                       </>
                     )}
                   </button>
-
                   {!collapsed && item.children && isExpanded && (
                     <div className={styles.subNav}>
-                      {item.children.map((child) => (
-                        <button
-                          type="button"
-                          key={child.id}
+                      {item.children.map(child => (
+                        <button type="button" key={child.id}
                           className={`${styles.subNavItem} ${activeView === child.id ? styles.subNavActive : ''}`}
                           onClick={() => onNavigate(child.id)}
                         >
@@ -240,14 +206,15 @@ export function DashboardSidebar({ collapsed, onToggle, activeView, onNavigate }
       </nav>
 
       <div className={styles.sidebarFooter}>
-        <button
-          type="button"
+        <button type="button"
           className={`${styles.navItem} ${activeView === 'settings' ? styles.navActive : ''}`}
           onClick={() => onNavigate('settings')}
           title={collapsed ? 'Settings' : undefined}
         >
           <span className={styles.navIcon}>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"
+              strokeLinejoin="round" aria-hidden="true">
               <circle cx="12" cy="12" r="3" />
               <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" />
             </svg>

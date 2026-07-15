@@ -9,11 +9,14 @@
  *  Step 5 — Summary / done screen
  */
 
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import JSZip from 'jszip';
 import * as XLSX from 'xlsx';
+import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/lib/supabaseClient';
+import { useValidationStore } from './validationStore';
 import styles from './DocumentGenerator.module.css';
 import LiveRegister from './LiveRegister';
 
@@ -166,6 +169,57 @@ const ACTS: Act[] = [
 ];
 
 const CATEGORIES = ['All', 'Labour', 'State', 'Compliance'];
+
+type AuthProfileSeed = {
+  company_name?: string | null;
+  firm_name?: string | null;
+  full_name?: string | null;
+  industry?: string | null;
+  gstin?: string | null;
+  email?: string | null;
+};
+
+function normalizeText(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function mergeSeedIntoCompany(
+  current: CompanyDetails,
+  seed: Partial<CompanyDetails>,
+): CompanyDetails {
+  return {
+    ...current,
+    name: current.name || seed.name || '',
+    cin: current.cin || seed.cin || '',
+    pan: current.pan || seed.pan || '',
+    gstin: current.gstin || seed.gstin || '',
+    address: current.address || seed.address || '',
+    state: current.state || seed.state || '',
+    industry: current.industry || seed.industry || '',
+    headcount: current.headcount || seed.headcount || '',
+    incorporationDate: current.incorporationDate || seed.incorporationDate || '',
+    authorizedPerson: current.authorizedPerson || seed.authorizedPerson || '',
+    designation: current.designation || seed.designation || '',
+    email: current.email || seed.email || '',
+    phone: current.phone || seed.phone || '',
+  };
+}
+
+function companyFromProfile(profile: AuthProfileSeed | null | undefined, fallbackEmail = ''): Partial<CompanyDetails> {
+  const companyName = normalizeText(profile?.company_name) || normalizeText(profile?.firm_name);
+  const fullName = normalizeText(profile?.full_name);
+  const industry = normalizeText(profile?.industry);
+  const gstin = normalizeText(profile?.gstin);
+  const email = normalizeText(profile?.email) || fallbackEmail;
+
+  return {
+    name: companyName,
+    industry,
+    gstin,
+    email,
+    authorizedPerson: fullName,
+  };
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ENDPOINT ROUTING
@@ -822,19 +876,35 @@ function Step4({ company, selectedActs, onBack, onDone, onFileReady }: {
 // ─────────────────────────────────────────────────────────────────────────────
 // STEP 5 — Done
 // ─────────────────────────────────────────────────────────────────────────────
-function Step5({ company, selectedActs, info, onRestart }: {
+function Step5({ company, selectedActs, info, onRestart, liveRegisterFile }: {
   company: CompanyDetails;
   selectedActs: ActId[];
   info: { fileCount: number; rowCount: number; zipUrl: string };
   onRestart: () => void;
+  liveRegisterFile: File | null;
 }) {
   const navigate = useNavigate();
+  const validationStore = useValidationStore();
 
   const reDownload = () => {
     const a = document.createElement('a');
     a.href = info.zipUrl;
     a.download = `${company.name.replace(/\s+/g, '_')}_Registers.zip`;
     a.click();
+  };
+
+  const handleStartValidation = () => {
+    validationStore.setCompanyName(company.name);
+    validationStore.setSelectedActs(selectedActs);
+    validationStore.setLiveRegisterFile(liveRegisterFile);
+    validationStore.setCurrentRoute('landing');
+    navigate('/dashboard/validation', {
+      state: {
+        companyName: company.name,
+        liveRegisterFile,
+        selectedActs,
+      },
+    });
   };
 
   return (
@@ -894,7 +964,7 @@ function Step5({ company, selectedActs, info, onRestart }: {
         </div>
         <button
           className={styles.btnPrimary}
-          onClick={() => navigate('/dashboard/validation')}
+          onClick={handleStartValidation}
           style={{ whiteSpace: 'nowrap' }}
         >
           Start Validation →
@@ -917,6 +987,12 @@ function Step5({ company, selectedActs, info, onRestart }: {
 // ROOT COMPONENT
 // ─────────────────────────────────────────────────────────────────────────────
 export default function DocumentGenerator() {
+  const { user, profile, loading: authLoading } = useAuth() as {
+    user: { email?: string | null } | null;
+    profile: AuthProfileSeed | null;
+    loading: boolean;
+  };
+
   const [step, setStep] = useState(1);
   const [company, setCompany] = useState<CompanyDetails>(EMPTY_COMPANY);
   const [selectedActs, setSelectedActs] = useState<ActId[]>([]);
@@ -925,9 +1001,68 @@ export default function DocumentGenerator() {
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [fabPulse, setFabPulse] = useState(false);
 
+  useEffect(() => {
+    if (authLoading) return;
+
+    const seeded = companyFromProfile(profile, user?.email ?? '');
+    if (Object.values(seeded).every((v) => !v)) return;
+
+    setCompany((current) => mergeSeedIntoCompany(current, seeded));
+  }, [authLoading, profile, user?.email]);
+
+  useEffect(() => {
+    if (authLoading) return;
+
+    let active = true;
+
+    const loadProfileFallback = async () => {
+      const seeded = companyFromProfile(profile, user?.email ?? '');
+      if (Object.values(seeded).some((v) => Boolean(v))) return;
+
+      try {
+        const { data: authUserData, error: userErr } = await supabase.auth.getUser();
+        if (!active || userErr) return;
+
+        const authUser = authUserData.user;
+        if (!authUser) return;
+
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('company_name, firm_name, full_name, industry, gstin, email')
+          .eq('id', authUser.id)
+          .maybeSingle();
+
+        if (!active || error || !data) return;
+
+        const fallbackSeed = companyFromProfile(
+          {
+            company_name: data.company_name ?? null,
+            firm_name: data.firm_name ?? null,
+            full_name: data.full_name ?? null,
+            industry: data.industry ?? null,
+            gstin: data.gstin ?? null,
+            email: data.email ?? authUser.email ?? null,
+          },
+          authUser.email ?? '',
+        );
+
+        setCompany((current) => mergeSeedIntoCompany(current, fallbackSeed));
+      } catch {
+        // Keep the screen usable even if the fallback lookup fails.
+      }
+    };
+
+    void loadProfileFallback();
+
+    return () => {
+      active = false;
+    };
+  }, [authLoading, profile, user?.email]);
+
   const restart = () => {
     setStep(1);
-    setCompany(EMPTY_COMPANY);
+    const seeded = companyFromProfile(profile, user?.email ?? '');
+    setCompany(mergeSeedIntoCompany(EMPTY_COMPANY, seeded));
     setSelectedActs([]);
     setDoneInfo(null);
   };
@@ -942,6 +1077,8 @@ export default function DocumentGenerator() {
     setDoneInfo(info);
     setStep(5);
   };
+
+  if (authLoading) return null;
 
   return (
     <>
@@ -1023,6 +1160,7 @@ export default function DocumentGenerator() {
             selectedActs={selectedActs}
             info={doneInfo}
             onRestart={restart}
+            liveRegisterFile={uploadedFile}
           />
         )}
       </div>
