@@ -197,3 +197,85 @@
   .saFunnelRow { grid-template-columns: 140px 1fr 30px; }
   .saActivityRow { grid-template-columns: 1fr; gap: 4px; }
 }
+
+/* ── Notification bell (additive; no existing styles changed) ───────── */
+.saBellWrap { position: relative; }
+.saBellBtn {
+  position: relative; display: flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px; border-radius: 8px; border: 1px solid var(--sa-line);
+  background: #fff; color: var(--sa-ink); cursor: pointer;
+}
+.saBellBtn:hover { background: #F7F8FA; }
+.saBellBadge {
+  position: absolute; top: -6px; right: -6px; min-width: 18px; height: 18px; padding: 0 5px;
+  border-radius: 999px; background: var(--sa-red); color: #fff;
+  font-size: 10.5px; font-weight: 700; display: flex; align-items: center; justify-content: center;
+}
+.saBellPanel {
+  position: absolute; right: 0; top: 42px; width: 360px; max-height: 460px; z-index: 50;
+  background: #fff; border: 1px solid var(--sa-line); border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.1); display: flex; flex-direction: column; overflow: hidden;
+}
+.saBellHead {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 14px; border-bottom: 1px solid var(--sa-line); font-size: 13px;
+}
+.saBellList { overflow-y: auto; }
+.saBellItem {
+  display: flex; flex-direction: column; gap: 2px; width: 100%; text-align: left;
+  padding: 10px 14px; border: none; border-bottom: 1px solid #F3F4F6;
+  background: #fff; cursor: pointer; font-family: inherit;
+}
+.saBellItem:hover { background: #F7F8FA; }
+.saBellItemUnread { background: var(--sa-amber-bg); }
+.saBellTitle { font-size: 12.5px; font-weight: 600; color: var(--sa-ink); }
+.saBellDetail { font-size: 12px; color: var(--sa-dim); line-height: 1.4; }
+
+/* ── Live-session notice + unread dot (additive) ────────────────────── */
+.saNotice {
+  margin: 0; padding: 10px 14px; font-size: 12px; line-height: 1.5;
+  background: var(--sa-amber-bg); color: var(--sa-amber); border-bottom: 1px solid var(--sa-amber-border);
+}
+.saPanel > .saNotice { border: 1px solid var(--sa-amber-border); border-radius: 8px; margin-bottom: 12px; }
+.saBellDot {
+  display: inline-block; width: 7px; height: 7px; margin-right: 7px; border-radius: 50%;
+  background: var(--sa-red); vertical-align: middle;
+}
+
+/* ── Authorized users + KYC request (additive) ─────────────────────── */
+.saNoticeOk {
+  margin: 0 0 12px; padding: 10px 14px; font-size: 12px; line-height: 1.5; border-radius: 8px;
+  background: var(--sa-green-bg); color: var(--sa-green); border: 1px solid #A7F3D0;
+}
+.saPanel > .saNotice { margin-bottom: 12px; }
+.saDimText { color: var(--sa-dim); font-size: 12px; }
+.saKycMeta { margin-top: 5px; font-size: 11px; line-height: 1.5; color: var(--sa-dim); }
+.saRowActions { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.saModalBackdrop {
+  position: fixed; inset: 0; z-index: 100; padding: 16px;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(17, 24, 39, 0.45);
+}
+.saModal {
+  width: 100%; max-width: 520px; max-height: calc(100vh - 32px); overflow-y: auto;
+  display: flex; flex-direction: column; gap: 14px;
+  background: #fff; border: 1px solid var(--sa-line); border-radius: 14px; padding: 24px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.18);
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; color: var(--sa-ink);
+}
+.saModalTitle { margin: 0; font-size: 16px; }
+.saModalSub { margin: -8px 0 0; font-size: 12.5px; color: var(--sa-dim); }
+.saModalRow { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.saCheckList { display: flex; flex-direction: column; gap: 6px; margin: 2px 0 6px; }
+.saCheckItem { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
+.saModalError {
+  margin: 0; padding: 8px 10px; font-size: 12px; border-radius: 8px;
+  background: var(--sa-red-bg); color: var(--sa-red); border: 1px solid #FECACA;
+}
+.saModalActions { display: flex; justify-content: flex-end; gap: 10px; }
+.saModalActions .saSubmit { margin-top: 0; padding: 8px 18px; }
+
+@media (max-width: 560px) {
+  .saModalRow { grid-template-columns: 1fr; }
+}

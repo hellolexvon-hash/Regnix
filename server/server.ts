@@ -21,12 +21,36 @@ import auditorRouter from './routes/auditorRoute.js';
 import validationRouter from './routes/validationRoute.js';
 import superAdminRouter from './routes/superAdminRoute.js';
 import certificateRouter from './routes/certificateRoute.js';
+import emailRouter from './routes/emailRoute.js';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
 const isProduction = process.env.NODE_ENV === 'production';
 
-app.use(cors());
+// Behind Vercel / a proxy: needed so rate limiting sees the real client IP.
+app.set('trust proxy', 1);
+app.disable('x-powered-by');
+
+// Production: only the configured site origins may call the API from a browser.
+// Development (or no ALLOWED_ORIGINS set): behave as before.
+const allowedOrigins = (process.env.ALLOWED_ORIGINS ?? '')
+  .split(',')
+  .map((o) => o.trim())
+  .filter(Boolean);
+
+app.use(
+  cors(
+    isProduction && allowedOrigins.length > 0
+      ? {
+          origin: (origin, cb) => {
+            // no Origin header = same-origin / server-to-server (e.g. the Supabase webhook)
+            if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
+            return cb(null, false);
+          },
+        }
+      : undefined,
+  ),
+);
 app.use(express.json({ limit: '20mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(requestLogger);
@@ -63,6 +87,7 @@ app.use('/api', validationRouter);
 app.use('/api', auditorRouter);
 app.use('/api', superAdminRouter);
 app.use('/api', certificateRouter);
+app.use('/api', emailRouter);
 
 if (isProduction && fs.existsSync(path.join(distDir, 'index.html'))) {
   app.get('*', (_req, res) => {
@@ -103,6 +128,11 @@ if (isProduction && fs.existsSync(path.join(distDir, 'index.html'))) {
         '/api/admin/activity',
         '/api/certificate/email',
         '/api/certificate/issue',
+        '/api/email/approval',
+        '/api/email/rejection',
+        '/api/email/kyc-request',
+        '/api/email/kyc-verified',
+        '/api/webhooks/signup',
       ],
     });
   });

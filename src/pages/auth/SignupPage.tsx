@@ -13,6 +13,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import type { AccountType, SignupFormData } from '@/hooks/useAuth';
+import { getApprovalStatus, signOutQuietly } from './approval';
 import styles from './AuthPage.module.css';
 
 const INDUSTRIES = [
@@ -39,8 +40,16 @@ export default function SignupPage() {
   const [done,  setDone]  = useState(false); // email confirmation pending
 
   useEffect(() => {
-    if (!loading && isAuthenticated) navigate('/dashboard', { replace: true });
-  }, [isAuthenticated, loading, navigate]);
+    // Don't redirect while submitting or while the "in review" screen is showing,
+    // and only send already-signed-in users on if an admin has approved them.
+    if (loading || !isAuthenticated || done || busy) return;
+    let cancelled = false;
+    (async () => {
+      const status = await getApprovalStatus();
+      if (!cancelled && status === 'approved') navigate('/dashboard', { replace: true });
+    })();
+    return () => { cancelled = true; };
+  }, [isAuthenticated, loading, done, busy, navigate]);
 
   const set = (k: keyof typeof INITIAL_FORM) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
@@ -75,10 +84,11 @@ export default function SignupPage() {
         industry:        form.industry,
         gstin:           form.gstin.trim(),
       } as SignupFormData);
-      // Supabase sends a confirmation email by default.
-      // If email confirmation is OFF in your Supabase project,
-      // the user is signed in immediately and isAuthenticated becomes true,
-      // which triggers the useEffect redirect above.
+      // The new profile starts as approval_status = 'pending' (DB default) and
+      // the super admin is notified by a DB trigger. If Supabase auto-signed
+      // the user in (email confirmation OFF), sign them out: the account only
+      // becomes usable after an admin approves it.
+      await signOutQuietly();
       setDone(true);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Signup failed. Please try again.');
@@ -109,13 +119,16 @@ export default function SignupPage() {
         <div className={styles.right}>
           <div className={styles.formCard}>
             <div className={styles.formHeader}>
-              <h1 className={styles.formTitle}>Check your email ✉️</h1>
+              <h1 className={styles.formTitle}>Your application is in review ⏳</h1>
               <p className={styles.formSub}>
-                We sent a confirmation link to <strong>{form.email}</strong>.
-                Click it to activate your account, then{' '}
-                <Link to="/login" className={styles.formLink}>sign in</Link>.
+                Thanks for signing up, {form.name.trim().split(' ')[0]}. Your application
+                is in review and we will get back to you shortly
+                {form.email ? <> at <strong>{form.email}</strong></> : null}.
               </p>
             </div>
+            <Button variant="primary" size="lg" onClick={() => navigate('/login', { replace: true })}>
+              Go to Login
+            </Button>
           </div>
         </div>
       </div>

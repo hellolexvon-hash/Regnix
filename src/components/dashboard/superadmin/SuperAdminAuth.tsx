@@ -28,7 +28,7 @@ export default function SuperAdminAuth({ onAuthenticated }: SuperAdminAuthProps)
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
     if (!email.trim() || !password) {
@@ -36,12 +36,20 @@ export default function SuperAdminAuth({ onAuthenticated }: SuperAdminAuthProps)
       return;
     }
     setSubmitting(true);
-    setTimeout(() => {
-      const result = admin.signIn(email, password);
+
+    // 1) Real Supabase super admin (needed to see and approve signups)
+    const remote = await admin.signInRemote(email, password);
+    if (remote.ok === true) {
       setSubmitting(false);
-      if (result.ok === true) onAuthenticated();
-      else setError(result.error);
-    }, 400);
+      onAuthenticated();
+      return;
+    }
+
+    // 2) Fall back to the local demo admin so the console still opens in dev
+    const demo = admin.signIn(email, password);
+    setSubmitting(false);
+    if (demo.ok === true) onAuthenticated();
+    else setError(remote.error);
   }
 
   function fillDemo() {

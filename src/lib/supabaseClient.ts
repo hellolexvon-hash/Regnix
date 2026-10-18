@@ -33,6 +33,8 @@ export interface Profile {
   industry:     string | null;
   gstin:        string | null;
   firm_name:    string | null;
+  approval_status:  'pending' | 'approved' | 'rejected';      // set by a super admin
+  rejection_reason: string | null;
   created_at:   string;
   updated_at:   string;
 }

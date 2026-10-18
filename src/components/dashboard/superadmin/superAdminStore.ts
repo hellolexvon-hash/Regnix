@@ -15,7 +15,9 @@
  * certificateData.ts.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+// Separate-session client so /admin never clobbers a normal user's session
+import { supabaseConsole as supabase } from '@/lib/supabaseConsole';
 import { useAuditorStore, type CompanyReview, type Auditor, type AuditLogEntry } from '../AuditorView/auditorStore';
 
 export interface SuperAdmin {
@@ -41,9 +43,68 @@ let _admin: AdminStoreState = {
   currentAdminId: null,
 };
 
+// ── Transactional email (sent by the backend; the server decides recipient + content) ──
+const API_BASE: string = (import.meta.env.VITE_API_URL as string | undefined) ?? '';
+
+/** Ask the backend to send a transactional email. Returns null on success, else an error message. */
+async function postEmail(path: string, body: Record<string, string>): Promise<string | null> {
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  if (!token) return 'Not signed in.';
+  try {
+    const res = await fetch(`${API_BASE}/api/email/${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify(body),
+    });
+    if (res.ok) return null;
+    const j = await res.json().catch(() => ({}));
+    return (j as { error?: string }).error ?? `Request failed (${res.status}).`;
+  } catch {
+    return 'Could not reach the email service.';
+  }
+}
+
+// Why the last real (Supabase) sign-in attempt failed; shown when the console falls back to the demo session.
+let _lastRemoteError = '';
+
 type Listener = () => void;
 const _listeners = new Set<Listener>();
 function notify() { _listeners.forEach(fn => fn()); }
+
+/** Make a verified Supabase super admin the current console admin. */
+async function adoptRemoteAdmin(userId: string, email: string) {
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('full_name')
+    .eq('id', userId)
+    .maybeSingle();
+
+  const remoteAdmin: SuperAdmin = {
+    id:       userId,
+    fullName: (profile?.full_name as string | undefined) ?? 'Super Admin',
+    email,
+    title:    'Super Admin',
+  };
+  _admin = {
+    ..._admin,
+    admins: [..._admin.admins.filter(a => a.id !== remoteAdmin.id), remoteAdmin],
+    currentAdminId: remoteAdmin.id,
+  };
+  notify();
+}
+
+// Restore a real super-admin session after a page refresh (runs once per page load).
+let _restoreStarted = false;
+async function restoreRemoteSession() {
+  if (_restoreStarted) return;
+  _restoreStarted = true;
+  const { data } = await supabase.auth.getSession();
+  const user = data.session?.user;
+  if (!user) return;
+  const { data: isAdmin } = await supabase.rpc('is_super_admin');
+  if (isAdmin === true) await adoptRemoteAdmin(user.id, user.email ?? '');
+}
 
 export function useSuperAdminAuth() {
   const [, forceRender] = useState(0);
@@ -51,6 +112,7 @@ export function useSuperAdminAuth() {
   useEffect(() => {
     const listener: Listener = () => forceRender(n => n + 1);
     _listeners.add(listener);
+    void restoreRemoteSession();
     return () => { _listeners.delete(listener); };
   }, []);
 
@@ -59,6 +121,10 @@ export function useSuperAdminAuth() {
   return {
     currentAdmin,
     isAuthenticated: currentAdmin !== null,
+    /** true only for a real Supabase super admin; the local demo admin has no database access */
+    isLive: currentAdmin !== null && currentAdmin.id !== DEMO_ADMIN.id,
+    /** reason the real sign-in failed (empty when it has not been tried or succeeded) */
+    remoteError: _lastRemoteError,
 
     signIn(email: string, password: string): { ok: true } | { ok: false; error: string } {
       const key = email.trim().toLowerCase();
@@ -71,10 +137,382 @@ export function useSuperAdminAuth() {
       return { ok: true };
     },
 
+    /**
+     * Real sign-in against Supabase. Only accounts listed (and active) in
+     * super_admin_profiles get in. This is what gives the console a session
+     * that is allowed to read the activity feed and approve/reject signups.
+     */
+    async signInRemote(email: string, password: string): Promise<{ ok: true } | { ok: false; error: string }> {
+      const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+      if (error || !data.user) {
+        _lastRemoteError = `Supabase sign-in failed: ${error?.message ?? 'no user returned'}.`;
+        return { ok: false, error: 'Incorrect email or password.' };
+      }
+
+      const { data: isAdmin, error: adminErr } = await supabase.rpc('is_super_admin');
+      if (adminErr || isAdmin !== true) {
+        _lastRemoteError = adminErr
+          ? `is_super_admin() failed: ${adminErr.message}.`
+          : 'Signed in, but this user is not an active row in super_admin_profiles.';
+        await supabase.auth.signOut();
+        return { ok: false, error: 'This account does not have super admin access.' };
+      }
+
+      _lastRemoteError = '';
+      await adoptRemoteAdmin(data.user.id, data.user.email ?? email.trim());
+      return { ok: true };
+    },
+
     signOut() {
+      void supabase.auth.signOut();
       _admin = { ..._admin, currentAdminId: null };
       notify();
     },
+  };
+}
+
+// ── Signup approvals + notifications ────────────────────────────────────
+
+export interface PendingSignup {
+  id:          string;
+  fullName:    string;
+  email:       string;
+  accountType: string;
+  companyName: string;
+  industry:    string;
+  createdAt:   Date;
+  isNew:       boolean;   // has an unread "new signup" notification
+}
+
+/**
+ * Pending applicants + their notifications for the Super Admin console.
+ * Live: subscribes to admin_notifications (inserted by a DB trigger on every
+ * signup) and also polls every 30s as a fallback.
+ */
+export function useSignupApprovals(enabled: boolean) {
+  const [pending, setPending] = useState<PendingSignup[]>([]);
+  const [error, setError]     = useState('');
+  const [busyId, setBusyId]   = useState<string | null>(null);
+
+  const refresh = useCallback(async () => {
+    const [profilesRes, notesRes] = await Promise.all([
+      supabase
+        .from('profiles')
+        .select('id, full_name, email, account_type, company_name, firm_name, industry, created_at')
+        .eq('approval_status', 'pending')
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('admin_notifications')
+        .select('entity_id')
+        .eq('type', 'new_signup')
+        .eq('is_read', false),
+    ]);
+
+    if (profilesRes.error) { setError(profilesRes.error.message); return; }
+    setError('');
+
+    if (notesRes.error) { setError(notesRes.error.message); return; }
+    const unread = new Set((notesRes.data ?? []).map(n => n.entity_id as string));
+    setPending((profilesRes.data ?? []).map(p => ({
+      id:          p.id as string,
+      fullName:    (p.full_name as string) ?? '—',
+      email:       (p.email as string) ?? '—',
+      accountType: (p.account_type as string) ?? '—',
+      companyName: ((p.company_name as string) || (p.firm_name as string)) ?? '—',
+      industry:    (p.industry as string) ?? '—',
+      createdAt:   new Date(p.created_at as string),
+      isNew:       unread.has(p.id as string),
+    })));
+  }, []);
+
+  useEffect(() => {
+    if (!enabled) return;
+    void refresh();
+
+    const channel = supabase
+      .channel('admin-signup-notifications')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'admin_notifications' }, () => { void refresh(); })
+      .subscribe();
+    const poll = setInterval(() => { void refresh(); }, 30000);
+
+    return () => {
+      clearInterval(poll);
+      void supabase.removeChannel(channel);
+    };
+  }, [enabled, refresh]);
+
+  const decide = useCallback(async (id: string, run: () => PromiseLike<{ error: { message: string } | null }>) => {
+    setBusyId(id);
+    const { error: rpcError } = await run();
+    setBusyId(null);
+    if (rpcError) { setError(rpcError.message); return false; }
+    await refresh();
+    return true;
+  }, [refresh]);
+
+  return {
+    pending,
+    error,
+    busyId,
+    approve: async (id: string) => {
+      const ok = await decide(id, () => supabase.rpc('approve_signup', { p_user_id: id }));
+      if (ok) {
+        // Email the user that they can sign in now. A mail failure must not undo the approval.
+        const mailErr = await postEmail('approval', { userId: id });
+        if (mailErr) setError('Approved, but the email could not be sent: ' + mailErr);
+      }
+      return ok;
+    },
+    reject: async (id: string, reason?: string) => {
+      const ok = await decide(id, () => supabase.rpc('reject_signup', { p_user_id: id, p_reason: reason ?? null }));
+      if (ok) {
+        // Tell the applicant. A mail failure must not undo the rejection.
+        const mailErr = await postEmail('rejection', { userId: id });
+        if (mailErr) setError('Rejected, but the email could not be sent: ' + mailErr);
+      }
+      return ok;
+    },
+  };
+}
+
+// ── Authorized (approved) users + KYC / payment requests ────────────────
+
+export type KycStatus = 'none' | 'requested' | 'verified' | 'cancelled';
+
+export interface KycRequest {
+  id:              string;
+  documents:       string[];
+  amount:          number;
+  currency:        string;
+  dueDate:         string | null;
+  note:            string;
+  docsReceived:    boolean;
+  paymentReceived: boolean;
+  status:          Exclude<KycStatus, 'none'>;
+  createdAt:       Date;
+}
+
+export interface AuthorizedUser {
+  id:          string;
+  fullName:    string;
+  email:       string;
+  accountType: string;
+  companyName: string;
+  industry:    string;
+  gstin:       string;
+  approvedAt:  Date | null;
+  createdAt:   Date;
+  kyc:         KycRequest | null;   // latest request, if any
+}
+
+export interface KycRequestInput {
+  documents: string[];
+  amount:    number;
+  currency:  string;
+  dueDate:   string;   // yyyy-mm-dd or ''
+  note:      string;
+}
+
+/**
+ * Approved users and the state of their KYC / payment request.
+ * Requesting emails the user (backend /api/email/kyc-request); a mail failure
+ * never undoes the request.
+ */
+export function useAuthorizedUsers(enabled: boolean, selfId: string | null) {
+  const [users, setUsers]   = useState<AuthorizedUser[]>([]);
+  const [error, setError]   = useState('');
+  const [notice, setNotice] = useState('');
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  const refresh = useCallback(async () => {
+    const [profilesRes, kycRes] = await Promise.all([
+      supabase
+        .from('profiles')
+        .select('id, full_name, email, account_type, company_name, firm_name, industry, gstin, approved_at, created_at')
+        .eq('approval_status', 'approved')
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('kyc_requests')
+        .select('id, profile_id, documents, amount, currency, due_date, note, docs_received, payment_received, status, created_at')
+        .order('created_at', { ascending: false }),
+    ]);
+
+    if (profilesRes.error) { setError(profilesRes.error.message); return; }
+    if (kycRes.error)      { setError(kycRes.error.message); return; }
+    setError('');
+
+    // rows arrive newest first, so the first one seen per user is their latest request
+    const latest = new Map<string, KycRequest>();
+    for (const k of kycRes.data ?? []) {
+      const pid = k.profile_id as string;
+      if (latest.has(pid)) continue;
+      latest.set(pid, {
+        id:              k.id as string,
+        documents:       (k.documents as string[] | null) ?? [],
+        amount:          Number(k.amount ?? 0),
+        currency:        (k.currency as string) ?? 'INR',
+        dueDate:         (k.due_date as string | null) ?? null,
+        note:            (k.note as string | null) ?? '',
+        docsReceived:    k.docs_received as boolean,
+        paymentReceived: k.payment_received as boolean,
+        status:          k.status as KycRequest['status'],
+        createdAt:       new Date(k.created_at as string),
+      });
+    }
+
+    setUsers((profilesRes.data ?? [])
+      .filter(p => p.id !== selfId)
+      .map(p => ({
+        id:          p.id as string,
+        fullName:    (p.full_name as string) ?? '—',
+        email:       (p.email as string) ?? '—',
+        accountType: (p.account_type as string) ?? '—',
+        companyName: ((p.company_name as string) || (p.firm_name as string)) ?? '—',
+        industry:    (p.industry as string) ?? '—',
+        gstin:       (p.gstin as string) ?? '',
+        approvedAt:  p.approved_at ? new Date(p.approved_at as string) : null,
+        createdAt:   new Date(p.created_at as string),
+        kyc:         latest.get(p.id as string) ?? null,
+      })));
+  }, [selfId]);
+
+  useEffect(() => {
+    if (!enabled) return;
+    void refresh();
+    const channel = supabase
+      .channel('admin-authorized-users')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'kyc_requests' }, () => { void refresh(); })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' },     () => { void refresh(); })
+      .subscribe();
+    const poll = setInterval(() => { void refresh(); }, 30000);
+    return () => {
+      clearInterval(poll);
+      void supabase.removeChannel(channel);
+    };
+  }, [enabled, refresh]);
+
+  const requestKyc = useCallback(async (userId: string, input: KycRequestInput): Promise<boolean> => {
+    setBusyId(userId);
+    setNotice('');
+    const { data: requestId, error: rpcError } = await supabase.rpc('request_kyc', {
+      p_user_id:   userId,
+      p_documents: input.documents,
+      p_amount:    input.amount,
+      p_currency:  input.currency,
+      p_due_date:  input.dueDate || null,
+      p_note:      input.note || null,
+    });
+    if (rpcError) { setBusyId(null); setError(rpcError.message); return false; }
+    setError('');
+
+    const mailErr = await postEmail('kyc-request', { requestId: String(requestId) });
+    setNotice(mailErr
+      ? 'Request saved, but the email could not be sent: ' + mailErr
+      : 'Request saved and the user has been emailed.');
+
+    setBusyId(null);
+    await refresh();
+    return true;
+  }, [refresh]);
+
+  const updateRequest = useCallback(async (
+    userId: string,
+    requestId: string,
+    patch: { docsReceived?: boolean; paymentReceived?: boolean; status?: 'verified' | 'cancelled' },
+  ): Promise<boolean> => {
+    setBusyId(userId);
+    setNotice('');
+    const { error: rpcError } = await supabase.rpc('update_kyc_request', {
+      p_id:               requestId,
+      p_docs_received:    patch.docsReceived ?? null,
+      p_payment_received: patch.paymentReceived ?? null,
+      p_status:           patch.status ?? null,
+    });
+    setBusyId(null);
+    if (rpcError) { setError(rpcError.message); return false; }
+    setError('');
+    if (patch.status === 'verified') {
+      const mailErr = await postEmail('kyc-verified', { requestId });
+      if (mailErr) setNotice('Verified, but the email could not be sent: ' + mailErr);
+    }
+    await refresh();
+    return true;
+  }, [refresh]);
+
+  return { users, error, notice, busyId, requestKyc, updateRequest };
+}
+
+// ── Notification bell feed ──────────────────────────────────────────────
+
+export interface AdminNotification {
+  id:         number;
+  type:       string;
+  title:      string;
+  detail:     string;
+  entityType: string | null;
+  entityId:   string | null;
+  isRead:     boolean;
+  createdAt:  Date;
+}
+
+/**
+ * Every activity (signups, approvals, uploads, reviews, certificates ...) lands
+ * in admin_notifications via DB triggers. Live via realtime, 15s poll fallback.
+ */
+export function useAdminNotifications(enabled: boolean) {
+  const [items, setItems] = useState<AdminNotification[]>([]);
+  const [error, setError] = useState('');
+
+  const refresh = useCallback(async () => {
+    const { data, error: qErr } = await supabase
+      .from('admin_notifications')
+      .select('id, type, title, detail, entity_type, entity_id, is_read, created_at')
+      .order('created_at', { ascending: false })
+      .limit(50);
+    if (qErr) { setError(qErr.message); return; }
+    setError('');
+    setItems((data ?? []).map(n => ({
+      id:         n.id as number,
+      type:       n.type as string,
+      title:      n.title as string,
+      detail:     (n.detail as string) ?? '',
+      entityType: (n.entity_type as string | null) ?? null,
+      entityId:   (n.entity_id as string | null) ?? null,
+      isRead:     n.is_read as boolean,
+      createdAt:  new Date(n.created_at as string),
+    })));
+  }, []);
+
+  useEffect(() => {
+    if (!enabled) return;
+    void refresh();
+    const channel = supabase
+      .channel('admin-notification-feed')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'admin_notifications' }, () => { void refresh(); })
+      .subscribe();
+    const poll = setInterval(() => { void refresh(); }, 15000);
+    return () => {
+      clearInterval(poll);
+      void supabase.removeChannel(channel);
+    };
+  }, [enabled, refresh]);
+
+  const markRead = useCallback(async (id: number) => {
+    setItems(list => list.map(n => (n.id === id ? { ...n, isRead: true } : n)));
+    await supabase.from('admin_notifications').update({ is_read: true }).eq('id', id);
+  }, []);
+
+  const markAllRead = useCallback(async () => {
+    setItems(list => list.map(n => ({ ...n, isRead: true })));
+    await supabase.from('admin_notifications').update({ is_read: true }).eq('is_read', false);
+  }, []);
+
+  return {
+    items,
+    error,
+    unread: items.filter(n => !n.isRead).length,
+    markRead,
+    markAllRead,
   };
 }
 

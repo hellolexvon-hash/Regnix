@@ -10,6 +10,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { getApprovalStatus, approvalMessage, signOutQuietly } from './approval';
 import styles from './AuthPage.module.css';
 
 export default function LoginPage() {
@@ -21,18 +22,31 @@ export default function LoginPage() {
   const [busy,     setBusy]     = useState(false);
   const [error,    setError]    = useState('');
 
-  // Redirect if already logged in
+  // Once signed in, only let the user through if an admin has approved them.
+  // Pending / rejected users are signed straight back out with a message.
   useEffect(() => {
-    if (!loading && isAuthenticated) navigate('/dashboard', { replace: true });
-  }, [isAuthenticated, loading, navigate]);
+    if (loading || !isAuthenticated || busy) return;
+    let cancelled = false;
+    (async () => {
+      const status = await getApprovalStatus();
+      if (cancelled) return;
+      if (status === 'approved') {
+        navigate('/dashboard', { replace: true });
+      } else {
+        await signOutQuietly();
+        if (!cancelled) setError(approvalMessage(status));
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [isAuthenticated, loading, busy, navigate]);
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError('');
     setBusy(true);
     try {
+      // The approval check + redirect happens in the effect above.
       await login(email.trim(), password);
-      navigate('/dashboard', { replace: true });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Login failed.';
       // Supabase returns "Invalid login credentials" — surface it plainly

@@ -8,6 +8,7 @@ import { AuthProvider } from '@/hooks/useAuth';
 import LandingPage    from '@/pages/landing/LandingPage';
 import SignupPage     from '@/pages/auth/SignupPage';
 import LoginPage      from '@/pages/auth/LoginPage';
+import RequireApproved from '@/pages/auth/RequireApproved';
 import DashboardPage  from '@/pages/dashboard/DashboardPage';
 import AuditorPage    from '@/components/dashboard/AuditorView/AuditorPage';
 import SuperAdminPage from '@/components/dashboard/superadmin/SuperAdminPage';
@@ -22,9 +23,10 @@ export default function App() {
           <Route path="/login"    element={<LoginPage />} />
 
           {/* Dashboard — nested section & sub-section */}
-          <Route path="/dashboard"                element={<DashboardPage />} />
-          <Route path="/dashboard/:section"       element={<DashboardPage />} />
-          <Route path="/dashboard/:section/:sub"  element={<DashboardPage />} />
+          {/* Only signed-in users approved by a super admin get in */}
+          <Route path="/dashboard"                element={<RequireApproved><DashboardPage /></RequireApproved>} />
+          <Route path="/dashboard/:section"       element={<RequireApproved><DashboardPage /></RequireApproved>} />
+          <Route path="/dashboard/:section/:sub"  element={<RequireApproved><DashboardPage /></RequireApproved>} />
 
           {/* Auditor portal — independent of employer auth session */}
           <Route path="/auditor/*" element={<AuditorPage />} />
