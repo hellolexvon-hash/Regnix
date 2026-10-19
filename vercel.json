@@ -41,19 +41,7 @@
     "api/health.ts": {
       "maxDuration": 10
     },
-    "api/email/approval.ts": {
-      "maxDuration": 30
-    },
-    "api/email/rejection.ts": {
-      "maxDuration": 30
-    },
-    "api/email/kyc-request.ts": {
-      "maxDuration": 30
-    },
-    "api/email/kyc-verified.ts": {
-      "maxDuration": 30
-    },
-    "api/webhooks/signup.ts": {
+    "api/email-handler.ts": {
       "maxDuration": 30
     }
   },
@@ -108,23 +96,23 @@
     },
     {
       "source": "/api/email/approval",
-      "destination": "/api/email/approval"
+      "destination": "/api/email-handler?action=approval"
     },
     {
       "source": "/api/email/rejection",
-      "destination": "/api/email/rejection"
+      "destination": "/api/email-handler?action=rejection"
     },
     {
       "source": "/api/email/kyc-request",
-      "destination": "/api/email/kyc-request"
+      "destination": "/api/email-handler?action=kyc-request"
     },
     {
       "source": "/api/email/kyc-verified",
-      "destination": "/api/email/kyc-verified"
+      "destination": "/api/email-handler?action=kyc-verified"
     },
     {
       "source": "/api/webhooks/signup",
-      "destination": "/api/webhooks/signup"
+      "destination": "/api/email-handler?action=signup"
     },
     {
       "source": "/(.*)",
