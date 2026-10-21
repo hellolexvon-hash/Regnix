@@ -8,12 +8,14 @@
  */
 
 import { useState, useEffect } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
+import { supabase } from '../../lib/supabaseClient';
+import { getPlan, formatINR, headcountLabel } from '@/lib/plans';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import type { AccountType, SignupFormData } from '@/hooks/useAuth';
-import { getApprovalStatus, signOutQuietly } from './approval';
+import { getAccessState, gateFor, signOutQuietly } from './approval';
 import styles from './AuthPage.module.css';
 
 const INDUSTRIES = [
@@ -31,6 +33,9 @@ export default function SignupPage() {
   const navigate  = useNavigate();
   const { signup, isAuthenticated, loading } = useAuth();
 
+  // Plan chosen on /pricing (?plan=pro). No valid plan -> send them to pick one.
+  const plan = getPlan(params.get('plan'));
+
   const [accountType, setAccountType] = useState<AccountType>(
     (params.get('type') as AccountType) || 'company',
   );
@@ -45,8 +50,11 @@ export default function SignupPage() {
     if (loading || !isAuthenticated || done || busy) return;
     let cancelled = false;
     (async () => {
-      const status = await getApprovalStatus();
-      if (!cancelled && status === 'approved') navigate('/dashboard', { replace: true });
+      const gate = gateFor(await getAccessState());
+      if (cancelled) return;
+      if (gate === 'ok') navigate('/dashboard', { replace: true });
+      else if (gate === 'pending') navigate('/pending', { replace: true });
+      else if (gate === 'kyc') navigate('/pending?stage=kyc', { replace: true });
     })();
     return () => { cancelled = true; };
   }, [isAuthenticated, loading, done, busy, navigate]);
@@ -83,11 +91,19 @@ export default function SignupPage() {
         companyName:     form.companyName.trim(),
         industry:        form.industry,
         gstin:           form.gstin.trim(),
+        // forwarded into auth user metadata when useAuth.signup supports it
+        selected_plan:   plan?.id,
       } as SignupFormData);
+      // Persist the chosen plan on the profile. Works when Supabase returned a
+      // session (email confirmation OFF); otherwise the DB trigger reads
+      // selected_plan from the signup metadata. A failure here must not block signup.
+      if (plan) {
+        try { await supabase.rpc('set_my_plan', { p_plan: plan.id }); } catch { /* ignore */ }
+      }
       // The new profile starts as approval_status = 'pending' (DB default) and
       // the super admin is notified by a DB trigger. If Supabase auto-signed
       // the user in (email confirmation OFF), sign them out: the account only
-      // becomes usable after an admin approves it.
+      // becomes usable after an admin approves it AND the KYC is verified.
       await signOutQuietly();
       setDone(true);
     } catch (err: unknown) {
@@ -98,6 +114,7 @@ export default function SignupPage() {
   };
 
   if (loading) return null;
+  if (!plan && !done) return <Navigate to="/pricing" replace />;
 
   // ── Email confirmation pending screen ─────────────────────────────────────
   if (done) {
@@ -125,6 +142,11 @@ export default function SignupPage() {
                 is in review and we will get back to you shortly
                 {form.email ? <> at <strong>{form.email}</strong></> : null}.
               </p>
+              {plan && (
+                <p className={styles.formSub} style={{ marginTop: 10 }}>
+                  Selected plan: <strong>{plan.name}</strong> · {headcountLabel(plan)} · {formatINR(plan.monthlyPrice)}/month
+                </p>
+              )}
             </div>
             <Button variant="primary" size="lg" onClick={() => navigate('/login', { replace: true })}>
               Go to Login
@@ -187,6 +209,20 @@ export default function SignupPage() {
               <Link to="/login" className={styles.formLink}>Sign in</Link>
             </p>
           </div>
+
+          {/* Selected plan */}
+          {plan && (
+            <div className={styles.planBanner}>
+              <div>
+                <span className={styles.planBannerLabel}>Selected plan</span>
+                <strong className={styles.planBannerName}>{plan.name}</strong>
+                <span className={styles.planBannerMeta}>
+                  {headcountLabel(plan)} · {formatINR(plan.monthlyPrice)}/month
+                </span>
+              </div>
+              <Link to="/pricing" className={styles.planBannerChange}>Change</Link>
+            </div>
+          )}
 
           {/* Account type toggle */}
           <div className={styles.typeToggle} data-active={accountType}>

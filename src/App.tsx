@@ -11,6 +11,9 @@ import LoginPage      from '@/pages/auth/LoginPage';
 import RequireApproved from '@/pages/auth/RequireApproved';
 import DashboardPage  from '@/pages/dashboard/DashboardPage';
 import AuditorPage    from '@/components/dashboard/AuditorView/AuditorPage';
+import PricingPage    from '@/pages/pricing/PricingPage';
+import PendingApprovalPage from '@/pages/auth/PendingApprovalPage';
+import KycUploadPage   from '@/pages/kyc/KycUploadPage';
 import SuperAdminPage from '@/components/dashboard/superadmin/SuperAdminPage';
 
 export default function App() {
@@ -19,11 +22,17 @@ export default function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/"         element={<LandingPage />} />
+          <Route path="/pricing"  element={<PricingPage />} />
           <Route path="/signup"   element={<SignupPage />} />
           <Route path="/login"    element={<LoginPage />} />
 
+          {/* Waiting room: application review / KYC. Needs a session but not full access. */}
+          <Route path="/pending"  element={<PendingApprovalPage />} />
+          {/* Secure KYC upload link from the email (token-based, no login) */}
+          <Route path="/kyc-upload/:token" element={<KycUploadPage />} />
+
           {/* Dashboard — nested section & sub-section */}
-          {/* Only signed-in users approved by a super admin get in */}
+          {/* Only users approved by a super admin AND KYC-verified get in */}
           <Route path="/dashboard"                element={<RequireApproved><DashboardPage /></RequireApproved>} />
           <Route path="/dashboard/:section"       element={<RequireApproved><DashboardPage /></RequireApproved>} />
           <Route path="/dashboard/:section/:sub"  element={<RequireApproved><DashboardPage /></RequireApproved>} />

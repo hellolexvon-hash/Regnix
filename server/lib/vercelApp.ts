@@ -8,6 +8,7 @@
 import express from 'express';
 import cors from 'cors';
 import emailRouter from '../routes/emailRoute.js';
+import kycUploadRouter from '../routes/kycUploadRoute.js';
 
 export function emailApp() {
   const app = express();
@@ -35,6 +36,10 @@ export function emailApp() {
         : undefined,
     ),
   );
+
+  // KYC upload endpoints carry base64 files, so they get their own (larger) JSON limit
+  // and must be mounted BEFORE the global 100kb parser below.
+  app.use('/api', kycUploadRouter);
 
   app.use(express.json({ limit: '100kb' }));
   app.use('/api', emailRouter);

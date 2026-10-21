@@ -19,6 +19,9 @@ const ACTION_PATHS: Readonly<Record<string, string>> = {
   rejection: '/api/email/rejection',
   'kyc-request': '/api/email/kyc-request',
   'kyc-verified': '/api/email/kyc-verified',
+  'kyc-info': '/api/kyc/info',
+  'kyc-file': '/api/kyc/file',
+  'kyc-submit': '/api/kyc/submit',
 };
 
 const PATH_ACTIONS: Readonly<Record<string, string>> = {
@@ -27,6 +30,9 @@ const PATH_ACTIONS: Readonly<Record<string, string>> = {
   '/api/email/rejection': 'rejection',
   '/api/email/kyc-request': 'kyc-request',
   '/api/email/kyc-verified': 'kyc-verified',
+  '/api/kyc/info': 'kyc-info',
+  '/api/kyc/file': 'kyc-file',
+  '/api/kyc/submit': 'kyc-submit',
 };
 
 type RequestWithVercelQuery = IncomingMessage & {

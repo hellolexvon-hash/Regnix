@@ -25,13 +25,14 @@ import {
   useSuperAdminAuth, useSystemOverview, useSignupApprovals, useAdminNotifications, useAuthorizedUsers,
   type AuthorizedUser,
 } from './superAdminStore';
+import { getPlan, formatINR, headcountLabel } from '@/lib/plans';
 import { useAuditorStore, type CompanyReview } from '../AuditorView/auditorStore';
 import {
   IconShieldCheck, IconBuilding, IconUsers, IconAlertTriangle, IconCheckCircle,
   IconClock, IconEye, IconUndo, IconXCircle, IconLogOut, IconSearch, IconFlag,
 } from '../AuditorView/icons';
 
-type Tab = 'overview' | 'approvals' | 'authorized' | 'clients' | 'auditors' | 'activity';
+type Tab = 'overview' | 'approvals' | 'authorized' | 'kyc' | 'clients' | 'auditors' | 'activity';
 
 /** Standard company-KYC checklist offered when requesting documents. */
 const KYC_DOCUMENTS = [
@@ -48,6 +49,7 @@ function kycPill(u: AuthorizedUser): { label: string; cls: string } | null {
   if (!u.kyc) return null;
   if (u.kyc.status === 'verified')  return { label: 'KYC verified', cls: 'saPillApproved' };
   if (u.kyc.status === 'cancelled') return { label: 'Request cancelled', cls: 'saPillRejected' };
+  if (u.kyc.submittedAt) return { label: 'Submitted · needs review', cls: 'saPillChanges' };
   return u.kyc.docsReceived || u.kyc.paymentReceived
     ? { label: 'In progress', cls: 'saPillReview' }
     : { label: 'Requested', cls: 'saPillPending' };
@@ -60,6 +62,23 @@ const STATUS_META: Record<CompanyReview['status'], { label: string; icon: JSX.El
   changes_requested:  { label: 'Changes Requested', icon: <IconUndo size={12} />,         cls: 'saPillChanges' },
   rejected:           { label: 'Rejected',        icon: <IconXCircle size={12} />,        cls: 'saPillRejected' },
 };
+
+function PlanChip({ id }: { id: string | null }) {
+  const plan = getPlan(id);
+  if (!plan) return <span className={s.saDimText}>—</span>;
+  return (
+    <span className={s.saPlanChip} title={headcountLabel(plan)}>
+      <strong>{plan.name}</strong>
+      <span>{formatINR(plan.monthlyPrice)}/mo</span>
+    </span>
+  );
+}
+
+function fmtBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
+  return `${(n / 1024 / 1024).toFixed(1)} MB`;
+}
 
 function fmtDate(d: Date | null | undefined): string {
   if (!d) return '—';
@@ -102,11 +121,14 @@ export default function SuperAdminPage() {
   const [kycDue, setKycDue] = useState('');
   const [kycNote, setKycNote] = useState('');
   const [kycFormError, setKycFormError] = useState('');
+  const [reviewId, setReviewId] = useState<string | null>(null);
 
   function openKycForm(u: AuthorizedUser) {
     setKycTarget(u);
     setKycDocs(KYC_DOCUMENTS.slice(0, 3));
-    setKycOther(''); setKycAmount(''); setKycDue(''); setKycNote(''); setKycFormError('');
+    // price comes from the plan the user picked on the pricing page
+    const plan = getPlan(u.plan);
+    setKycOther(''); setKycAmount(plan ? String(plan.monthlyPrice) : ''); setKycDue(''); setKycNote(''); setKycFormError('');
   }
 
   async function submitKycForm() {
@@ -123,6 +145,12 @@ export default function SuperAdminPage() {
     });
     if (ok) setKycTarget(null);
   }
+
+  const reviewUser = reviewId ? authorized.users.find((u) => u.id === reviewId) ?? null : null;
+  const submittedUsers = useMemo(
+    () => authorized.users.filter((u) => u.kyc && u.kyc.status === 'requested' && u.kyc.submittedAt),
+    [authorized.users],
+  );
 
   const [authQuery, setAuthQuery] = useState('');
   const filteredAuthorized = useMemo(() => {
@@ -187,6 +215,7 @@ export default function SuperAdminPage() {
                       onClick={() => {
                         void notifications.markRead(n.id);
                         if (n.type === 'new_signup') { setTab('approvals'); setBellOpen(false); }
+                        if (n.type === 'kyc_submitted') { setTab('kyc'); setBellOpen(false); }
                       }}
                     >
                       <span className={s.saBellTitle}>
@@ -217,6 +246,9 @@ export default function SuperAdminPage() {
         </button>
         <button className={tab === 'authorized' ? `${s.saTab} ${s.saTabActive}` : s.saTab} onClick={() => setTab('authorized')}>
           Authorized users <span className={s.saTabCount}>{authorized.users.length}</span>
+        </button>
+        <button className={tab === 'kyc' ? `${s.saTab} ${s.saTabActive}` : s.saTab} onClick={() => setTab('kyc')}>
+          KYC review <span className={s.saTabCount}>{submittedUsers.length}</span>
         </button>
         <button className={tab === 'clients' ? `${s.saTab} ${s.saTabActive}` : s.saTab} onClick={() => setTab('clients')}>
           Clients <span className={s.saTabCount}>{overview.totalCompanies}</span>
@@ -283,7 +315,7 @@ export default function SuperAdminPage() {
 
         {tab === 'approvals' && (
           <div className={s.saPanel}>
-            <p className={s.saPanelTitle}>Pending signups</p>
+            <p className={s.saPanelTitle}>Pending applications</p>
             {!admin.isLive && <p className={s.saNotice}>{liveNotice(admin.remoteError)}</p>}
             {admin.isLive && approvals.error && <p className={s.saEmptyNote}>{approvals.error}</p>}
             {admin.isLive && !approvals.error && approvals.pending.length === 0 && (
@@ -294,7 +326,7 @@ export default function SuperAdminPage() {
                 <thead>
                   <tr>
                     <th>Name</th><th>Email</th><th>Type</th><th>Company</th>
-                    <th>Industry</th><th>Signed up</th><th></th>
+                    <th>Industry</th><th>Plan</th><th>Signed up</th><th></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -308,6 +340,7 @@ export default function SuperAdminPage() {
                       <td>{p.accountType}</td>
                       <td>{p.companyName}</td>
                       <td>{p.industry}</td>
+                      <td><PlanChip id={p.plan} /></td>
                       <td>{fmtDate(p.createdAt)}</td>
                       <td>
                         <button
@@ -360,7 +393,7 @@ export default function SuperAdminPage() {
                 <thead>
                   <tr>
                     <th>Name</th><th>Email</th><th>Type</th><th>Company</th>
-                    <th>Approved</th><th>KYC &amp; payment</th><th></th>
+                    <th>Plan</th><th>Approved</th><th>KYC &amp; payment</th><th></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -369,13 +402,13 @@ export default function SuperAdminPage() {
                     const k = u.kyc;
                     const open = k?.status === 'requested';
                     const busy = authorized.busyId === u.id;
-                    const readyToVerify = !!k && k.docsReceived && (k.paymentReceived || k.amount === 0);
                     return (
                       <tr key={u.id}>
                         <td className={s.saTableStrong}>{u.fullName}</td>
                         <td>{u.email}</td>
                         <td>{u.accountType}</td>
                         <td>{u.companyName}</td>
+                        <td><PlanChip id={u.plan} /></td>
                         <td>{fmtDate(u.approvedAt ?? u.createdAt)}</td>
                         <td>
                           {pill
@@ -396,30 +429,14 @@ export default function SuperAdminPage() {
                           <div className={s.saRowActions}>
                             {open && k ? (
                               <>
-                                <button
-                                  className={s.saSignOutBtn}
-                                  disabled={busy}
-                                  onClick={() => { void authorized.updateRequest(u.id, k.id, { docsReceived: !k.docsReceived }); }}
-                                >
-                                  {k.docsReceived ? 'Docs received ✓' : 'Mark docs received'}
-                                </button>
-                                {k.amount > 0 && (
-                                  <button
-                                    className={s.saSignOutBtn}
-                                    disabled={busy}
-                                    onClick={() => { void authorized.updateRequest(u.id, k.id, { paymentReceived: !k.paymentReceived }); }}
-                                  >
-                                    {k.paymentReceived ? 'Payment received ✓' : 'Mark payment received'}
+                                {k.submittedAt && (
+                                  <button className={`${s.saSignOutBtn} ${s.saBtnAccent}`} onClick={() => setReviewId(u.id)}>
+                                    Review submission
                                   </button>
                                 )}
-                                <button
-                                  className={s.saSignOutBtn}
-                                  disabled={busy || !readyToVerify}
-                                  title={readyToVerify ? 'Verify this KYC' : 'Mark documents (and payment) received first'}
-                                  onClick={() => { void authorized.updateRequest(u.id, k.id, { status: 'verified' }); }}
-                                >
-                                  <IconCheckCircle size={13} /> Verify
-                                </button>
+                                {!k.submittedAt && (
+                                  <span className={s.saDimText}>Waiting for the user to upload…</span>
+                                )}
                                 <button
                                   className={s.saSignOutBtn}
                                   disabled={busy}
@@ -439,6 +456,42 @@ export default function SuperAdminPage() {
                             )}
                           </div>
                         </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
+        )}
+
+        {tab === 'kyc' && (
+          <div className={s.saPanel}>
+            <p className={s.saPanelTitle}>KYC submissions awaiting review</p>
+            {!admin.isLive && <p className={s.saNotice}>{liveNotice(admin.remoteError)}</p>}
+            {admin.isLive && submittedUsers.length === 0 && (
+              <p className={s.saEmptyNote}>Nothing to review. Submissions appear here after a user uploads documents and payment details.</p>
+            )}
+            {submittedUsers.length > 0 && (
+              <table className={s.saTable}>
+                <thead>
+                  <tr><th>Company</th><th>Contact</th><th>Plan</th><th>Documents</th><th>Payment</th><th>Submitted</th><th></th></tr>
+                </thead>
+                <tbody>
+                  {submittedUsers.map((u) => {
+                    const k = u.kyc!;
+                    return (
+                      <tr key={u.id}>
+                        <td className={s.saTableStrong}>{u.companyName}</td>
+                        <td>{u.fullName}<div className={s.saKycMeta}>{u.email}</div></td>
+                        <td><PlanChip id={u.plan} /></td>
+                        <td>{k.files.length}/{k.documents.length}</td>
+                        <td>
+                          {k.amount > 0 ? formatINR(k.amount) : '—'}
+                          {k.payment.reference && <div className={s.saKycMeta}>{k.payment.method} · {k.payment.reference}</div>}
+                        </td>
+                        <td>{fmtDate(k.submittedAt)}</td>
+                        <td><button className={`${s.saSignOutBtn} ${s.saBtnAccent}`} onClick={() => setReviewId(u.id)}>Review</button></td>
                       </tr>
                     );
                   })}
@@ -544,91 +597,215 @@ export default function SuperAdminPage() {
         )}
       </main>
 
-      {kycTarget && (
-        <div className={s.saModalBackdrop} onClick={() => setKycTarget(null)}>
-          <div
-            className={s.saModal}
-            role="dialog"
-            aria-modal="true"
-            aria-label="Request KYC and payment"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 className={s.saModalTitle}>Request KYC &amp; payment</h2>
-            <p className={s.saModalSub}>{kycTarget.fullName} · {kycTarget.companyName} · {kycTarget.email}</p>
+      {/* ── KYC requests tab ─────────────────────────────────────────── */}
+      {/* (rendered above in <main>; see tab === 'kyc') */}
 
-            <div className={s.saField}>
-              <span className={s.saLabel}>Documents required</span>
-              <div className={s.saCheckList}>
-                {KYC_DOCUMENTS.map((d) => (
-                  <label key={d} className={s.saCheckItem}>
-                    <input
-                      type="checkbox"
-                      checked={kycDocs.includes(d)}
-                      onChange={() => setKycDocs((cur) => (cur.includes(d) ? cur.filter((x) => x !== d) : [...cur, d]))}
-                    />
-                    {d}
-                  </label>
-                ))}
+      {kycTarget && (() => {
+        const plan = getPlan(kycTarget.plan);
+        const amountNum = kycAmount.trim() === '' ? 0 : Number(kycAmount);
+        return (
+          <div className={s.saModalBackdrop} onClick={() => setKycTarget(null)}>
+            <div className={`${s.saModal} ${s.saModalWide}`} role="dialog" aria-modal="true" aria-label="Request KYC and payment" onClick={(e) => e.stopPropagation()}>
+              <div className={s.saModalHero}>
+                <span className={s.saHeroIcon}><IconShieldCheck size={20} /></span>
+                <div>
+                  <h2 className={s.saHeroTitle}>Request KYC &amp; payment</h2>
+                  <p className={s.saHeroSub}>{kycTarget.companyName} · {kycTarget.fullName} · {kycTarget.email}</p>
+                </div>
+                <button className={s.saHeroClose} onClick={() => setKycTarget(null)} aria-label="Close">×</button>
               </div>
-              <input
-                className={s.saInput}
-                placeholder="Other document (optional)"
-                value={kycOther}
-                onChange={(e) => setKycOther(e.target.value)}
-              />
-            </div>
 
-            <div className={s.saModalRow}>
-              <div className={s.saField}>
-                <label className={s.saLabel}>Payment amount (INR)</label>
-                <input
-                  className={s.saInput}
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  placeholder="0 = no payment"
-                  value={kycAmount}
-                  onChange={(e) => setKycAmount(e.target.value)}
-                />
+              <div className={s.saModalBody}>
+                {/* Plan the applicant chose */}
+                <div className={s.saPlanCard}>
+                  <div>
+                    <span className={s.saMicro}>Selected plan</span>
+                    <strong className={s.saPlanCardName}>{plan ? plan.name : 'No plan selected'}</strong>
+                    {plan && <span className={s.saPlanCardMeta}>{headcountLabel(plan)}</span>}
+                  </div>
+                  <div className={s.saPlanCardPrice}>
+                    {plan ? formatINR(plan.monthlyPrice) : '—'}<small>{plan ? '/month' : ''}</small>
+                  </div>
+                </div>
+
+                {/* Documents as toggle chips */}
+                <div className={s.saField}>
+                  <div className={s.saFieldHead}>
+                    <span className={s.saLabel}>Documents required</span>
+                    <span className={s.saMicro}>{kycDocs.length} selected</span>
+                  </div>
+                  <div className={s.saChipGrid}>
+                    {KYC_DOCUMENTS.map((d) => {
+                      const on = kycDocs.includes(d);
+                      return (
+                        <button
+                          key={d} type="button" aria-pressed={on}
+                          className={on ? `${s.saChip} ${s.saChipOn}` : s.saChip}
+                          onClick={() => setKycDocs((cur) => (cur.includes(d) ? cur.filter((x) => x !== d) : [...cur, d]))}
+                        >
+                          <span className={s.saChipTick}>{on ? '✓' : '+'}</span>{d}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <input className={s.saInput} placeholder="Add another document (optional)" value={kycOther} onChange={(e) => setKycOther(e.target.value)} />
+                </div>
+
+                <div className={s.saModalRow}>
+                  <div className={s.saField}>
+                    <label className={s.saLabel}>Payment amount (INR)</label>
+                    <div className={s.saAmountWrap}>
+                      <span>₹</span>
+                      <input type="number" min="0" step="0.01" placeholder="0 = no payment" value={kycAmount} onChange={(e) => setKycAmount(e.target.value)} />
+                    </div>
+                    {plan && (
+                      <div className={s.saQuickRow}>
+                        <button type="button" className={s.saQuick} onClick={() => setKycAmount(String(plan.monthlyPrice))}>1 month · {formatINR(plan.monthlyPrice)}</button>
+                        <button type="button" className={s.saQuick} onClick={() => setKycAmount(String(plan.monthlyPrice * 3))}>3 months · {formatINR(plan.monthlyPrice * 3)}</button>
+                        <button type="button" className={s.saQuick} onClick={() => setKycAmount('')}>No payment</button>
+                      </div>
+                    )}
+                  </div>
+                  <div className={s.saField}>
+                    <label className={s.saLabel}>Due date</label>
+                    <input className={s.saInput} type="date" value={kycDue} onChange={(e) => setKycDue(e.target.value)} />
+                  </div>
+                </div>
+
+                <div className={s.saField}>
+                  <label className={s.saLabel}>Note to the user (optional)</label>
+                  <textarea className={s.saInput} rows={2} value={kycNote} onChange={(e) => setKycNote(e.target.value)} placeholder="Shown in the email and on the upload page" />
+                </div>
+
+                <div className={s.saSummary}>
+                  <span>The user will receive an email with a secure upload link for <strong>{kycDocs.length + (kycOther.trim() ? 1 : 0)}</strong> document(s)
+                    {amountNum > 0 ? <> and a payment of <strong>{formatINR(amountNum)}</strong></> : null}.</span>
+                </div>
+
+                {(kycFormError || authorized.error) && <p className={s.saModalError}>{kycFormError || authorized.error}</p>}
               </div>
-              <div className={s.saField}>
-                <label className={s.saLabel}>Due date</label>
-                <input
-                  className={s.saInput}
-                  type="date"
-                  value={kycDue}
-                  onChange={(e) => setKycDue(e.target.value)}
-                />
+
+              <div className={s.saModalFooter}>
+                <button className={s.saSignOutBtn} onClick={() => setKycTarget(null)}>Cancel</button>
+                <button className={`${s.saSubmit} ${s.saSubmitWide}`} disabled={authorized.busyId === kycTarget.id} onClick={() => { void submitKycForm(); }}>
+                  {authorized.busyId === kycTarget.id ? 'Sending…' : 'Send KYC request →'}
+                </button>
               </div>
-            </div>
-
-            <div className={s.saField}>
-              <label className={s.saLabel}>Note to the user (optional)</label>
-              <textarea
-                className={s.saInput}
-                rows={3}
-                value={kycNote}
-                onChange={(e) => setKycNote(e.target.value)}
-              />
-            </div>
-
-            {(kycFormError || authorized.error) && (
-              <p className={s.saModalError}>{kycFormError || authorized.error}</p>
-            )}
-
-            <div className={s.saModalActions}>
-              <button className={s.saSignOutBtn} onClick={() => setKycTarget(null)}>Cancel</button>
-              <button
-                className={s.saSubmit}
-                disabled={authorized.busyId === kycTarget.id}
-                onClick={() => { void submitKycForm(); }}
-              >
-                {authorized.busyId === kycTarget.id ? 'Sending…' : 'Send request'}
-              </button>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
+
+      {/* ── KYC review: everything the user submitted ─────────────────── */}
+      {reviewUser && reviewUser.kyc && (() => {
+        const k = reviewUser.kyc;
+        const plan = getPlan(reviewUser.plan);
+        const busy = authorized.busyId === reviewUser.id;
+        const payOk = k.amount === 0 || k.paymentReceived;
+        const canApprove = k.status === 'requested' && k.docsReceived && payOk;
+        const missing = k.documents.filter((d) => !k.files.some((f) => f.label === d));
+        return (
+          <div className={s.saModalBackdrop} onClick={() => setReviewId(null)}>
+            <div className={`${s.saModal} ${s.saModalXL}`} role="dialog" aria-modal="true" aria-label="Review KYC submission" onClick={(e) => e.stopPropagation()}>
+              <div className={s.saModalHero}>
+                <span className={s.saHeroIcon}><IconEye size={20} /></span>
+                <div>
+                  <h2 className={s.saHeroTitle}>KYC review · {reviewUser.companyName}</h2>
+                  <p className={s.saHeroSub}>Submitted {fmtDate(k.submittedAt)} by {reviewUser.fullName} · {reviewUser.email}</p>
+                </div>
+                <button className={s.saHeroClose} onClick={() => setReviewId(null)} aria-label="Close">×</button>
+              </div>
+
+              <div className={s.saModalBody}>
+                <div className={s.saReviewGrid}>
+                  <div className={s.saReviewBox}>
+                    <span className={s.saMicro}>Company</span>
+                    <dl className={s.saDl}>
+                      <dt>Company</dt><dd>{reviewUser.companyName}</dd>
+                      <dt>Contact</dt><dd>{reviewUser.fullName}</dd>
+                      <dt>Email</dt><dd>{reviewUser.email}</dd>
+                      <dt>Industry</dt><dd>{reviewUser.industry}</dd>
+                      <dt>GSTIN</dt><dd>{reviewUser.gstin || '—'}</dd>
+                      <dt>Account type</dt><dd>{reviewUser.accountType}</dd>
+                    </dl>
+                  </div>
+                  <div className={s.saReviewBox}>
+                    <span className={s.saMicro}>Plan &amp; payment</span>
+                    <dl className={s.saDl}>
+                      <dt>Plan</dt><dd>{plan ? `${plan.name} · ${headcountLabel(plan)}` : '—'}</dd>
+                      <dt>Plan price</dt><dd>{plan ? `${formatINR(plan.monthlyPrice)}/month` : '—'}</dd>
+                      <dt>Amount requested</dt><dd>{k.amount > 0 ? formatINR(k.amount) : 'No payment'}</dd>
+                      <dt>Method</dt><dd>{k.payment.method || '—'}</dd>
+                      <dt>Reference / UTR</dt><dd className={s.saMono}>{k.payment.reference || '—'}</dd>
+                      <dt>Paid on</dt><dd>{k.payment.paidOn ?? '—'}</dd>
+                    </dl>
+                    {k.payment.note && <p className={s.saReviewNote}>“{k.payment.note}”</p>}
+                  </div>
+                </div>
+
+                <div className={s.saField}>
+                  <div className={s.saFieldHead}>
+                    <span className={s.saLabel}>Submitted documents ({k.files.length}/{k.documents.length})</span>
+                    {reviewUser.zohoFolderUrl && (
+                      <a className={s.saLinkBtn} href={reviewUser.zohoFolderUrl} target="_blank" rel="noreferrer">Open WorkDrive folder ↗</a>
+                    )}
+                  </div>
+                  <ul className={s.saFileList}>
+                    {k.documents.map((d) => {
+                      const f = k.files.find((x) => x.label === d);
+                      return (
+                        <li key={d} className={f ? s.saFileRow : `${s.saFileRow} ${s.saFileMissing}`}>
+                          <span className={s.saFileDot}>{f ? '✓' : '!'}</span>
+                          <div className={s.saFileMain}>
+                            <strong>{d}</strong>
+                            <span>{f ? `${f.fileName} · ${fmtBytes(f.size)}` : 'Not uploaded'}</span>
+                          </div>
+                          {f?.url && <a className={s.saLinkBtn} href={f.url} target="_blank" rel="noreferrer">View ↗</a>}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  {missing.length > 0 && <p className={s.saModalError}>Missing: {missing.join(', ')}</p>}
+                </div>
+
+                <div className={s.saVerifyRow}>
+                  <label className={s.saCheckItem}>
+                    <input
+                      type="checkbox" checked={k.paymentReceived} disabled={busy || k.amount === 0}
+                      onChange={() => { void authorized.updateRequest(reviewUser.id, k.id, { paymentReceived: !k.paymentReceived }); }}
+                    />
+                    {k.amount === 0 ? 'No payment required' : `I have confirmed the payment of ${formatINR(k.amount)} in the bank / UPI statement`}
+                  </label>
+                </div>
+                {authorized.error && <p className={s.saModalError}>{authorized.error}</p>}
+              </div>
+
+              <div className={s.saModalFooter}>
+                <button
+                  className={s.saSignOutBtn} disabled={busy}
+                  onClick={() => {
+                    if (window.confirm('Reject this submission? The request is cancelled and you can request KYC again.')) {
+                      void authorized.updateRequest(reviewUser.id, k.id, { status: 'cancelled' }).then((ok) => { if (ok) setReviewId(null); });
+                    }
+                  }}
+                >
+                  <IconXCircle size={13} /> Reject
+                </button>
+                <button
+                  className={`${s.saSubmit} ${s.saSubmitWide}`}
+                  disabled={busy || !canApprove}
+                  title={canApprove ? 'Approve KYC and let the user sign in' : 'Confirm the payment first'}
+                  onClick={() => {
+                    void authorized.updateRequest(reviewUser.id, k.id, { status: 'verified' }).then((ok) => { if (ok) setReviewId(null); });
+                  }}
+                >
+                  {busy ? 'Working…' : 'Approve KYC & activate →'}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

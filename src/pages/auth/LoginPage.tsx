@@ -10,7 +10,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import { getApprovalStatus, approvalMessage, signOutQuietly } from './approval';
+import { getAccessState, gateFor, gateMessage, signOutQuietly } from './approval';
 import styles from './AuthPage.module.css';
 
 export default function LoginPage() {
@@ -22,19 +22,22 @@ export default function LoginPage() {
   const [busy,     setBusy]     = useState(false);
   const [error,    setError]    = useState('');
 
-  // Once signed in, only let the user through if an admin has approved them.
-  // Pending / rejected users are signed straight back out with a message.
+  // Once signed in the user must be (1) approved by an admin and (2) KYC-verified.
+  //   pending        -> "application in review" page (session kept)
+  //   approved w/o KYC -> "complete your KYC" page   (session kept)
+  //   rejected       -> signed out with a message
   useEffect(() => {
     if (loading || !isAuthenticated || busy) return;
     let cancelled = false;
     (async () => {
-      const status = await getApprovalStatus();
+      const gate = gateFor(await getAccessState());
       if (cancelled) return;
-      if (status === 'approved') {
-        navigate('/dashboard', { replace: true });
-      } else {
+      if (gate === 'ok')           navigate('/dashboard', { replace: true });
+      else if (gate === 'pending') navigate('/pending', { replace: true });
+      else if (gate === 'kyc')     navigate('/pending?stage=kyc', { replace: true });
+      else {
         await signOutQuietly();
-        if (!cancelled) setError(approvalMessage(status));
+        if (!cancelled) setError(gateMessage(gate));
       }
     })();
     return () => { cancelled = true; };

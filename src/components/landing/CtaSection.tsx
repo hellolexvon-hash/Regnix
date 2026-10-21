@@ -25,7 +25,7 @@ export function CtaSection() {
           <div className={styles.sectionHeader}>
             <span className={styles.label}>Get Started</span>
             <h2 className={styles.sectionTitle}>Choose how you want to use Regnix</h2>
-            <p className={styles.sectionSub}>Free during Early Access. No credit card required. Full platform access from day one.</p>
+            <p className={styles.sectionSub}>Plans from ₹6,999/month, priced by team size. Full platform access once your KYC is verified.</p>
           </div>
 
           <div className={styles.cards}>
@@ -41,7 +41,7 @@ export function CtaSection() {
                   <li key={f}><span className={styles.check}>✓</span>{f}</li>
                 ))}
               </ul>
-              <Button variant="primary" size="lg" onClick={() => navigate('/signup?type=company')}>
+              <Button variant="primary" size="lg" onClick={() => navigate('/pricing?type=company')}>
                 Get started as Company →
               </Button>
             </div>
@@ -56,7 +56,7 @@ export function CtaSection() {
                   <li key={f}><span className={styles.check}>✓</span>{f}</li>
                 ))}
               </ul>
-              <Button variant="outline" size="lg" onClick={() => navigate('/signup?type=client')}>
+              <Button variant="outline" size="lg" onClick={() => navigate('/pricing?type=client')}>
                 Get started as Client →
               </Button>
             </div>
@@ -69,13 +69,13 @@ export function CtaSection() {
             </div>
             <div className={styles.bannerText}>
               <h3>Ready to simplify compliance?</h3>
-              <p>Join 200+ Indian enterprises already on Regnix. Free during Early Access.</p>
+              <p>Join 200+ Indian enterprises already on Regnix. Choose a plan and get started.</p>
             </div>
             <div className={styles.bannerActions}>
-              <button className={styles.bannerBtnPrimary} onClick={() => navigate('/signup?type=company')}>
+              <button className={styles.bannerBtnPrimary} onClick={() => navigate('/pricing?type=company')}>
                 Sign up as Company
               </button>
-              <button className={styles.bannerBtnSecondary} onClick={() => navigate('/signup?type=client')}>
+              <button className={styles.bannerBtnSecondary} onClick={() => navigate('/pricing?type=client')}>
                 Sign up as Client
               </button>
             </div>

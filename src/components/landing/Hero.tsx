@@ -48,10 +48,10 @@ export function Hero() {
 
         {/* CTAs */}
         <div className={styles.ctas}>
-          <Button size="lg" variant="primary" onClick={() => navigate('/signup?type=company')}>
-            Start as a Company — Free
+          <Button size="lg" variant="primary" onClick={() => navigate('/pricing?type=company')}>
+            Start as a Company
           </Button>
-          <Button size="lg" variant="secondary" onClick={() => navigate('/signup?type=client')}>
+          <Button size="lg" variant="secondary" onClick={() => navigate('/pricing?type=client')}>
             Start as a Client
           </Button>
         </div>
@@ -59,8 +59,8 @@ export function Hero() {
         {/* Trust */}
         <div className={styles.trust}>
           {[
-            'No credit card required',
-            'Free during Early Access',
+            'Plans from ₹6,999/month',
+            'Simple KYC onboarding',
             'ISO 27001 Aligned',
             'India Labour Law Expert',
             'DPDP Compliant',

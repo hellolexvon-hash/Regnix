@@ -33,6 +33,7 @@ export interface SignupFormData {
   companyName:     string;
   industry:        string;
   gstin:           string;
+  selected_plan?:  string;        // pricing plan id chosen on /pricing
 }
 
 interface AuthContextValue {
@@ -106,6 +107,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           industry:     data.industry    || null,
           gstin:        data.gstin       || null,
           firm_name:    data.accountType === 'client' ? data.companyName : null,
+          selected_plan: data.selected_plan || null,
         },
       },
     });

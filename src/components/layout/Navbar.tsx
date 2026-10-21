@@ -64,7 +64,7 @@ export function Navbar() {
           <li><a href="#features" className={styles.link}>Features</a></li>
           <li><a href="#modules" className={styles.link}>Modules</a></li>
           <li><a href="#about" className={styles.link}>About</a></li>
-          <li><a href="#pricing" className={styles.link}>Pricing</a></li>
+          <li><Link to="/pricing" className={styles.link}>Pricing</Link></li>
         </ul>
         <div className={styles.actions}>
           {isAuthenticated ? (
@@ -75,7 +75,7 @@ export function Navbar() {
           ) : (
             <>
               <Button variant="ghost" size="sm" onClick={() => navigate('/login')}>Sign in</Button>
-              <Button variant="primary" size="sm" onClick={() => navigate('/signup')}>Get started free</Button>
+              <Button variant="primary" size="sm" onClick={() => navigate('/pricing')}>Get started</Button>
             </>
           )}
         </div>
@@ -85,14 +85,15 @@ export function Navbar() {
       </nav>
       {menuOpen && (
         <div className={styles.mobileMenu}>
-          {['#features','#modules','#about','#pricing'].map((href, i) => (
+          {['#features','#modules','#about'].map((href, i) => (
             <a key={href} href={href} className={styles.mobileLink} onClick={() => setMenuOpen(false)}>
-              {['Features','Modules','About','Pricing'][i]}
+              {['Features','Modules','About'][i]}
             </a>
           ))}
+          <Link to="/pricing" className={styles.mobileLink} onClick={() => setMenuOpen(false)}>Pricing</Link>
           <div className={styles.mobileCtas}>
             <Button variant="secondary" size="md" onClick={() => { navigate('/login'); setMenuOpen(false); }}>Sign in</Button>
-            <Button variant="primary" size="md" onClick={() => { navigate('/signup'); setMenuOpen(false); }}>Get started free</Button>
+            <Button variant="primary" size="md" onClick={() => { navigate('/pricing'); setMenuOpen(false); }}>Get started</Button>
           </div>
         </div>
       )}

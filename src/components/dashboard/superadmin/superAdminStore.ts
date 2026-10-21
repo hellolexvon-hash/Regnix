@@ -180,6 +180,7 @@ export interface PendingSignup {
   accountType: string;
   companyName: string;
   industry:    string;
+  plan:        string | null;   // selected pricing plan id
   createdAt:   Date;
   isNew:       boolean;   // has an unread "new signup" notification
 }
@@ -198,7 +199,7 @@ export function useSignupApprovals(enabled: boolean) {
     const [profilesRes, notesRes] = await Promise.all([
       supabase
         .from('profiles')
-        .select('id, full_name, email, account_type, company_name, firm_name, industry, created_at')
+        .select('id, full_name, email, account_type, company_name, firm_name, industry, selected_plan, created_at')
         .eq('approval_status', 'pending')
         .order('created_at', { ascending: false }),
       supabase
@@ -220,6 +221,7 @@ export function useSignupApprovals(enabled: boolean) {
       accountType: (p.account_type as string) ?? '—',
       companyName: ((p.company_name as string) || (p.firm_name as string)) ?? '—',
       industry:    (p.industry as string) ?? '—',
+      plan:        (p.selected_plan as string | null) ?? null,
       createdAt:   new Date(p.created_at as string),
       isNew:       unread.has(p.id as string),
     })));
@@ -290,6 +292,24 @@ export interface KycRequest {
   paymentReceived: boolean;
   status:          Exclude<KycStatus, 'none'>;
   createdAt:       Date;
+  submittedAt:     Date | null;       // user pressed "Submit for verification"
+  payment: {
+    method:    string;
+    reference: string;
+    amount:    number | null;
+    paidOn:    string | null;
+    note:      string;
+  };
+  files:           KycFile[];         // documents the user uploaded (stored in Zoho WorkDrive)
+}
+
+export interface KycFile {
+  id:       string;
+  label:    string;
+  fileName: string;
+  mimeType: string;
+  size:     number;
+  url:      string;   // Zoho WorkDrive link
 }
 
 export interface AuthorizedUser {
@@ -300,6 +320,9 @@ export interface AuthorizedUser {
   companyName: string;
   industry:    string;
   gstin:       string;
+  plan:        string | null;
+  zohoFolderUrl: string | null;
+  kycVerified: boolean;
   approvedAt:  Date | null;
   createdAt:   Date;
   kyc:         KycRequest | null;   // latest request, if any
@@ -325,20 +348,35 @@ export function useAuthorizedUsers(enabled: boolean, selfId: string | null) {
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
-    const [profilesRes, kycRes] = await Promise.all([
+    const [profilesRes, kycRes, filesRes] = await Promise.all([
       supabase
         .from('profiles')
-        .select('id, full_name, email, account_type, company_name, firm_name, industry, gstin, approved_at, created_at')
+        .select('id, full_name, email, account_type, company_name, firm_name, industry, gstin, selected_plan, zoho_folder_url, kyc_verified, approved_at, created_at')
         .eq('approval_status', 'approved')
         .order('created_at', { ascending: false }),
       supabase
         .from('kyc_requests')
-        .select('id, profile_id, documents, amount, currency, due_date, note, docs_received, payment_received, status, created_at')
+        .select('id, profile_id, documents, amount, currency, due_date, note, docs_received, payment_received, status, created_at, submitted_at, payment_method, payment_reference, payment_amount, payment_paid_on, payment_note')
         .order('created_at', { ascending: false }),
+      supabase
+        .from('kyc_files')
+        .select('id, request_id, doc_label, file_name, mime_type, size_bytes, zoho_url')
+        .order('created_at', { ascending: true }),
     ]);
 
     if (profilesRes.error) { setError(profilesRes.error.message); return; }
     if (kycRes.error)      { setError(kycRes.error.message); return; }
+    // kyc_files may not exist yet (migration not run) — don't break the page for it
+    const filesByRequest = new Map<string, KycFile[]>();
+    for (const f of filesRes.error ? [] : (filesRes.data ?? [])) {
+      const rid = f.request_id as string;
+      const list = filesByRequest.get(rid) ?? [];
+      list.push({
+        id: f.id as string, label: f.doc_label as string, fileName: f.file_name as string,
+        mimeType: (f.mime_type as string) ?? '', size: Number(f.size_bytes ?? 0), url: (f.zoho_url as string) ?? '',
+      });
+      filesByRequest.set(rid, list);
+    }
     setError('');
 
     // rows arrive newest first, so the first one seen per user is their latest request
@@ -357,6 +395,15 @@ export function useAuthorizedUsers(enabled: boolean, selfId: string | null) {
         paymentReceived: k.payment_received as boolean,
         status:          k.status as KycRequest['status'],
         createdAt:       new Date(k.created_at as string),
+        submittedAt:     k.submitted_at ? new Date(k.submitted_at as string) : null,
+        payment: {
+          method:    (k.payment_method as string | null) ?? '',
+          reference: (k.payment_reference as string | null) ?? '',
+          amount:    k.payment_amount == null ? null : Number(k.payment_amount),
+          paidOn:    (k.payment_paid_on as string | null) ?? null,
+          note:      (k.payment_note as string | null) ?? '',
+        },
+        files:           filesByRequest.get(k.id as string) ?? [],
       });
     }
 
@@ -370,6 +417,9 @@ export function useAuthorizedUsers(enabled: boolean, selfId: string | null) {
         companyName: ((p.company_name as string) || (p.firm_name as string)) ?? '—',
         industry:    (p.industry as string) ?? '—',
         gstin:       (p.gstin as string) ?? '',
+        plan:        (p.selected_plan as string | null) ?? null,
+        zohoFolderUrl: (p.zoho_folder_url as string | null) ?? null,
+        kycVerified: p.kyc_verified === true,
         approvedAt:  p.approved_at ? new Date(p.approved_at as string) : null,
         createdAt:   new Date(p.created_at as string),
         kyc:         latest.get(p.id as string) ?? null,

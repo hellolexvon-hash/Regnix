@@ -279,3 +279,78 @@
 @media (max-width: 560px) {
   .saModalRow { grid-template-columns: 1fr; }
 }
+/* ═══ Plan chip, redesigned KYC request modal, KYC review (additive) ═══ */
+.saPlanChip {
+  display: inline-flex; flex-direction: column; line-height: 1.25; padding: 4px 10px; border-radius: 9px;
+  background: var(--sa-violet-bg); color: var(--sa-violet); font-size: 12px;
+}
+.saPlanChip span { font-size: 10.5px; opacity: .8; }
+.saBtnAccent { background: var(--sa-amber-bg); border-color: var(--sa-amber-border); color: var(--sa-amber); font-weight: 600; }
+.saBtnAccent:hover { background: #FEF3C7; }
+.saMicro { display: block; font-size: 10.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--sa-dim); }
+
+.saModalWide { max-width: 640px; padding: 0; gap: 0; overflow: hidden; }
+.saModalXL   { max-width: 760px; padding: 0; gap: 0; overflow: hidden; }
+.saModalHero {
+  position: relative; display: flex; align-items: center; gap: 14px; padding: 20px 24px; color: #fff;
+  background: linear-gradient(135deg, #92400E 0%, #B45309 45%, #D97706 100%);
+}
+.saHeroIcon { width: 40px; height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,.18); border: 1px solid rgba(255,255,255,.3); flex-shrink: 0; }
+.saHeroTitle { margin: 0; font-size: 17px; font-weight: 700; letter-spacing: -.01em; }
+.saHeroSub { margin: 2px 0 0; font-size: 12.5px; opacity: .85; }
+.saHeroClose { position: absolute; top: 12px; right: 14px; width: 30px; height: 30px; border-radius: 8px; border: none; cursor: pointer; font-size: 20px; line-height: 1; color: #fff; background: rgba(255,255,255,.16); }
+.saHeroClose:hover { background: rgba(255,255,255,.28); }
+.saModalBody { display: flex; flex-direction: column; gap: 18px; padding: 22px 24px; overflow-y: auto; max-height: calc(100vh - 220px); }
+.saModalFooter { display: flex; justify-content: flex-end; gap: 10px; padding: 14px 24px; border-top: 1px solid var(--sa-line); background: #FAFAFB; }
+.saSubmitWide { margin-top: 0; padding: 10px 22px; border-radius: 10px; }
+.saSubmit:disabled[title] { cursor: not-allowed; }
+.saFieldHead { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+
+.saPlanCard {
+  display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 14px 16px; border-radius: 14px;
+  background: linear-gradient(135deg, var(--sa-violet-bg), #fff); border: 1px solid #DDD2FB;
+}
+.saPlanCardName { display: block; font-size: 17px; margin-top: 2px; }
+.saPlanCardMeta { display: block; font-size: 12px; color: var(--sa-dim); }
+.saPlanCardPrice { font-size: 24px; font-weight: 800; letter-spacing: -.03em; color: var(--sa-violet); }
+.saPlanCardPrice small { font-size: 12px; font-weight: 500; color: var(--sa-dim); }
+
+.saChipGrid { display: flex; flex-wrap: wrap; gap: 8px; margin: 2px 0 4px; }
+.saChip {
+  display: inline-flex; align-items: center; gap: 7px; padding: 7px 12px; border-radius: 999px; cursor: pointer;
+  font-size: 12.5px; font-family: inherit; color: var(--sa-ink); background: #fff; border: 1.5px solid var(--sa-line);
+  transition: all .15s ease;
+}
+.saChip:hover { border-color: var(--sa-amber); }
+.saChipOn { background: var(--sa-amber-bg); border-color: var(--sa-amber); color: var(--sa-amber); font-weight: 600; }
+.saChipTick { width: 16px; height: 16px; border-radius: 50%; font-size: 10px; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; background: var(--sa-line); color: var(--sa-dim); }
+.saChipOn .saChipTick { background: var(--sa-amber); color: #fff; }
+
+.saAmountWrap { display: flex; align-items: center; border: 1px solid var(--sa-line); border-radius: 8px; background: #fff; overflow: hidden; }
+.saAmountWrap:focus-within { border-color: var(--sa-amber); }
+.saAmountWrap span { padding: 0 4px 0 12px; color: var(--sa-dim); font-weight: 700; }
+.saAmountWrap input { flex: 1; border: none; outline: none; padding: 9px 11px 9px 4px; font-size: 14px; font-weight: 600; min-width: 0; }
+.saQuickRow { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
+.saQuick { padding: 4px 9px; font-size: 11px; border-radius: 7px; cursor: pointer; border: 1px dashed var(--sa-line); background: #fff; color: var(--sa-dim); font-family: inherit; }
+.saQuick:hover { border-color: var(--sa-amber); color: var(--sa-amber); }
+.saSummary { padding: 12px 14px; border-radius: 10px; font-size: 12.5px; line-height: 1.55; background: var(--sa-blue-bg); color: #1E40AF; border: 1px solid #BFDBFE; }
+
+.saReviewGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.saReviewBox { padding: 14px 16px; border-radius: 12px; background: #FAFAFB; border: 1px solid var(--sa-line); }
+.saDl { display: grid; grid-template-columns: auto 1fr; gap: 7px 14px; margin: 10px 0 0; font-size: 12.5px; }
+.saDl dt { color: var(--sa-dim); }
+.saDl dd { margin: 0; font-weight: 600; text-align: right; word-break: break-word; }
+.saMono { font-family: ui-monospace, monospace; }
+.saReviewNote { margin: 10px 0 0; font-size: 12px; font-style: italic; color: var(--sa-dim); }
+.saFileList { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.saFileRow { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 10px; background: var(--sa-green-bg); border: 1px solid #A7F3D0; }
+.saFileMissing { background: var(--sa-red-bg); border-color: #FECACA; }
+.saFileDot { width: 24px; height: 24px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; color: #fff; background: var(--sa-green); }
+.saFileMissing .saFileDot { background: var(--sa-red); }
+.saFileMain { flex: 1; min-width: 0; display: flex; flex-direction: column; font-size: 13px; }
+.saFileMain span { font-size: 11.5px; color: var(--sa-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.saLinkBtn { padding: 5px 11px; border-radius: 8px; font-size: 12px; font-weight: 600; text-decoration: none; white-space: nowrap; color: var(--sa-amber); background: #fff; border: 1px solid var(--sa-amber-border); }
+.saLinkBtn:hover { background: var(--sa-amber-bg); }
+.saVerifyRow { padding: 12px 14px; border-radius: 10px; background: var(--sa-amber-bg); border: 1px solid var(--sa-amber-border); }
+
+@media (max-width: 640px) { .saReviewGrid { grid-template-columns: 1fr; } .saModalHero { padding-right: 52px; } }

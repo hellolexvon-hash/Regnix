@@ -42,7 +42,7 @@
       "maxDuration": 10
     },
     "api/email-handler.ts": {
-      "maxDuration": 30
+      "maxDuration": 60
     }
   },
   "rewrites": [
@@ -113,6 +113,18 @@
     {
       "source": "/api/webhooks/signup",
       "destination": "/api/email-handler?action=signup"
+    },
+    {
+      "source": "/api/kyc/info",
+      "destination": "/api/email-handler?action=kyc-info"
+    },
+    {
+      "source": "/api/kyc/file",
+      "destination": "/api/email-handler?action=kyc-file"
+    },
+    {
+      "source": "/api/kyc/submit",
+      "destination": "/api/email-handler?action=kyc-submit"
     },
     {
       "source": "/(.*)",
