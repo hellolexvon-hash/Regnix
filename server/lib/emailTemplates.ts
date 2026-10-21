@@ -183,3 +183,67 @@ export function adminNewSignupEmail(a: {
     text: `New signup: ${a.name} <${a.email}> ${a.company ?? ''}${a.plan ? ` — plan ${a.plan.name} (${inr(a.plan.price)}/mo)` : ''}\nReview: ${a.reviewUrl}`,
   };
 }
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Compatibility layer: the names/signatures server/routes/emailRoute.ts imports
+// (`import * as tpl from '../lib/emailTemplates.js'`). The route needs no other change
+// than passing the plan / upload link shown below.
+// ═══════════════════════════════════════════════════════════════════════════
+
+export type Email = Mail;
+
+/** Keep in sync with src/lib/plans.ts (same ids, names, prices). */
+const PLAN_TABLE: Record<string, { name: string; min: number; max: number; price: number }> = {
+  essential:  { name: 'Essential',  min: 1,   max: 50,  price: 6999 },
+  pro:        { name: 'Pro',        min: 51,  max: 100, price: 11999 },
+  apex:       { name: 'Apex',       min: 101, max: 150, price: 17999 },
+  business:   { name: 'Business',   min: 151, max: 200, price: 23999 },
+  enterprise: { name: 'Enterprise', min: 201, max: 250, price: 29999 },
+};
+
+export function planLine(id: string | null | undefined): PlanLine | null {
+  const p = id ? PLAN_TABLE[id] : undefined;
+  return p ? { name: p.name, headcount: `${p.min}–${p.max} employees`, price: p.price } : null;
+}
+
+/** Public URL of the web app (APP_URL, else the first ALLOWED_ORIGINS entry). */
+export function appUrl(): string {
+  const v = process.env.APP_URL || (process.env.ALLOWED_ORIGINS ?? '').split(',')[0] || '';
+  return v.trim().replace(/\/+$/, '');
+}
+
+export function signupReceived(fullName: string, extra?: { companyName?: string; plan?: PlanLine | null }): Email {
+  return signupReceivedEmail({ name: fullName, company: extra?.companyName, plan: extra?.plan });
+}
+
+export function signupApproved(fullName: string, plan?: PlanLine | null): Email {
+  return approvalEmail({ name: fullName, plan });
+}
+
+export function signupRejected(fullName: string, reason?: string | null): Email {
+  return rejectionEmail({ name: fullName, reason });
+}
+
+export function kycRequested(a: {
+  fullName: string; documents: string[]; amount: number; currency?: string; dueDate?: string | null;
+  note?: string | null; uploadUrl: string; companyName?: string; plan?: PlanLine | null;
+}): Email {
+  return kycRequestEmail({
+    name: a.fullName, company: a.companyName, documents: a.documents, amount: a.amount,
+    dueDate: a.dueDate, note: a.note, uploadUrl: a.uploadUrl, plan: a.plan,
+  });
+}
+
+export function kycVerified(fullName: string, loginUrl?: string): Email {
+  return kycVerifiedEmail({ name: fullName, loginUrl: loginUrl || `${appUrl()}/login` });
+}
+
+export function adminNewSignup(a: {
+  fullName: string; email: string; accountType?: string; companyName?: string; industry?: string; plan?: PlanLine | null;
+}): Email {
+  return adminNewSignupEmail({
+    name: a.fullName, email: a.email, company: a.companyName, industry: a.industry,
+    accountType: a.accountType, plan: a.plan, reviewUrl: `${appUrl()}/admin`,
+  });
+}

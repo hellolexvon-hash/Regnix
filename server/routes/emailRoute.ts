@@ -9,6 +9,8 @@
  *   POST /api/email/kyc-verified  super admin only   -> KYC verified
  *   POST /api/webhooks/signup     Supabase DB webhook (shared secret) -> "application received"
  *
+ * Needs APP_URL (e.g. https://app.regnix.in) to build the KYC upload / login links.
+ *
  * Security model:
  *   - Admin routes verify the caller's Supabase access token and call the same
  *     is_super_admin() function the console uses.
@@ -103,12 +105,13 @@ interface ProfileRow {
   firm_name: string | null;
   approval_status: string;
   rejection_reason: string | null;
+  selected_plan: string | null;
 }
 
 async function loadProfile(id: string): Promise<ProfileRow | null> {
   const { data } = await getServiceClient()
     .from('profiles')
-    .select('id, full_name, email, account_type, company_name, firm_name, approval_status, rejection_reason')
+    .select('id, full_name, email, account_type, company_name, firm_name, approval_status, rejection_reason, selected_plan')
     .eq('id', id)
     .maybeSingle();
   return (data as ProfileRow | null) ?? null;
@@ -139,7 +142,7 @@ router.post('/email/approval', adminLimiter, requireSuperAdmin, async (req, res)
     if (profile.approval_status !== 'approved') {
       return res.status(409).json({ ok: false, error: 'User is not approved.' });
     }
-    return await deliver(res, profile.email, tpl.signupApproved(profile.full_name ?? ''));
+    return await deliver(res, profile.email, tpl.signupApproved(profile.full_name ?? '', tpl.planLine(profile.selected_plan)));
   } catch (err) {
     console.error('[email/approval]', err instanceof Error ? err.message : err);
     return res.status(500).json({ ok: false, error: 'Could not send email.' });
@@ -165,7 +168,7 @@ router.post('/email/rejection', adminLimiter, requireSuperAdmin, async (req, res
 async function loadKyc(requestId: string) {
   const { data: kyc } = await getServiceClient()
     .from('kyc_requests')
-    .select('id, profile_id, documents, amount, currency, due_date, note, status')
+    .select('id, profile_id, documents, amount, currency, due_date, note, status, upload_token')
     .eq('id', requestId)
     .maybeSingle();
   if (!kyc) return null;
@@ -183,10 +186,18 @@ router.post('/email/kyc-request', adminLimiter, requireSuperAdmin, async (req, r
     if (kyc.status !== 'requested') {
       return res.status(409).json({ ok: false, error: 'This KYC request is not open.' });
     }
+    const base = tpl.appUrl();
+    const token = kyc.upload_token as string | null;
+    if (!base || !token) {
+      return res.status(500).json({ ok: false, error: 'APP_URL is not set or the request has no upload token (run signup-kyc-flow.sql).' });
+    }
     return await deliver(
       res,
       profile.email,
       tpl.kycRequested({
+        uploadUrl: `${base}/kyc-upload/${token}`,
+        companyName: profile.company_name || profile.firm_name || '',
+        plan: tpl.planLine(profile.selected_plan),
         fullName: profile.full_name ?? '',
         documents: (kyc.documents as string[] | null) ?? [],
         amount: Number(kyc.amount ?? 0),
@@ -243,7 +254,10 @@ router.post('/webhooks/signup', rateLimit(30, 60_000), async (req, res) => {
     const profile = await loadProfile(id);
     if (!profile || profile.approval_status !== 'pending') return res.status(200).json({ ok: true, skipped: true });
 
-    const toUser = await sendMail({ to: profile.email ?? '', ...tpl.signupReceived(profile.full_name ?? '') });
+    const toUser = await sendMail({ to: profile.email ?? '', ...tpl.signupReceived(profile.full_name ?? '', {
+      companyName: profile.company_name || profile.firm_name || '',
+      plan: tpl.planLine(profile.selected_plan),
+    }) });
 
     const adminTo = process.env.ADMIN_NOTIFY_EMAIL;
     if (adminTo) {
@@ -254,6 +268,7 @@ router.post('/webhooks/signup', rateLimit(30, 60_000), async (req, res) => {
           email: profile.email ?? '',
           accountType: profile.account_type ?? '',
           companyName: profile.company_name || profile.firm_name || '',
+          plan: tpl.planLine(profile.selected_plan),
         }),
       });
     }
