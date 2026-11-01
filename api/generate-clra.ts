@@ -21,12 +21,10 @@ export default async (req: VercelRequest, res: VercelResponse): Promise<void> =>
       });
     });
   } catch (err) {
+    // Log the detail server-side; never return stack traces to the client.
     console.error('[CLRA] Unhandled error:', err);
     if (!res.headersSent) {
-      res.status(500).json({
-        error: err instanceof Error ? err.message : String(err),
-        stack: err instanceof Error ? err.stack : undefined,
-      });
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
     }
   }
 };

@@ -23,21 +23,6 @@
       "maxDuration": 60,
       "includeFiles": "public/templates/SE_Act/**"
     },
-    "api/download-bocw.ts": {
-      "maxDuration": 30
-    },
-    "api/download-equal-remuneration.ts": {
-      "maxDuration": 30
-    },
-    "api/download-ismw.ts": {
-      "maxDuration": 30
-    },
-    "api/download-maternity-benefit.ts": {
-      "maxDuration": 30
-    },
-    "api/download-posh.ts": {
-      "maxDuration": 30
-    },
     "api/health.ts": {
       "maxDuration": 10
     },
@@ -46,6 +31,9 @@
     },
     "api/populate-master.ts": {
       "maxDuration": 60
+    },
+    "api/download.ts": {
+      "maxDuration": 30
     }
   },
   "rewrites": [
@@ -79,23 +67,23 @@
     },
     {
       "source": "/api/download-bocw",
-      "destination": "/api/download-bocw"
+      "destination": "/api/download?doc=bocw"
     },
     {
       "source": "/api/download-equal-remuneration",
-      "destination": "/api/download-equal-remuneration"
+      "destination": "/api/download?doc=equal-remuneration"
     },
     {
       "source": "/api/download-ismw",
-      "destination": "/api/download-ismw"
+      "destination": "/api/download?doc=ismw"
     },
     {
       "source": "/api/download-maternity-benefit",
-      "destination": "/api/download-maternity-benefit"
+      "destination": "/api/download?doc=maternity-benefit"
     },
     {
       "source": "/api/download-posh",
-      "destination": "/api/download-posh"
+      "destination": "/api/download?doc=posh"
     },
     {
       "source": "/api/health",

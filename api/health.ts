@@ -4,6 +4,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 export default (_req: VercelRequest, res: VercelResponse) => {
+  res.setHeader('Cache-Control', 'no-store');
   res.status(200).json({
     ok: true,
     message: 'Regnix backend is running',
