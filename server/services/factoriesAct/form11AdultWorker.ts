@@ -29,7 +29,7 @@
  *  C3  → employeeName               401 (OK)
  *  C4  → guardianName               73  (BU)
  *  C5  → dateOfBirth                87  (CI)
- *  C6  → gender                     74  (BV)
+ *  C6  → gender                     80  (CB)
  *  C7  → permanentAddress           452 (QJ)
  *  C8  → dateOfJoining              270 (JJ)
  *  C9  → department                 46  (AT)
@@ -81,7 +81,7 @@ export async function generateForm11AdultWorker(
     rowWriter: (emp, _, oneIndex) => ({
       1:  oneIndex,
       2:  getString(emp, M.employeeCode),
-      3:  getString(emp, M.employeeName),
+      3:  getString(emp, M.employeeName) || getString(emp, M.employeeNameFallback),
       4:  getString(emp, M.guardianName),
       5:  formatDate(getDate(emp, M.dateOfBirth)),
       6:  getString(emp, M.gender),

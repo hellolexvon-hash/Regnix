@@ -17,7 +17,7 @@
  *   11 → 304 amountRecoveredTillDate
  *   12 → 433 balanceOutstanding
  *   13 → 398 signature
- *   14 → 217 remarks
+ *   14 → 222 remarks
  */
 
 import ExcelJS from 'exceljs';
@@ -49,7 +49,7 @@ export async function generateRegisterAdvances(
     const rowNum = DATA_START_ROW + idx;
     safeSetCell(ws, rowNum, 1,  idx + 1);
     safeSetCell(ws, rowNum, 2,  getString(emp, C.employeeCode));
-    safeSetCell(ws, rowNum, 3,  getString(emp, C.employeeName));
+    safeSetCell(ws, rowNum, 3,  getString(emp, C.employeeName) || getString(emp, C.employeeNameFallback));
     safeSetCell(ws, rowNum, 4,  getString(emp, C.designation));
     safeSetCell(ws, rowNum, 5,  formatDate(getDate(emp, C.dateOfAdvance)));
     safeSetCell(ws, rowNum, 6,  getString(emp, C.purposeOfAdvance));
@@ -60,7 +60,7 @@ export async function generateRegisterAdvances(
     safeSetCell(ws, rowNum, 11, getNumber(emp, C.amountRecoveredTillDate));
     safeSetCell(ws, rowNum, 12, getNumber(emp, C.balanceOutstanding));
     safeSetCell(ws, rowNum, 13, getString(emp, C.signature));
-    safeSetCell(ws, rowNum, 14, getString(emp, C.fineRemarks));
+    safeSetCell(ws, rowNum, 14, getString(emp, C.advanceRemarks));
   });
 
   return workbookToBuffer(wb);

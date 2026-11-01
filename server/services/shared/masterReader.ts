@@ -26,7 +26,17 @@ export interface MasterData {
 }
 
 const MASTER_SHEET_NAME = 'Master Register - Structured';
-const FIRST_DATA_ROW = 3;
+const FIRST_DATA_ROW = 3; // template layout: row 1 sections, row 2 headers
+
+/** Compact layout has the headers in row 1 (data from row 2). Detect via the "Employee code" header. */
+export function detectFirstDataRow(sheet: ExcelJS.Worksheet): number {
+  const row1 = sheet.getRow(1);
+  for (let c = 1; c <= 30; c += 1) {
+    const v = row1.getCell(c).value;
+    if (typeof v === 'string' && v.trim().toLowerCase() === 'employee code') return 2;
+  }
+  return FIRST_DATA_ROW;
+}
 
 export async function readMasterWorkbook(
   buffer: Buffer | Uint8Array | ArrayBuffer,
@@ -178,7 +188,7 @@ export function excelSerialToDate(serial: number): Date | null {
 function readEmployeeRows(sheet: ExcelJS.Worksheet): MasterRow[] {
   const rows: MasterRow[] = [];
 
-  for (let rowNumber = FIRST_DATA_ROW; rowNumber <= sheet.rowCount; rowNumber += 1) {
+  for (let rowNumber = detectFirstDataRow(sheet); rowNumber <= sheet.rowCount; rowNumber += 1) {
     const row = sheet.getRow(rowNumber);
     if (isEmptyRow(row)) {
       continue;

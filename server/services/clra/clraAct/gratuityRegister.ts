@@ -16,7 +16,7 @@
  *  C7  → basicWage (last drawn)     284
  *  C8  → years of service           (blank — calculated)
  *  C9  → gratuity formula           (static text in template)
- *  C10 → gratuity amount payable    (blank — calculated)
+ *  C10 → gratuityPayable            281  (filled by populate engine)
  *  C11 → nomineeName                131
  *  C12 → nomineeRelation            132
  *  C13 → nomineeDob                 98
@@ -67,7 +67,7 @@ export async function generateGratuityRegister(
       7:  getNumber(emp, M.basicWage),
       // C8: years of service — calculated field, left blank
       // C9: formula text — static in template
-      // C10: gratuity amount — calculated field, left blank
+      10: getNumber(emp, M.gratuityPayable),
       11: getString(emp, M.nomineeName),
       12: getString(emp, M.nomineeRelation),
       13: formatDate(getDate(emp, M.nomineeDob)),

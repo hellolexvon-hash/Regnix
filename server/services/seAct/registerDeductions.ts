@@ -10,7 +10,7 @@
  *   4  → 401 employeeName
  *   5  → 47  designation
  *   6  → 209 natureOfDeduction
- *   7  → 292 amountDeducted
+ *   7  → 306 amountDeducted
  *   8  → 311 dateOfDeduction
  *   9  → 567 reasonAuthority  (blank — no master col)
  *   10 → 569 showCauseIssued  (blank — no master col)
@@ -52,7 +52,7 @@ export async function generateRegisterDeductions(
     safeSetCell(ws, rowNum, 1,  idx + 1);
     safeSetCell(ws, rowNum, 2,  null);  // monthYear — manual entry
     safeSetCell(ws, rowNum, 3,  getString(emp, C.employeeCode));
-    safeSetCell(ws, rowNum, 4,  getString(emp, C.employeeName));
+    safeSetCell(ws, rowNum, 4,  getString(emp, C.employeeName) || getString(emp, C.employeeNameFallback));
     safeSetCell(ws, rowNum, 5,  getString(emp, C.designation));
     safeSetCell(ws, rowNum, 6,  getString(emp, C.natureOfDeduction));
     safeSetCell(ws, rowNum, 7,  getNumber(emp, C.amountDeducted));
@@ -62,7 +62,7 @@ export async function generateRegisterDeductions(
     safeSetCell(ws, rowNum, 11, null);  // employee consent — manual
     safeSetCell(ws, rowNum, 12, getNumber(emp, C.balanceAfterDeduction));
     safeSetCell(ws, rowNum, 13, null);  // authorised by — manual
-    safeSetCell(ws, rowNum, 14, null);  // remarks — manual
+    safeSetCell(ws, rowNum, 14, getString(emp, C.deductionRemarks) || null);
   });
 
   return workbookToBuffer(wb);

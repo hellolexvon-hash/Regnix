@@ -21,16 +21,18 @@ export const FACTORIES_ACT_COLUMNS = {
   // ── ESTABLISHMENT ─────────────────────────────────────────────────────────
   establishmentName:      391,  // OA — Factory Name & Address
   registrationNumber:     MASTER_COLUMNS.registrationNumber,  // 2  (B)
-  factoryLicenceNo:       19,   // S  — Factory Licence / Reg No
+  factoryLicenceNo:       3,    // C  — Number and date of licence — FIXED (19 is 'Apprenticeship Registration No.')
   occupierName:           67,   // BO — Name of Occupier
   managerName:            68,   // BP — Name of Manager
 
   // ── EMPLOYEE PERSONAL ─────────────────────────────────────────────────────
   employeeCode:           MASTER_COLUMNS.employeeCode,        // 9  (I)
-  employeeName:           401,  // OK — Full Name of Worker
+  employeeName:           401,  // OK — Name of Workman (often blank; registers fall back to col 101)
+  employeeNameFallback:   101,  // CW — Employee Full Name
   guardianName:           73,   // BU — Father / Husband Name
   dateOfBirth:            87,   // CI — Date of Birth
-  gender:                 74,   // BV — Sex (M/F)
+  gender:                 80,   // CB — Gender — FIXED (74 is the combined 'Age and sex' cell; 80 is synced with 516)
+  age:                    239,  // JM — Employee Age
   nationality:            90,   // CL — Nationality
   permanentAddress:       452,  // QJ — Permanent Address
   dateOfJoining:          270,  // JJ — Date of Joining
@@ -62,9 +64,9 @@ export const FACTORIES_ACT_COLUMNS = {
   // Col 16 (Remarks) has no col code in template — use SI=503
   dateOfOvertime:         223,  // HO — Date of Overtime
   normalHoursWorked:      189,  // GG — Normal Hours Worked
-  overtimeHoursWorked:    434,  // PR — Overtime Hours Worked
-  totalHoursWorked:       440,  // PX — Total Hours Worked
-  normalWageRate:         187,  // GE — Normal Wage Rate (₹/hr)
+  overtimeHoursWorked:    440,  // PX — Total Overtime Hours Worked — FIXED (434 is a free-text From–To range; template totals need a number)
+  totalHoursWorked:       190,  // GH — Total Hours worked — FIXED (440 duplicated the OT-hours column)
+  normalWageRate:         225,  // HQ — Normal rate of wages — FIXED (187 is 'OT Rate [2× Ordinary]')
   otWageRate:             226,  // HR — OT Wage Rate (₹/hr, 2× Normal)
   otWagesPayable:         227,  // HS — OT Wages Payable (₹)
   reasonForOvertime:      524,  // TD — Reason for Overtime
@@ -77,7 +79,7 @@ export const FACTORIES_ACT_COLUMNS = {
   //       Col 5 header says "Department"  but col code is AU (=47=designation)
   //       This swap is intentional per the Form 22 template design.
   // Registration no in Form 22 meta: col code 'B' = col 2 = registrationNumber
-  form22Date:             123,  // DS — Date
+  form22Date:             223,  // HO — Date on which overtime worked — FIXED (123 is 'Mother Contact Details')
   form22NormalHours:      415,  // OY — Normal Hours Worked (From–To)
   form22OtHours:          440,  // PX — Overtime Hours
   form22TotalHours:       190,  // GH — Total Hours

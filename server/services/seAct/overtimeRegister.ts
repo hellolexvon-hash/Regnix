@@ -13,8 +13,8 @@
  *   7  → 415 otStartTime
  *   8  → 434 otEndTime
  *   9  → 440 otHours
- *   10 → 225 otRate
- *   11 → 226 otAmount
+ *   10 → 226 otRate
+ *   11 → 207 otAmount
  *   12 → 524 reasonForOt
  *   13 → 567 supervisorApproval  (blank)
  *   14 → 514 otRemarks
@@ -50,7 +50,7 @@ export async function generateOvertimeRegister(
     safeSetCell(ws, rowNum, 1,  idx + 1);
     safeSetCell(ws, rowNum, 2,  null);  // month — manual entry
     safeSetCell(ws, rowNum, 3,  getString(emp, C.employeeCode));
-    safeSetCell(ws, rowNum, 4,  getString(emp, C.employeeName));
+    safeSetCell(ws, rowNum, 4,  getString(emp, C.employeeName) || getString(emp, C.employeeNameFallback));
     safeSetCell(ws, rowNum, 5,  getString(emp, C.designation));
     safeSetCell(ws, rowNum, 6,  formatDate(getDate(emp, C.dateOfOt)));
     safeSetCell(ws, rowNum, 7,  getString(emp, C.otStartTime));

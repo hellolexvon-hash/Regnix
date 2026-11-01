@@ -14,11 +14,11 @@
  *  C5  → dateOfDamage               210
  *  C6  → natureOfDamage             209
  *  C7  → estimatedDamage            293
- *  C8  → amountOfDeduction          292
+ *  C8  → amountOfDeduction          306
  *  C9  → numberOfInstallments       409
  *  C10 → amountPerInstallment       294
  *  C11 → dateOfRecovery             303
- *  C12 → damageRemarks              222
+ *  C12 → damageRemarks              213
  *  C13 → damageSignature            398
  *
  * TO CHANGE A COLUMN: edit clraAct/mapping.ts
@@ -41,10 +41,11 @@ function writeCompanyMeta(
   ws: ExcelJS.Worksheet,
   companyInfo: MasterData['companyInfo'],
 ): void {
-  const name = getString(companyInfo, M.establishmentName);
+  const name = getString(companyInfo, M.contractorName);
+  const principal = getString(companyInfo, M.principalEmployer);
   fillCell(ws, 4, 2,  name);
   fillCell(ws, 4, 8,  getString(companyInfo, M.licenceNumber));
-  fillCell(ws, 5, 2,  name);
+  fillCell(ws, 5, 2,  principal);
   fillCell(ws, 5, 8,  getString(companyInfo, M.address));
 }
 

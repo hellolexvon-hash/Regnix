@@ -48,7 +48,7 @@ export async function generateRegisterFines(
     const rowNum = DATA_START_ROW + idx;
     safeSetCell(ws, rowNum, 1,  idx + 1);
     safeSetCell(ws, rowNum, 2,  getString(emp, C.employeeCode));
-    safeSetCell(ws, rowNum, 3,  getString(emp, C.employeeName));
+    safeSetCell(ws, rowNum, 3,  getString(emp, C.employeeName) || getString(emp, C.employeeNameFallback));
     safeSetCell(ws, rowNum, 4,  getString(emp, C.designation));
     safeSetCell(ws, rowNum, 5,  formatDate(getDate(emp, C.dateOfOffence)));
     safeSetCell(ws, rowNum, 6,  getString(emp, C.natureOfOffence));

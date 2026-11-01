@@ -45,13 +45,14 @@ function writeCompanyMeta(
   ws: ExcelJS.Worksheet,
   companyInfo: MasterData['companyInfo'],
 ): void {
-  const name    = getString(companyInfo, M.establishmentName);
+  const name    = getString(companyInfo, M.contractorName);
+  const principal = getString(companyInfo, M.principalEmployer);
   const licNo   = getString(companyInfo, M.licenceNumber);
   // Row 4: contractor name in col 2, licence in col 10
   fillCell(ws, 4, 2,  name);
   fillCell(ws, 4, 10, licNo);
   // Row 5: principal employer in col 2, location (address) in col 2 (shifted by template layout)
-  fillCell(ws, 5, 2,  name);
+  fillCell(ws, 5, 2,  principal);
   fillCell(ws, 5, 10, getString(companyInfo, M.address));
 }
 

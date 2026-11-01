@@ -22,7 +22,7 @@
  *  C13 → employeePf                 262
  *  C14 → esicEmployee               243
  *  C15 → ptAmount                   251
- *  C16 → employeeLwf                247
+ *  C16 → employeeLwf                248
  *  C17 → advanceDeduction           266
  *  C18 → tdsAmount                  356
  *  C19 → totalDeductions            292

@@ -354,3 +354,32 @@
 .saVerifyRow { padding: 12px 14px; border-radius: 10px; background: var(--sa-amber-bg); border: 1px solid var(--sa-amber-border); }
 
 @media (max-width: 640px) { .saReviewGrid { grid-template-columns: 1fr; } .saModalHero { padding-right: 52px; } }
+
+/* ── KYC document picker (grouped, collapsible) ───────────────────────── */
+.saPicker { border: 1px solid var(--sa-line); border-radius: 12px; background: #fff; overflow: hidden; }
+.saPickerTop { display: flex; flex-direction: column; gap: 10px; padding: 12px; border-bottom: 1px solid var(--sa-line); background: var(--sa-bg); }
+.saPresetRow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.saPickerClear { margin-left: auto; background: none; border: none; color: var(--sa-red); font-size: 12px; cursor: pointer; }
+.saPickerList { max-height: 340px; overflow-y: auto; }
+.saPickerEmpty { margin: 0; padding: 24px; text-align: center; font-size: 13px; color: var(--sa-dim); }
+.saGroup { border-bottom: 1px solid var(--sa-line); }
+.saGroup:last-child { border-bottom: none; }
+.saGroupHead { display: flex; align-items: center; gap: 10px; padding: 4px 12px 4px 4px; }
+.saGroupToggle { flex: 1; display: flex; align-items: center; gap: 8px; padding: 11px 8px; background: none; border: none; cursor: pointer; text-align: left; color: var(--sa-ink); }
+.saGroupCaret { display: inline-block; width: 14px; color: var(--sa-dim); font-size: 16px; line-height: 1; transition: transform .15s; }
+.saGroupCaretOpen { transform: rotate(90deg); }
+.saGroupTitle { font-size: 13.5px; font-weight: 600; }
+.saGroupTag { font-size: 10px; padding: 2px 7px; border-radius: 999px; background: #F3F4F6; color: var(--sa-dim); }
+.saGroupCount { font-size: 11.5px; color: var(--sa-dim); }
+.saGroupCountOn { color: var(--sa-amber); font-weight: 600; }
+.saGroupAction { background: none; border: none; color: var(--sa-amber); font-size: 12px; font-weight: 600; cursor: pointer; }
+.saDocList { list-style: none; margin: 0; padding: 2px 12px 12px; display: flex; flex-direction: column; gap: 6px; }
+.saDocRow { display: flex; align-items: flex-start; gap: 12px; padding: 10px 12px; border: 1px solid var(--sa-line); border-radius: 10px; cursor: pointer; background: #fff; }
+.saDocRow:hover { border-color: var(--sa-amber-border); }
+.saDocRowOn { background: var(--sa-amber-bg); border-color: var(--sa-amber-border); }
+.saDocRow input { margin-top: 3px; accent-color: var(--sa-amber); width: 15px; height: 15px; flex-shrink: 0; }
+.saDocText { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.saDocName { font-size: 13px; font-weight: 600; color: var(--sa-ink); }
+.saDocAbout { font-size: 11.5px; color: var(--sa-dim); line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.saDocApplies { font-size: 10.5px; color: var(--sa-dim); white-space: nowrap; max-width: 130px; overflow: hidden; text-overflow: ellipsis; padding-top: 2px; }
+@media (max-width: 560px) { .saDocApplies { display: none; } }

@@ -11,7 +11,7 @@
  *  C2  → employeeName                401
  *  C3  → napsRegistrationNo          27
  *  C4  → trade                       47
- *  C5  → contractNo                  94
+ *  C5  → contractNo                  491
  *  C6  → contractExecutionDate       323
  *  C7  → contractCommencementDate    554
  *  C8  → apprenticeshipPeriod        446
@@ -62,10 +62,10 @@ export async function generateContractRegister(
     metaWriter: (ws) => writeCompanyMeta(ws, masterData.companyInfo),
     rowWriter: (emp, _, oneIndex) => ({
       1:  oneIndex,
-      2:  getString(emp, M.employeeName),                                // 401
+      2:  getString(emp, M.employeeName) || getString(emp, M.employeeNameFallback),                                // 401
       3:  getString(emp, M.napsRegistrationNo),                          // 27
-      4:  getString(emp, M.trade),                                       // 47
-      5:  getString(emp, M.contractNo),                                  // 94
+      4:  getString(emp, M.trade) || getString(emp, M.tradeFallback),    // 487 → 47
+      5:  getString(emp, M.contractNo),                                  // 491
       6:  formatDate(getDate(emp, M.contractExecutionDate)),             // 323
       7:  formatDate(getDate(emp, M.contractCommencementDate)),          // 554
       8:  getNumber(emp, M.apprenticeshipPeriod),                        // 446

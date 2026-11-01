@@ -11,13 +11,13 @@
  *  C2      → employeeName        401
  *  C3      → napsRegistrationNo  27
  *  C4      → trade               47
- *  C5      → shift               463
+ *  C5      → shift               49
  *  C6–C36  → day1–day31          144–174
- *  C37     → totalDaysPresent    246  (Total Present)
+ *  C37     → totalDaysPresent    199  (Total Present)
  *  C38     → totalDaysAbsent     200  (Total Absent)
  *  C39     → totalDaysOnLeave    490  (On Leave)
  *  C40     → holidayDays         201  (Holiday)
- *  C41     → workingDays         92   (Working Days)
+ *  C41     → workingDays         derived from day codes
  *
  * TO CHANGE A COLUMN: edit apprenticesAct/mapping.ts
  * ════════════════════════════════════════════════════════════════════════
@@ -35,6 +35,18 @@ const DATA_END_ROW   = 20;
 const TOTAL_ROW      = 21;
 const USED_COLUMNS   = 43; // A through AQ
 const DAY_START_COL  = 6;  // template col 6 = Day 1
+
+/** Working days = days with an attendance code that is not a week-off / holiday. The master has no such column. */
+export function workingDaysFromAttendance(emp: MasterData['employees'][number]): number | null {
+  let coded = 0, working = 0;
+  for (const col of M.dayColumns) {
+    const v = getString(emp, col).trim().toUpperCase();
+    if (!v) continue;
+    coded += 1;
+    if (!['WO', 'W', 'H', 'HOL', 'PH', 'FH', 'NH', 'NFH'].includes(v)) working += 1;
+  }
+  return coded ? working : null;
+}
 
 function monthYearLabel(employees: MasterData['employees']): string {
   const first = employees
@@ -67,10 +79,10 @@ export async function generateAttendanceRegister(
     rowWriter: (emp, _, oneIndex) => {
       const row: Record<number, ExcelJS.CellValue | null> = {
         1: oneIndex,
-        2: getString(emp, M.employeeName),           // 401
+        2: getString(emp, M.employeeName) || getString(emp, M.employeeNameFallback),           // 401
         3: getString(emp, M.napsRegistrationNo),     // 27
-        4: getString(emp, M.trade),                  // 47
-        5: getString(emp, M.shift),                  // 463
+        4: getString(emp, M.trade) || getString(emp, M.tradeFallback),   // 487 → 47
+        5: getString(emp, M.shift),                  // 49
       };
 
       // Daily attendance: template cols 6–36 → master cols 144–174
@@ -78,11 +90,11 @@ export async function generateAttendanceRegister(
         row[DAY_START_COL + dayIdx] = getString(emp, masterCol) || null;
       });
 
-      row[37] = getNumber(emp, M.workingDaysInMonth); // 246 — Total Present
+      row[37] = getNumber(emp, M.totalDaysPresent);   // 199 — Total Present
       row[38] = getNumber(emp, M.totalDaysAbsent);    // 200 — Total Absent
       row[39] = getNumber(emp, M.totalDaysOnLeave);   // 490 — On Leave
       row[40] = getNumber(emp, M.holidayDays);        // 201 — Holiday
-      row[41] = getNumber(emp, M.workingDays);        // 92  — Working Days
+      row[41] = workingDaysFromAttendance(emp);       // derived from day codes
 
       return row;
     },

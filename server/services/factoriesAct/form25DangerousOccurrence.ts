@@ -67,7 +67,10 @@ export async function generateForm25DangerousOccurrence(
 
   const ci  = masterData.companyInfo;
   // Form 25 is a per-incident notice; use the first employee row for occurrence-specific data
-  const emp = masterData.employees[0] ?? {};
+  // …the first row that actually carries occurrence data (ref no. or description), else the first row.
+  const emp = masterData.employees.find(
+    (r) => getString(r, M.occurrenceRefNo).trim() || getString(r, M.detailedDescription).trim(),
+  ) ?? masterData.employees[0] ?? {};
 
   // ── Occurrence identification ──────────────────────────────────────────────
   fillCell(ws, 5,  2, getString(emp, M.occurrenceRefNo));                       // Row5  col B (NW/387)

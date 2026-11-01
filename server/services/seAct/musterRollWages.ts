@@ -22,7 +22,7 @@
  *   45  → 230 hra
  *   46  → 233 conveyance
  *   47  → 231 medicalAllowance
- *   48  → 278 bonus
+ *   48  → 279 bonus
  *   49  → 235 specialAllowance
  *   50  → 207 otAmount
  *   51  → 414 nfh
@@ -32,7 +32,7 @@
  *   55  → 232 leaveEncashment
  *   56  → 273 grossTotal
  *   57  → 243 esic
- *   58  → 238 epf
+ *   58  → 262 epf
  *   59  → 251 pt
  *   60  → 356 tds
  *   61  → 336 society
@@ -42,7 +42,7 @@
  *   65  → 312 damagesLoss
  *   66  → 335 other
  *   67  → 292 total
- *   68  → 274 netPayable
+ *   68  → 208 netPayable
  *   69  → 430 modeOfPayment
  *   70  → 398 employeeSignature
  */
@@ -78,7 +78,7 @@ export async function generateMusterRollWages(
     let col = 1;
 
     safeSetCell(ws, rowNum, col++, getString(emp, C.employeeCode));
-    safeSetCell(ws, rowNum, col++, getString(emp, C.employeeName));
+    safeSetCell(ws, rowNum, col++, getString(emp, C.employeeName) || getString(emp, C.employeeNameFallback));
     safeSetCell(ws, rowNum, col++, getString(emp, C.fatherOrHusbandName));
     safeSetCell(ws, rowNum, col++, getString(emp, C.maleFemale));
     safeSetCell(ws, rowNum, col++, getString(emp, C.designation));

@@ -67,7 +67,10 @@ export async function generateForm24AccidentNotice(
 
   const ci  = masterData.companyInfo;
   // Form 24 is a per-incident notice; use the first employee row for incident-specific data
-  const emp = masterData.employees[0] ?? {};
+  // …the first row that actually carries accident data (ref no. or injured person), else the first row.
+  const emp = masterData.employees.find(
+    (r) => getString(r, M.accidentRefNo).trim() || getString(r, M.injuredPersonName).trim(),
+  ) ?? masterData.employees[0] ?? {};
 
   // ── Serial number ──────────────────────────────────────────────────────────
   fillCell(ws, 5,  2, 1);                                                       // Row5  col B
@@ -84,8 +87,8 @@ export async function generateForm24AccidentNotice(
   // ── Accident details ───────────────────────────────────────────────────────
   fillCell(ws, 11, 2, formatDate(getDate(emp, M.dateTimeOfAccident)));          // Row11 col B (LH/320)
   fillCell(ws, 12, 2, getString(emp, M.placeOfAccident));                       // Row12 col B (QR/460)
-  fillCell(ws, 13, 2, getString(emp, M.injuredPersonName));                     // Row13 col B (PY/441)
-  fillCell(ws, 14, 2, getString(emp, M.injuredPersonAgeSex));                   // Row14 col B (SV/516)
+  fillCell(ws, 13, 2, getString(emp, M.injuredPersonName) || getString(emp, M.employeeName) || getString(emp, M.employeeNameFallback));                     // Row13 col B (PY/441)
+  fillCell(ws, 14, 2, [getString(emp, M.age), getString(emp, M.gender) || getString(emp, M.injuredPersonAgeSex)].filter(Boolean).join(' / '));                   // Row14 col B (SV/516)
   fillCell(ws, 15, 2, getString(emp, M.employeeCode));                          // Row15 col B (I/9)
   fillCell(ws, 16, 2, getString(emp, M.designation));                           // Row16 col B (AU/47)
   fillCell(ws, 17, 2, getString(emp, M.natureOfAccident));                      // Row17 col B (RE/473)

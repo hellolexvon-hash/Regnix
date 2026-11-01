@@ -33,9 +33,9 @@
  *  C5  → designation                47  (AU) — no code in template col-code row; ref: Factory_s_Act row 38
  *  C6  → dateOfOvertime             223 (HO)
  *  C7  → normalHoursWorked          189 (GG)
- *  C8  → overtimeHoursWorked        434 (PR)
- *  C9  → totalHoursWorked           440 (PX)
- *  C10 → normalWageRate             187 (GE)
+ *  C8  → overtimeHoursWorked        440 (PX)
+ *  C9  → totalHoursWorked           190 (GH)
+ *  C10 → normalWageRate             225 (HQ)
  *  C11 → otWageRate                 226 (HR)
  *  C12 → otWagesPayable             227 (HS)
  *  C13 → reasonForOvertime          524 (TD)
@@ -87,7 +87,7 @@ export async function generateOvertimeRegister(
     rowWriter: (emp, _, oneIndex) => ({
       1:  oneIndex,
       2:  getString(emp, M.employeeCode),
-      3:  getString(emp, M.employeeName),
+      3:  getString(emp, M.employeeName) || getString(emp, M.employeeNameFallback),
       4:  getString(emp, M.department),
       5:  getString(emp, M.designation),
       6:  formatDate(getDate(emp, M.dateOfOvertime)),

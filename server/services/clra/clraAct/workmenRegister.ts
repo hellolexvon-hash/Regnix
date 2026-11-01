@@ -69,8 +69,8 @@ function writeCompanyMeta(
 ): void {
   // Row 3: "Principal Employer: AD" | "Contractor: AF"
   // We write establishment name as principal employer, registration as CL reg no
-  fillCellAddress(ws, 'A3', `Principal Employer: ${getString(companyInfo, M.establishmentName)}`);
-  fillCellAddress(ws, 'K3', `Contractor: ${getString(companyInfo, M.establishmentName)}`);
+  fillCellAddress(ws, 'A3', `Principal Employer: ${getString(companyInfo, M.principalEmployer)}`);
+  fillCellAddress(ws, 'K3', `Contractor: ${getString(companyInfo, M.contractorName)}`);
 }
 
 export async function generateWorkmenRegister(

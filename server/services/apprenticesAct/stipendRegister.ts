@@ -13,10 +13,10 @@
  *  C4  → trade                       47
  *  C5  → apprenticeshipType          46
  *  C6  → workingDaysInMonth          246
- *  C7  → totalDaysPresent            449
+ *  C7  → totalDaysPresent            199
  *  C8  → totalDaysAbsent             200
- *  C9  → leaveDays                   201
- *  C10 → prescribedMonthlyStipend    316
+ *  C9  → leaveDays                   275
+ *  C10 → prescribedMonthlyStipend    290
  *  C11 → earnedStipend               325
  *  C12 → stipendDeductions           327
  *  C13 → netStipendPayable           328
@@ -34,6 +34,7 @@ import ExcelJS from 'exceljs';
 import { MasterData, getString, getNumber, getDate, formatDate, round2 } from '../shared/masterReader.js';
 import { APPRENTICES_ACT_COLUMNS as M } from './mapping.js';
 import { generateSingleSheetRegister, sumColumn } from './registerEngine.js';
+import { workingDaysFromAttendance } from './attendanceRegister.js';
 import { fillCellAddress } from '../shared/templateFiller.js';
 
 const SHEET_TITLE    = 'Stipend Register';
@@ -71,7 +72,7 @@ export async function generateStipendRegister(
     usedColumns:  USED_COLUMNS,
     metaWriter: (ws) => writeCompanyMeta(ws, masterData.companyInfo, masterData.employees),
     rowWriter: (emp, _, oneIndex) => {
-      const prescribed  = round2(getNumber(emp, M.prescribedMonthlyStipend)); // 316
+      const prescribed  = round2(getNumber(emp, M.prescribedMonthlyStipend)); // 290
       const earned      = round2(getNumber(emp, M.earnedStipend));            // 325
       const deductions  = round2(getNumber(emp, M.stipendDeductions));        // 327
       const net         = round2(getNumber(emp, M.netStipendPayable))         // 328
@@ -79,14 +80,14 @@ export async function generateStipendRegister(
 
       return {
         1:  oneIndex,
-        2:  getString(emp, M.employeeName),                                  // 401
+        2:  getString(emp, M.employeeName) || getString(emp, M.employeeNameFallback),                                  // 401
         3:  getString(emp, M.napsRegistrationNo),                            // 27
-        4:  getString(emp, M.trade),                                         // 47
-        5:  getString(emp, M.apprenticeshipType),                            // 46
-        6:  getNumber(emp, M.workingDaysInMonth),                            // 246
-        7:  getNumber(emp, M.totalDaysPresent),                              // 449
+        4:  getString(emp, M.trade) || getString(emp, M.tradeFallback),      // 487 → 47
+        5:  getString(emp, M.apprenticeshipType) || getString(emp, M.apprenticeshipTypeFallback), // 486 → 46
+        6:  workingDaysFromAttendance(emp),                                  // derived from day codes
+        7:  getNumber(emp, M.totalDaysPresent),                              // 199
         8:  getNumber(emp, M.totalDaysAbsent),                               // 200
-        9:  getNumber(emp, M.leaveDays),                                     // 201
+        9:  getNumber(emp, M.leaveDays),                                     // 275
         10: prescribed,                                                      // 316
         11: earned,                                                          // 325
         12: deductions,                                                      // 327
@@ -94,8 +95,8 @@ export async function generateStipendRegister(
         14: formatDate(getDate(emp, M.stipendPaidDate)),                     // 311
         15: getString(emp, M.paymentMode),                                   // 430
         16: getString(emp, M.bankAccountNumber),                             // 276
-        17: getString(emp, M.utrNumber),                                     // 344
-        18: getString(emp, M.remarks),                                       // 503
+        17: null,                                                            // no UTR column in master
+        18: getString(emp, M.stipendRemarks) || getString(emp, M.remarks),   // 495 → 503
       };
     },
     totalWriter: (ws, totalRow, rows) => {

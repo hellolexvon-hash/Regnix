@@ -18,6 +18,8 @@ export const CLRA_ACT_COLUMNS = {
   // FIXED: col 391/392 ("Contractor Name..." / "Name of principal employer and
   // his address") are EMPTY in every row of the master. Col 30 holds the real
   // "Name and address of the principal employer" value and is non-empty.
+  contractorName:               28,                                      // AB — Name and address of contractor (synced with 29/32/391/397 by the populate engine)
+  principalEmployer:            30,                                      // AD — Name and address of the principal employer
   establishmentName:            30,                                      // AD — Name and address of the principal employer
   registrationNumber:           MASTER_COLUMNS.registrationNumber,      // 2   (B)
   licenceNumber:                MASTER_COLUMNS.licenceNumber,           // 3   (C)
@@ -77,9 +79,9 @@ export const CLRA_ACT_COLUMNS = {
   // ── ATTENDANCE — TOTALS ──────────────────────────────────────────────────
   totalDaysPresent:             MASTER_COLUMNS.totalDaysPresent,        // 199 (GQ)
   totalDaysAbsent:              MASTER_COLUMNS.totalDaysAbsent,         // 200 (GR)
-  totalWoHolidays:              MASTER_COLUMNS.lwpDays,                 // 201 (GS)
+  totalWoHolidays:              MASTER_COLUMNS.totalWeekOffsHolidaysLeaves, // 201 (GS) — FIXED (was lwpDays = 275)
   overtimeDays:                 MASTER_COLUMNS.overtimeDaysCount,       // 202 (GT)
-  totalLop:                     MASTER_COLUMNS.lopLoss,                 // 312 (KZ)
+  totalLop:                     MASTER_COLUMNS.lwpDays,                 // 275 (JO) Leave Without Pay days — FIXED (was 312 = 'Total Damages / Loss of pay')
   netDaysWorked:                MASTER_COLUMNS.totalDaysWorked,         // 246 (IL)
   musterRollRemarks:            MASTER_COLUMNS.musterRollRemarks,       // 176 (FT)
 
@@ -94,7 +96,7 @@ export const CLRA_ACT_COLUMNS = {
   employeePf:                   MASTER_COLUMNS.employeePf,              // 262 (JB)
   esicEmployee:                 MASTER_COLUMNS.esicEmployee,            // 243 (II)
   ptAmount:                     MASTER_COLUMNS.ptAmount,                // 251 (IQ)
-  employeeLwf:                  247,   // IM — Employee LWF
+  employeeLwf:                  248,   // IN — Employee LWF — FIXED (247 is Employer LWF)
   advanceDeduction:             266,   // JF — Advance Deduction
   tdsAmount:                    356,   // MR — TDS
   totalDeductions:              MASTER_COLUMNS.totalDeduction,          // 292 (KF)
@@ -118,24 +120,24 @@ export const CLRA_ACT_COLUMNS = {
   dateOfDamage:                 MASTER_COLUMNS.dateOfDamage,            // 210 (HB)
   natureOfDamage:               MASTER_COLUMNS.natureOfDamage,          // 209 (HA)
   estimatedDamage:              MASTER_COLUMNS.estimatedDamage,         // 293 (KG)
-  amountOfDeduction:            MASTER_COLUMNS.totalDeduction,          // 292 (KF)
+  amountOfDeduction:            306,   // KV — Amount Ordered (₹) Damages — FIXED (was 292 = total salary deductions)
   numberOfInstallments:         409,   // OS — Number of Installments
-  amountPerInstallment:         MASTER_COLUMNS.estimatedDamage,         // 293 (KH) reuse KH=294
+  amountPerInstallment:         294,   // KH — Amount per Installment Damage / Loss — FIXED (was 293)
   dateOfRecovery:               MASTER_COLUMNS.dateOfRecovery,          // 303 (KQ)
-  damageRemarks:                222,   // HN — Remarks by Contractor
+  damageRemarks:                213,   // HA — Form XX Remarks — FIXED (222 is the Advances remarks)
   damageSignature:              MASTER_COLUMNS.signatureOrThumbImpressionOfWorkmen, // 398 (OH)
 
   // ── ADVANCES (Form XXII) ────────────────────────────────────────────────
   dateOfAdvance:                523,   // TC — Date of Advance
   purposeOfAdvance:             411,   // OU — Purpose of Advance
-  amountOfAdvance:              MASTER_COLUMNS.advanceRefund,           // 218 (HJ)
+  amountOfAdvance:              218,   // HJ — Amount of advance given — FIXED (was 266 = refund of advances)
   numberOfInstallmentsAdv:      219,   // HK — No. of Installments
   amountEachInstallment:        294,   // KH — Amount each installment
   dateFirstRecovery:            211,   // HC — Date of 1st Recovery
   amountRecoveredTillDate:      MASTER_COLUMNS.amountRecovered,         // 304 (KR)
   balanceOutstanding:           433,   // PQ — Balance Outstanding
   advanceSignature:             MASTER_COLUMNS.signatureOrThumbImpressionOfWorkmen, // 398 (OH)
-  advanceRemarks:               MASTER_COLUMNS.finesRemarks,            // 217 (HI)
+  advanceRemarks:               222,   // HN — Form XXII Remarks — FIXED (217 is the Fines remarks)
 
   // ── OVERTIME (Form XXIII) ────────────────────────────────────────────────
   dateOfOvertime:               223,   // HO — Date of overtime
@@ -151,6 +153,7 @@ export const CLRA_ACT_COLUMNS = {
   bonusDoj:                     MASTER_COLUMNS.dateOfEntryIntoService,  // 270 (JJ)
 
   // ── GRATUITY ─────────────────────────────────────────────────────────────
+  gratuityPayable:              281,   // JU — Gratuity Amount Payable (filled by the populate engine)
   dateOfEligibility:            280,   // JT — Date of Eligibility (5 yrs)
   nomineeName:                  131,   // EA — Nominee Name
   nomineeRelation:              132,   // EB — Nominee Relation
@@ -163,8 +166,8 @@ export const CLRA_ACT_COLUMNS = {
   edliWages:                    261,   // JA — EDLI Wages
   employeePf12pct:              MASTER_COLUMNS.employeePf,              // 262 (JB)
   employerEps833:               263,   // JC — Employer EPS 8.33%
-  employerEpfDiff:              238,   // ID — Employer EPF Difference
-  edliEmployer05:               261,   // JA — EDLI Employer 0.5% (reuses JA)
+  employerEpfDiff:              264,   // JD — EPF and EPS differences — FIXED (238 is 'Employer PF')
+  // edliEmployer05 removed: the master has no EDLI-amount column (261 is EDLI *wages*); epfRegister computes 0.5% of 261.
 
   // ── LWF + PT ─────────────────────────────────────────────────────────────
   employeeState:                454,   // QL — State

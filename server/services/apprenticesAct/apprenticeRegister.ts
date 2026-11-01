@@ -63,14 +63,14 @@ export async function generateApprenticeRegister(
     metaWriter: (ws) => writeCompanyMeta(ws, masterData.companyInfo),
     rowWriter: (emp, _, oneIndex) => ({
       1:  oneIndex,
-      2:  getString(emp, M.employeeName),                                // 401
+      2:  getString(emp, M.employeeName) || getString(emp, M.employeeNameFallback),                                // 401
       3:  getString(emp, M.napsRegistrationNo),                          // 27
       4:  formatDate(getDate(emp, M.dateOfBirth)),                       // 87
       5:  getString(emp, M.gender),                                      // 516
       6:  getString(emp, M.category),                                    // 444
       7:  getString(emp, M.educationalQualification),                    // 445
-      8:  getString(emp, M.trade),                                       // 47
-      9:  getString(emp, M.apprenticeshipType),                          // 46
+      8:  getString(emp, M.trade) || getString(emp, M.tradeFallback),    // 487 → 47
+      9:  getString(emp, M.apprenticeshipType) || getString(emp, M.apprenticeshipTypeFallback), // 486 → 46
       10: getNumber(emp, M.durationMonths),                              // 446
       11: formatDate(getDate(emp, M.dateOfCommencement)),                // 467
       12: formatDate(getDate(emp, M.dateOfCompletion)),                  // 468

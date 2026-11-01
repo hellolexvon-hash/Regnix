@@ -41,7 +41,7 @@
  *  C3  → employeeName               401 (OK)
  *  C4  → department                 46  (AT) ← header reads "Designation" — col code AT wins
  *  C5  → designation                47  (AU) ← header reads "Department"  — col code AU wins
- *  C6  → form22Date                 123 (DS)
+ *  C6  → form22Date                 223 (HO)
  *  C7  → form22NormalHours          415 (OY)
  *  C8  → form22OtHours              440 (PX)
  *  C9  → form22TotalHours           190 (GH)
@@ -95,7 +95,7 @@ export async function generateForm22Overtime(
     rowWriter: (emp, _, oneIndex) => ({
       1:  oneIndex,
       2:  getString(emp, M.employeeCode),
-      3:  getString(emp, M.employeeName),
+      3:  getString(emp, M.employeeName) || getString(emp, M.employeeNameFallback),
       4:  getString(emp, M.department),          // col code AT=46=department (header says "Designation")
       5:  getString(emp, M.designation),          // col code AU=47=designation (header says "Department")
       6:  formatDate(getDate(emp, M.form22Date)),

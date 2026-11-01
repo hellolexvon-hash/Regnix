@@ -21,8 +21,8 @@
  *  C11 → edliWages                  261
  *  C12 → employeePf12pct            262
  *  C13 → employerEps833             263
- *  C14 → employerEpfDiff            238
- *  C15 → edliEmployer05             261  (reuses JA column per template)
+ *  C14 → employerEpfDiff            264
+ *  C15 → EDLI employer 0.5%         computed = 0.5% × edliWages (no master column)
  *
  * TO CHANGE A COLUMN: edit clraAct/mapping.ts
  * ════════════════════════════════════════════════════════════════════════
@@ -73,7 +73,8 @@ export async function generateEpfRegister(
       12: getNumber(emp, M.employeePf12pct),
       13: getNumber(emp, M.employerEps833),
       14: getNumber(emp, M.employerEpfDiff),
-      15: getNumber(emp, M.edliEmployer05),
+      // No EDLI-amount column exists in the master; employer EDLI = 0.5% of EDLI wages (col 261)
+      15: Math.round(getNumber(emp, M.edliWages) * 0.005),
     }),
     totalWriter: (ws, totalRow, rows) => {
       ws.getCell(totalRow, 1).value  = 'TOTAL';

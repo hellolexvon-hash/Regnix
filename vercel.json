@@ -43,6 +43,9 @@
     },
     "api/email-handler.ts": {
       "maxDuration": 60
+    },
+    "api/populate-master.ts": {
+      "maxDuration": 60
     }
   },
   "rewrites": [
@@ -69,6 +72,10 @@
     {
       "source": "/api/generate-se-act/states",
       "destination": "/api/generate-se-act"
+    },
+    {
+      "source": "/api/populate-master",
+      "destination": "/api/populate-master"
     },
     {
       "source": "/api/download-bocw",

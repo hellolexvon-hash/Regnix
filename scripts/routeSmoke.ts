@@ -1,0 +1,15 @@
+import express from 'express';
+import fs from 'fs';
+import route from '../server/routes/populateRoute.js';
+const app = express(); app.use('/api', route);
+app.use((err: Error, _q: express.Request, r: express.Response, _n: express.NextFunction) => r.status(500).json({ error: err.message }));
+const srv = app.listen(4599);
+const fd = new FormData();
+fd.append('master', new Blob([fs.readFileSync('out/fixture/SYNTHETIC_master_input.xlsx')]), 'm.xlsx');
+fd.append('source', new Blob([fs.readFileSync('out/fixture/SYNTHETIC_payroll_source.xlsx')]), 's.xlsx');
+fd.append('options', JSON.stringify({ allowUnverifiedTables: true }));
+const r = await fetch('http://localhost:4599/api/populate-master', { method: 'POST', body: fd });
+console.log(r.status, r.headers.get('content-type'), r.headers.get('x-row-count'), (await r.arrayBuffer()).byteLength, 'bytes');
+const bad = await fetch('http://localhost:4599/api/populate-master', { method: 'POST', body: new FormData() });
+console.log(bad.status, await bad.text());
+srv.close();

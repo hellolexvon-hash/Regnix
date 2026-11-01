@@ -565,7 +565,7 @@ function Step3({ company, selectedActs, onBack, onNext }: {
   const handleDownload = () => {
     const link = document.createElement('a');
     link.href = '/templates/Regnix_Enterprise_Master_Register_v2.xlsx';
-    link.download = 'Regnix_Enterprise_Master_Register_v2.xlsx';
+    link.download = 'Regnix_Enterprise_Master_Register.xlsx';
     link.click();
     setDownloaded(true);
   };

@@ -10,9 +10,9 @@
  *   4  → 47  designation
  *   5  → 46  department
  *   6  → 178 elOpeningBalance
- *   7  → 191 elEarned
- *   8  → 439 elAvailed
- *   9  → 191 elClosingBalance  (same col — template computed, we write earned)
+ *   7  → 439 elEarned
+ *   8  → 191 elAvailed
+ *   9  → 182 elClosingBalance
  *   10 → 180 slOpeningBalance
  *   11 → 180 slAvailed
  *   12 → 193 slClosingBalance
@@ -73,7 +73,7 @@ export async function generateRegisterLeave(
       // Karnataka Form T — 13 columns
       safeSetCell(ws, rowNum, 1,  idx + 1);
       safeSetCell(ws, rowNum, 2,  getString(emp, C.employeeCode));
-      safeSetCell(ws, rowNum, 3,  getString(emp, C.employeeName));
+      safeSetCell(ws, rowNum, 3,  getString(emp, C.employeeName) || getString(emp, C.employeeNameFallback));
       safeSetCell(ws, rowNum, 4,  getString(emp, C.designation));
       safeSetCell(ws, rowNum, 5,  getNumber(emp, C.elOpeningBalance));
       safeSetCell(ws, rowNum, 6,  getNumber(emp, C.elEarned));
@@ -82,25 +82,25 @@ export async function generateRegisterLeave(
       safeSetCell(ws, rowNum, 9,  getNumber(emp, C.elAvailed));
       safeSetCell(ws, rowNum, 10, getNumber(emp, C.clAvailed));
       safeSetCell(ws, rowNum, 11, getNumber(emp, C.slAvailed));
-      safeSetCell(ws, rowNum, 12, getNumber(emp, C.elEarned)); // closing balance (EL earned - availed)
+      safeSetCell(ws, rowNum, 12, getNumber(emp, C.elClosingBalance)); // closing EL balance
       safeSetCell(ws, rowNum, 13, getString(emp, C.remarks));
     } else {
       // Standard Form-K — 18 columns
       safeSetCell(ws, rowNum, 1,  idx + 1);
       safeSetCell(ws, rowNum, 2,  getString(emp, C.employeeCode));
-      safeSetCell(ws, rowNum, 3,  getString(emp, C.employeeName));
+      safeSetCell(ws, rowNum, 3,  getString(emp, C.employeeName) || getString(emp, C.employeeNameFallback));
       safeSetCell(ws, rowNum, 4,  getString(emp, C.designation));
       safeSetCell(ws, rowNum, 5,  getString(emp, C.department));
       safeSetCell(ws, rowNum, 6,  getNumber(emp, C.elOpeningBalance));
       safeSetCell(ws, rowNum, 7,  getNumber(emp, C.elEarned));
       safeSetCell(ws, rowNum, 8,  getNumber(emp, C.elAvailed));
-      safeSetCell(ws, rowNum, 9,  getNumber(emp, C.elEarned));   // EL closing
+      safeSetCell(ws, rowNum, 9,  getNumber(emp, C.elClosingBalance)); // EL closing
       safeSetCell(ws, rowNum, 10, getNumber(emp, C.slOpeningBalance));
       safeSetCell(ws, rowNum, 11, getNumber(emp, C.slAvailed));
-      safeSetCell(ws, rowNum, 12, getNumber(emp, C.slClosingBalance));
+      safeSetCell(ws, rowNum, 12, null); // SL closing — no separate master column
       safeSetCell(ws, rowNum, 13, getNumber(emp, C.clOpeningBalance));
       safeSetCell(ws, rowNum, 14, getNumber(emp, C.clAvailed));
-      safeSetCell(ws, rowNum, 15, getNumber(emp, C.clClosingBalance));
+      safeSetCell(ws, rowNum, 15, null); // CL closing — no separate master column
       safeSetCell(ws, rowNum, 16, getNumber(emp, C.nationalHolidays));
       safeSetCell(ws, rowNum, 17, getNumber(emp, C.weeklyOffAvailed));
       safeSetCell(ws, rowNum, 18, getString(emp, C.remarks));

@@ -27,23 +27,14 @@ import {
 } from './superAdminStore';
 import { getPlan, formatINR, headcountLabel } from '@/lib/plans';
 import { useAuditorStore, type CompanyReview } from '../AuditorView/auditorStore';
+import KycDocumentPicker from './KycDocumentPicker';
+import { KYC_DEFAULT_LABELS } from './kycDocuments';
 import {
   IconShieldCheck, IconBuilding, IconUsers, IconAlertTriangle, IconCheckCircle,
   IconClock, IconEye, IconUndo, IconXCircle, IconLogOut, IconSearch, IconFlag,
 } from '../AuditorView/icons';
 
 type Tab = 'overview' | 'approvals' | 'authorized' | 'kyc' | 'clients' | 'auditors' | 'activity';
-
-/** Standard company-KYC checklist offered when requesting documents. */
-const KYC_DOCUMENTS = [
-  'Certificate of Incorporation',
-  'Company PAN card',
-  'GST registration certificate',
-  'Registered address proof',
-  'MOA and AOA',
-  'Board resolution / authorisation letter',
-  'Director ID proof (PAN / Aadhaar)',
-];
 
 function kycPill(u: AuthorizedUser): { label: string; cls: string } | null {
   if (!u.kyc) return null;
@@ -115,7 +106,7 @@ export default function SuperAdminPage() {
 
   // KYC request form (modal)
   const [kycTarget, setKycTarget] = useState<AuthorizedUser | null>(null);
-  const [kycDocs, setKycDocs] = useState<string[]>(KYC_DOCUMENTS.slice(0, 3));
+  const [kycDocs, setKycDocs] = useState<string[]>(KYC_DEFAULT_LABELS);
   const [kycOther, setKycOther] = useState('');
   const [kycAmount, setKycAmount] = useState('');
   const [kycDue, setKycDue] = useState('');
@@ -125,7 +116,7 @@ export default function SuperAdminPage() {
 
   function openKycForm(u: AuthorizedUser) {
     setKycTarget(u);
-    setKycDocs(KYC_DOCUMENTS.slice(0, 3));
+    setKycDocs(KYC_DEFAULT_LABELS);
     // price comes from the plan the user picked on the pricing page
     const plan = getPlan(u.plan);
     setKycOther(''); setKycAmount(plan ? String(plan.monthlyPrice) : ''); setKycDue(''); setKycNote(''); setKycFormError('');
@@ -628,26 +619,13 @@ export default function SuperAdminPage() {
                   </div>
                 </div>
 
-                {/* Documents as toggle chips */}
+                {/* Documents: grouped picker */}
                 <div className={s.saField}>
                   <div className={s.saFieldHead}>
                     <span className={s.saLabel}>Documents required</span>
                     <span className={s.saMicro}>{kycDocs.length} selected</span>
                   </div>
-                  <div className={s.saChipGrid}>
-                    {KYC_DOCUMENTS.map((d) => {
-                      const on = kycDocs.includes(d);
-                      return (
-                        <button
-                          key={d} type="button" aria-pressed={on}
-                          className={on ? `${s.saChip} ${s.saChipOn}` : s.saChip}
-                          onClick={() => setKycDocs((cur) => (cur.includes(d) ? cur.filter((x) => x !== d) : [...cur, d]))}
-                        >
-                          <span className={s.saChipTick}>{on ? '✓' : '+'}</span>{d}
-                        </button>
-                      );
-                    })}
-                  </div>
+                  <KycDocumentPicker value={kycDocs} onChange={setKycDocs} />
                   <input className={s.saInput} placeholder="Add another document (optional)" value={kycOther} onChange={(e) => setKycOther(e.target.value)} />
                 </div>
 

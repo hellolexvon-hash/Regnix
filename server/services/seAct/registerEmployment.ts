@@ -10,7 +10,7 @@
  *   OK  → 401 employeeName
  *   BU  → 73  fatherOrHusbandName
  *   CI  → 87  dateOfBirth
- *   BV  → 74  age
+ *   BV  → 239 age
  *   TX  → 516 gender
  *   CJ  → 88  maritalStatus
  *   CK  → 89  religion
@@ -78,7 +78,7 @@ export async function generateRegisterEmployment(
     safeSetCell(ws, rowNum, 1,  idx + 1);
     safeSetCell(ws, rowNum, 2,  getString(emp, C.employeeCode));
     safeSetCell(ws, rowNum, 3,  getString(emp, C.regnixId));
-    safeSetCell(ws, rowNum, 4,  getString(emp, C.employeeName));
+    safeSetCell(ws, rowNum, 4,  getString(emp, C.employeeName) || getString(emp, C.employeeNameFallback));
     safeSetCell(ws, rowNum, 5,  getString(emp, C.fatherOrHusbandName));
     safeSetCell(ws, rowNum, 6,  formatDate(getDate(emp, C.dateOfBirth)));
     safeSetCell(ws, rowNum, 7,  getString(emp, C.age));
@@ -112,7 +112,7 @@ export async function generateRegisterEmployment(
     safeSetCell(ws, rowNum, 35, getString(emp, C.form1Submitted));
     safeSetCell(ws, rowNum, 36, getString(emp, C.nominationFormSubmitted));
     safeSetCell(ws, rowNum, 37, getString(emp, C.complianceOfficer));
-    safeSetCell(ws, rowNum, 38, getString(emp, C.lastAuditDate));
+    safeSetCell(ws, rowNum, 38, formatDate(getDate(emp, C.lastAuditDate)));
     safeSetCell(ws, rowNum, 39, getString(emp, C.remarks));
     safeSetCell(ws, rowNum, 40, getString(emp, C.qualification));
     safeSetCell(ws, rowNum, 41, getString(emp, C.category));

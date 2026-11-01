@@ -14,14 +14,15 @@ export const SE_ACT_COLUMNS = {
   slNo:                    MASTER_COLUMNS.slNo,              // 1
   employeeCode:            MASTER_COLUMNS.employeeCode,      // 9
   regnixId:                20,   // T  — Regnix ID
-  employeeName:            MASTER_COLUMNS.employeeName,      // 401
+  employeeName:            MASTER_COLUMNS.employeeName,      // 401 (often blank; registers fall back to col 101)
+  employeeNameFallback:    101,  // CW — Employee Full Name
   designation:             MASTER_COLUMNS.designation,       // 47
   department:              MASTER_COLUMNS.department,        // 46
 
   // ── EMPLOYEE DEMOGRAPHICS ──────────────────────────────────────────────────
   fatherOrHusbandName:     73,   // BU — Father / Husband Name
   dateOfBirth:             87,   // CI — Date of Birth
-  age:                     MASTER_COLUMNS.ageAndSexGender,   // 74
+  age:                     239,  // JM — Employee Age — FIXED (74 is the combined 'Age and sex' cell)
   gender:                  516,  // TX — Gender
   maritalStatus:           88,   // CJ — Marital Status
   religion:                89,   // CK — Religion
@@ -72,7 +73,7 @@ export const SE_ACT_COLUMNS = {
   medicalAllowance:        MASTER_COLUMNS.medicalAllowance,    // 231
   otherAllowance:          MASTER_COLUMNS.specialAllowance,    // 235
   grossWages:              MASTER_COLUMNS.grossSalary,         // 273
-  epfEmployee:             238,  // ID — EPF Employee contribution
+  epfEmployee:             MASTER_COLUMNS.employeePf,          // 262 — FIXED (238 is 'Employer PF')
   esicEmployee:            MASTER_COLUMNS.esicEmployee,        // 243
   pt:                      MASTER_COLUMNS.ptAmount,            // 251
   lwfEmployee:             MASTER_COLUMNS.employeeLwf,         // 248
@@ -87,21 +88,22 @@ export const SE_ACT_COLUMNS = {
 
   // ── LEAVE ──────────────────────────────────────────────────────────────────
   elOpeningBalance:        178,  // FV — EL Opening Balance
-  elEarned:                191,  // GI — EL Earned (Current Year)
-  elAvailed:               439,  // PP — EL Availed
-  slOpeningBalance:        180,  // FX — SL Opening Balance
-  slAvailed:               180,  // FX — SL Availed (same col, used as availed)
-  slClosingBalance:        193,  // GL — SL Closing Balance
-  clOpeningBalance:        179,  // FW — CL Opening Balance
-  clAvailed:               192,  // GJ — CL Availed
-  clClosingBalance:        192,  // GJ — CL Closing Balance (computed from availed)
+  elEarned:                439,  // 'EL/ Leave earned' — FIXED (was 191, which is 'EL Availed/ Balance left')
+  elAvailed:               191,  // 'Earned Leave (EL) Availed/ Balance left' — FIXED (was 439); combined master column
+  elClosingBalance:        182,  // 'Annual Leave Balance' — ADDED (closing used to repeat EL earned)
+  slOpeningBalance:        180,  // 'Sick Leave (SL) Entitlement'
+  slAvailed:               193,  // 'SL Entitlement Availed/ Balance left' — FIXED (was 180 = the entitlement itself); combined master column
+  clOpeningBalance:        179,  // 'Casual Leave (CL) Entitlement'
+  clAvailed:               192,  // 'CL Entitlement Availed/ Balance left' (combined master column)
+  // slClosingBalance / clClosingBalance removed: the master has no separate closing-balance columns (193/192 hold 'availed/balance left'); registers leave closing blank.
   nationalHolidays:        MASTER_COLUMNS.nfh,                 // 414
   weeklyOffAvailed:        313,  // LA — Weekly Off Availed
 
   // ── ADVANCES ───────────────────────────────────────────────────────────────
   dateOfAdvance:           523,  // TE — Date of Advance
   purposeOfAdvance:        411,  // PE — Purpose of Advance
-  amountOfAdvance:         MASTER_COLUMNS.advanceRefund,       // 218
+  amountOfAdvance:         218,  // HJ — Amount of advance given — FIXED (advanceRefund is 266 = refund)
+  advanceRemarks:          222,  // HN — Form XXII Advances remarks — ADDED (register used the fines remarks)
   noOfInstallments:        219,  // HK — No. of Installments for Recovery
   installmentAmount:       294,  // KH — Amount of Each Installment
   dateOf1stRecovery:       211,  // HC — Date of 1st Recovery
@@ -122,7 +124,8 @@ export const SE_ACT_COLUMNS = {
   // ── DEDUCTIONS ─────────────────────────────────────────────────────────────
   monthYear:               568,  // blank/special — month/year
   natureOfDeduction:       209,  // HA — Nature of Deduction
-  amountDeducted:          MASTER_COLUMNS.totalDeduction,      // 292
+  amountDeducted:          306,  // KV — Amount Ordered (₹) Damages — FIXED (292 is total salary deductions)
+  deductionRemarks:        213,  // HA — Form XX deductions remarks — ADDED
   dateOfDeduction:         MASTER_COLUMNS.dateOfPayment,       // 311
   balanceAfterDeduction:   436,  // PT — Balance After Deduction
 
@@ -132,16 +135,13 @@ export const SE_ACT_COLUMNS = {
   otStartTime:             415,  // OY — OT Start Time
   otEndTime:               434,  // PP — OT End Time
   otHours:                 440,  // PP — OT Hours
-  otRate:                  225,  // HQ — OT Rate (₹/hr)
-  otAmount:                226,  // HR — OT Amount (₹)
+  otRate:                  226,  // HR — Overtime rate of wages per hour — FIXED (225 is the NORMAL rate)
+  otAmount:                MASTER_COLUMNS.otAmount, // 207 GY — Overtime Amount — FIXED (226 is the hourly rate)
   reasonForOt:             524,  // TE — Reason for OT
   otRemarks:               514,  // ST — OT Remarks
 
   // ── TELANGANA MUSTER ROLL ONLY ─────────────────────────────────────────────
   maleFemale:              80,   // CB — Male/Female
-  bonus:                   278,  // JR — Bonus
-  society:                 336,  // ??? — Society deduction
-  insurance:               337,  // ??? — Insurance deduction
   day1:                    MASTER_COLUMNS.day1,  day2:  MASTER_COLUMNS.day2,
   day3:                    MASTER_COLUMNS.day3,  day4:  MASTER_COLUMNS.day4,
   day5:                    MASTER_COLUMNS.day5,  day6:  MASTER_COLUMNS.day6,
@@ -158,8 +158,8 @@ export const SE_ACT_COLUMNS = {
   day27:                   MASTER_COLUMNS.day27, day28: MASTER_COLUMNS.day28,
   day29:                   MASTER_COLUMNS.day29, day30: MASTER_COLUMNS.day30,
   day31:                   MASTER_COLUMNS.day31,
-  totalOtHours:            440,  // PP — Total OT Hours
-  bonus:                   278,  // JR — Bonus
+  totalOtHours:            440,  // PX — Total OT Hours
+  bonus:                   279,  // 'Bonus Amount Paid' — FIXED (278 is 'Bonus Payment Month')
   otAmountMuster:          MASTER_COLUMNS.otAmount,            // 207
   maternity:               450,  // PP — Maternity Benefit
   others:                  335,  // ??? — Others
@@ -170,5 +170,5 @@ export const SE_ACT_COLUMNS = {
   salaryAdvance:           MASTER_COLUMNS.advanceRefund,       // 218
   fines:                   302,  // KP — Fines
   damagesLoss:             MASTER_COLUMNS.lopLoss,             // 312
-  netPayable:              MASTER_COLUMNS.netSalary,           // 274
+  netPayable:              MASTER_COLUMNS.netPaymentsAmountPaid, // 208 — FIXED (274 is net salary EXCLUDING overtime; this register lists OT as an earning)
 } as const;

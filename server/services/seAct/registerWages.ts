@@ -16,7 +16,7 @@
  *   10 → 231 medicalAllowance
  *   11 → 235 otherAllowance
  *   12 → 273 grossWages
- *   13 → 238 epfEmployee
+ *   13 → 262 epfEmployee
  *   14 → 243 esicEmployee
  *   15 → 251 pt
  *   16 → 248 lwfEmployee
@@ -59,7 +59,7 @@ export async function generateRegisterWages(
     const rowNum = DATA_START_ROW + idx;
     safeSetCell(ws, rowNum, 1,  idx + 1);
     safeSetCell(ws, rowNum, 2,  getString(emp, C.employeeCode));
-    safeSetCell(ws, rowNum, 3,  getString(emp, C.employeeName));
+    safeSetCell(ws, rowNum, 3,  getString(emp, C.employeeName) || getString(emp, C.employeeNameFallback));
     safeSetCell(ws, rowNum, 4,  getString(emp, C.department));
     safeSetCell(ws, rowNum, 5,  getNumber(emp, C.daysWorked));
     safeSetCell(ws, rowNum, 6,  getNumber(emp, C.basicWage));

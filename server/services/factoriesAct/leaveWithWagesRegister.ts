@@ -84,7 +84,7 @@ export async function generateLeaveWithWagesRegister(
     rowWriter: (emp, _, oneIndex) => ({
       1:  oneIndex,
       2:  getString(emp, M.employeeCode),
-      3:  getString(emp, M.employeeName),
+      3:  getString(emp, M.employeeName) || getString(emp, M.employeeNameFallback),
       4:  getString(emp, M.department),
       5:  getNumber(emp, M.daysWorkedPrevYear),
       6:  getNumber(emp, M.leaveEntitlement),
