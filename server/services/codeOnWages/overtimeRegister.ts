@@ -28,7 +28,7 @@
  */
 
 import ExcelJS from 'exceljs';
-import { MasterData, getString, getNumber, getDate, formatDate, round2 } from '../shared/masterReader.js';
+import { MasterData, getEmployeeName, getString, getNumber, getDate, formatDate, round2 } from '../shared/masterReader.js';
 import { CODE_ON_WAGES_COLUMNS as M } from './mapping.js';
 import { generateSingleSheetRegister, sumColumn } from './registerEngine.js';
 import { fillCellAddress } from '../shared/templateFiller.js';
@@ -43,7 +43,8 @@ function monthYearLabel(employees: MasterData['employees']): string {
   const first = employees
     .map((r) => getDate(r, M.dateOfPayment))
     .find((v): v is Date => v instanceof Date);
-  return (first ?? new Date()).toLocaleString('en-GB', { month: 'long', year: 'numeric' });
+  // No payment date → leave blank rather than print today's month on a statutory register.
+  return first ? first.toLocaleString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' }) : '';
 }
 
 function writeCompanyMeta(
@@ -55,7 +56,7 @@ function writeCompanyMeta(
   fillCellAddress(ws, 'J3', getString(companyInfo, M.registrationNumber));
   fillCellAddress(ws, 'C4', getString(companyInfo, M.address));
   const payDate = employees.map((r) => getDate(r, M.dateOfPayment)).find((v): v is Date => v instanceof Date);
-  fillCellAddress(ws, 'J4', String((payDate ?? new Date()).getFullYear()));
+  fillCellAddress(ws, 'J4', payDate ? String(payDate.getUTCFullYear()) : '');
   fillCellAddress(ws, 'C5', getString(companyInfo, M.natureOfIndustry)); // 38 ← CORRECTED
   fillCellAddress(ws, 'C6', monthYearLabel(employees));
 }
@@ -83,7 +84,7 @@ export async function generateOvertimeRegister(
       return {
         1:  oneIndex,
         2:  getString(emp, M.employeeCode),
-        3:  getString(emp, M.employeeName),                    // 401 ← CORRECTED
+        3:  getEmployeeName(emp),                    // 401 ← CORRECTED
         4:  getString(emp, M.department),                      // 46
         5:  getString(emp, M.designation),                     // 47
         6:  round2(getNumber(emp, M.normalRateOfWages)),       // 204 ← CORRECTED (daily rate)

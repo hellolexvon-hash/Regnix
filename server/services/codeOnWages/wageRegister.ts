@@ -19,14 +19,14 @@
  *  C11 → conveyanceAllowance 233  ← CORRECTED
  *  C12 → specialAllowance   235   ← CORRECTED
  *  C13 → otAmount           227   ← CORRECTED (Form IV uses col 227)
- *  C14 → grossSalary        273   ← CORRECTED (was 274)
+ *  C14 → grossSalary        273 + OT (227)
  *  C15 → employeePf         262   ← CORRECTED (was 238)
  *  C16 → esicEmployee       243   ← CORRECTED
  *  C17 → ptAmount           251
- *  C18 → advanceRefund      218   ← CORRECTED (was 266)
+ *  C18 → advanceRefund      266
  *  C19 → otherDeduction     310
  *  C20 → totalDeduction     292
- *  C21 → netSalary          274   ← CORRECTED (was 208/275)
+ *  C21 → netPaid            208 (net salary 274 + OT)
  *  C22 → dateOfPayment      311   ← CORRECTED
  *  C23 → bankAccountNumber  276   (Receipt/Bank txn ID)
  *  C24 → signature          398   ← CORRECTED (was null)
@@ -37,7 +37,7 @@
  */
 
 import ExcelJS from 'exceljs';
-import { MasterData, getString, getNumber, getDate, formatDate, round2 } from '../shared/masterReader.js';
+import { MasterData, getEmployeeName, getString, getNumber, getDate, formatDate, round2 } from '../shared/masterReader.js';
 import { CODE_ON_WAGES_COLUMNS as M } from './mapping.js';
 import { generateSingleSheetRegister, sumColumn } from './registerEngine.js';
 import { fillCellAddress } from '../shared/templateFiller.js';
@@ -52,7 +52,8 @@ function monthYearLabel(employees: MasterData['employees']): string {
   const first = employees
     .map((r) => getDate(r, M.dateOfPayment))
     .find((v): v is Date => v instanceof Date);
-  return (first ?? new Date()).toLocaleString('en-GB', { month: 'long', year: 'numeric' });
+  // No payment date → leave blank rather than print today's month on a statutory register.
+  return first ? first.toLocaleString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' }) : '';
 }
 
 function writeCompanyMeta(
@@ -64,7 +65,7 @@ function writeCompanyMeta(
   fillCellAddress(ws, 'J3', getString(companyInfo, M.registrationNumber));
   fillCellAddress(ws, 'C4', getString(companyInfo, M.address));
   const payDate = employees.map((r) => getDate(r, M.dateOfPayment)).find((v): v is Date => v instanceof Date);
-  fillCellAddress(ws, 'J4', String((payDate ?? new Date()).getFullYear()));
+  fillCellAddress(ws, 'J4', payDate ? String(payDate.getUTCFullYear()) : '');
   fillCellAddress(ws, 'C5', getString(companyInfo, M.natureOfIndustry)); // 38 ← CORRECTED
   fillCellAddress(ws, 'C6', monthYearLabel(employees));
 }
@@ -88,9 +89,12 @@ export async function generateWageRegister(
       const special   = round2(getNumber(emp, M.specialAllowance));   // 235 ← CORRECTED
       const otAmt     = round2(getNumber(emp, M.otAmountFormIV));     // 227 ← CORRECTED
 
-      const gross = round2(getNumber(emp, M.grossSalary)) ?? round2( // 273 ← CORRECTED
-        (basic ?? 0) + (da ?? 0) + (hra ?? 0) + (conv ?? 0) + (special ?? 0) + (otAmt ?? 0),
-      );
+      // Master gross (273) excludes overtime, but this form lists OT as an earning before the gross
+      // column, so gross = 273 + OT. Without a master gross, sum the listed earnings.
+      const baseGross = round2(getNumber(emp, M.grossSalary));
+      const gross = baseGross !== null
+        ? round2(baseGross + (otAmt ?? 0))
+        : round2((basic ?? 0) + (da ?? 0) + (hra ?? 0) + (conv ?? 0) + (special ?? 0) + (otAmt ?? 0));
 
       const pf        = round2(getNumber(emp, M.employeePf));         // 262 ← CORRECTED
       const esi       = round2(getNumber(emp, M.esicEmployee));       // 243 ← CORRECTED
@@ -102,14 +106,15 @@ export async function generateWageRegister(
         (pf ?? 0) + (esi ?? 0) + (pt ?? 0) + (advance ?? 0) + (otherDedn ?? 0),
       );
 
-      const net = round2(getNumber(emp, M.netSalary)) ?? round2(     // 274 ← CORRECTED
+      // Net paid (208) includes overtime; fall back to gross − deductions.
+      const net = round2(getNumber(emp, M.netPaymentsAmountPaid)) ?? round2(
         (gross ?? 0) - (totalDedn ?? 0),
       );
 
       return {
         1:  oneIndex,
         2:  getString(emp, M.employeeCode),
-        3:  getString(emp, M.employeeName),                             // 401 ← CORRECTED
+        3:  getEmployeeName(emp),                             // 401 ← CORRECTED
         4:  getString(emp, M.department),
         5:  getString(emp, M.designation),
         6:  getNumber(emp, M.totalDaysWorked),                         // 246

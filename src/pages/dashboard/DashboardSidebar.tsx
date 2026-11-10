@@ -97,6 +97,11 @@ const NAV: NavSection[] = [
         icon: <Icon d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8zM14 2v6h6" />,
         label: 'Documents',
       },
+      {
+        id: 'library',
+        icon: <Icon d="M4 5a2 2 0 012-2h13v16H6a2 2 0 00-2 2zM4 21V5M9 8h6" />,
+        label: 'E-Library',
+      },
     ],
   },
   {

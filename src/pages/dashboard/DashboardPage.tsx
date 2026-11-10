@@ -7,6 +7,8 @@ import ComplianceCalendar from '../../components/dashboard/comlianceCalender/Com
 import DocumentGenerator from '../../components/dashboard/documentGenerator/DocumentGenerator';
 import ValidationPage from '../../components/dashboard/documentGenerator/ValidationPage';
 import DashboardHome from './DashboardHome';
+import { LibraryPage } from '@/pages/library/LibraryPage';
+import CalculatorPage from '@/pages/checker/calculator/CalculatorPage';
 import styles from './DashboardPage.module.css';
 
 function renderView(section: string) {
@@ -14,6 +16,8 @@ function renderView(section: string) {
     case 'calendar':   return <ComplianceCalendar />;
     case 'generator':  return <DocumentGenerator />;
     case 'validation': return <ValidationPage />;
+    case 'library':    return <LibraryPage />;
+    case 'checker':    return <CalculatorPage />;
     default:           return <DashboardHome />;
   }
 }

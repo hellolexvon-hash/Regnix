@@ -39,7 +39,7 @@ export const CODE_ON_WAGES_COLUMNS = {
   totalDaysPresent:      MASTER_COLUMNS.totalDaysPresent,   // 199
   totalDaysAbsent:       MASTER_COLUMNS.totalDaysAbsent,    // 200
   lwpDays:               MASTER_COLUMNS.lwpDays,            // 201
-  otHoursMusterRoll:     MASTER_COLUMNS.otHoursMusterRoll,  // 275 ← Form VI OT col CORRECTED
+  otHoursMusterRoll:     MASTER_COLUMNS.otHoursMusterRoll,  // 440 Total Overtime Hours Worked
 
   // ── WAGES / PAYROLL ───────────────────────────────────────────────────────
   basicWage:             MASTER_COLUMNS.basicWage,          // 284 ← CORRECTED
@@ -48,13 +48,14 @@ export const CODE_ON_WAGES_COLUMNS = {
   conveyanceAllowance:   MASTER_COLUMNS.conveyanceAllowance, // 233 ← CORRECTED
   specialAllowance:      MASTER_COLUMNS.specialAllowance,    // 235 ← CORRECTED
   grossSalary:           MASTER_COLUMNS.grossSalary,         // 273 ← CORRECTED
-  netSalary:             MASTER_COLUMNS.netSalary,           // 274 ← CORRECTED
+  netSalary:             MASTER_COLUMNS.netSalary,           // 274 — net salary EXCLUDING overtime
+  netPaymentsAmountPaid: MASTER_COLUMNS.netPaymentsAmountPaid, // 208 — net actually paid (incl. overtime) — ADDED
   otAmount:              MASTER_COLUMNS.otAmount,            // 207
   otAmountFormIV:        MASTER_COLUMNS.otAmountFormIV,      // 227 ← Form IV OT CORRECTED
   employeePf:            MASTER_COLUMNS.employeePf,          // 262 ← CORRECTED
   esicEmployee:          MASTER_COLUMNS.esicEmployee,        // 243 ← CORRECTED
   ptAmount:              MASTER_COLUMNS.ptAmount,            // 251
-  advanceRefund:         MASTER_COLUMNS.advanceRefund,       // 218 ← CORRECTED
+  advanceRefund:         MASTER_COLUMNS.advanceRefund,       // 266 — advance recovered from wages (deduction)
   otherDeduction:        MASTER_COLUMNS.otherDeduction,      // 310
   totalDeduction:        MASTER_COLUMNS.totalDeduction,      // 292
   dateOfPayment:         MASTER_COLUMNS.dateOfPayment,       // 311 ← CORRECTED
@@ -68,17 +69,18 @@ export const CODE_ON_WAGES_COLUMNS = {
   otHoursWeek2:          MASTER_COLUMNS.otHoursWeek2,       // 184
   otHoursWeek3:          MASTER_COLUMNS.otHoursWeek3,       // 185
   otHoursWeek4:          MASTER_COLUMNS.otHoursWeek4,       // 186
-  totalOtHours:          MASTER_COLUMNS.totalOtHours,       // 190 ← CORRECTED (was 440/224)
+  totalOtHours:          MASTER_COLUMNS.totalOtHours,       // 440 Total Overtime Hours Worked
   overtimeRemarks:       MASTER_COLUMNS.overtimeRemarks,    // 514
 
   // ── FINES (Form I) ────────────────────────────────────────────────────────
   dateOfOffence:         MASTER_COLUMNS.dateOfOffence,      // 295
   actOmissionForFine:    MASTER_COLUMNS.actOmissionForFine, // 301
   dateOffenceNoticed:    MASTER_COLUMNS.dateOffenceNoticed, // 299 ← CORRECTED (was 295)
-  dateShowCauseNotice:   MASTER_COLUMNS.dateShowCauseNotice, // 406 ← CORRECTED (was 296)
+  dateShowCauseNotice:   MASTER_COLUMNS.dateShowCauseNotice, // 296 Date of Show Cause Notice
   dateFineOrder:         MASTER_COLUMNS.dateFineOrder,      // 300
   wagePeriodOfFine:      MASTER_COLUMNS.wagePeriodOfFine,   // 432
-  amountOfFine:          MASTER_COLUMNS.amountOfFine,       // 215
+  amountOfFine:          MASTER_COLUMNS.amountOfFine,       // 215 Amount of fine imposed (fallback)
+  amountOfFineMw:        302,                                // 302 Amount of Fine (₹) MW — preferred; the Form I register uses it first
   dateOfRecovery:        MASTER_COLUMNS.dateOfRecovery,     // 303
   amountRecovered:       MASTER_COLUMNS.amountRecovered,    // 304 ← Form I col 14
   balancePending:        MASTER_COLUMNS.balancePending,     // 436
@@ -92,8 +94,8 @@ export const CODE_ON_WAGES_COLUMNS = {
   replyReceived:         MASTER_COLUMNS.replyReceived,      // 435
   dateOfOrder:           MASTER_COLUMNS.dateOfOrder,        // 305
   amountOrdered:         MASTER_COLUMNS.amountOrdered,      // 306
-  wagePeriodRecovery:    MASTER_COLUMNS.wagePeriodRecovery, // 304 ← CORRECTED (was 307)
-  amountRecoveredDamage: MASTER_COLUMNS.amountRecoveredDamage, // 307 ← CORRECTED (was 304)
+  wagePeriodRecovery:    MASTER_COLUMNS.wagePeriodRecovery, // 307 Wage Period of Recovery
+  amountRecoveredDamage: MASTER_COLUMNS.amountRecoveredDamage, // 304 Amount Recovered Till Date
   cumulativeDeductedDamage: MASTER_COLUMNS.cumulativeDeductedDamage, // 308
   pctWagesDeductedDamage: MASTER_COLUMNS.pctWagesDeductedDamage,    // 309
   damageRemarks:         MASTER_COLUMNS.damageRemarks,     // 213
@@ -108,7 +110,9 @@ export const CODE_ON_WAGES_COLUMNS = {
   uanNumber:             MASTER_COLUMNS.uanNumber,          // 13
   pfMemberId:            MASTER_COLUMNS.pfMemberId,         // 237
   baseWorkLocation:      MASTER_COLUMNS.baseWorkLocation,   // 526
-  workingAreaProject:    MASTER_COLUMNS.workingAreaProject,  // 400
+  workingAreaProject:    MASTER_COLUMNS.workingAreaProject,  // 48 Work Location
+  deputeLocation:        34,                                  // 34 Location Contract Work — used for 'Depute working location'
+  genderText:            80,                                  // 80 Gender (synced with 516 by the populate engine)
   projectName:           MASTER_COLUMNS.projectName,        // 44
   endClientName:         MASTER_COLUMNS.endClientName,      // 525
   ageAndSexGender:       MASTER_COLUMNS.ageAndSexGender,    // 74
@@ -125,10 +129,10 @@ export const CODE_ON_WAGES_COLUMNS = {
   nfh:                   MASTER_COLUMNS.nfh,                // 414
   statutoryBonus:        MASTER_COLUMNS.statutoryBonus,     // 234
   otherAllowances:       MASTER_COLUMNS.otherAllowances,    // 335
-  additionalComponent:   MASTER_COLUMNS.additionalComponent, // 336
+  additionalComponent:   MASTER_COLUMNS.additionalComponent, // 236
   insuranceEE:           MASTER_COLUMNS.insuranceEE,        // 337
   employeeLwf:           MASTER_COLUMNS.employeeLwf,        // 248
-  incomeTax:             MASTER_COLUMNS.incomeTax,          // 339
+  incomeTax:             MASTER_COLUMNS.incomeTax,          // 356 TDS
   govtBasicWage:         MASTER_COLUMNS.govtBasicWage,      // 561
   govtDA:                MASTER_COLUMNS.govtDA,             // 562
   govtHRA:               MASTER_COLUMNS.govtHRA,            // 563

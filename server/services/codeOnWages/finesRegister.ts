@@ -14,10 +14,10 @@
  *  C6  → dateOfOffence     295
  *  C7  → actOmissionForFine 301
  *  C8  → dateOffenceNoticed 299   ← CORRECTED (was 295)
- *  C9  → dateShowCauseNotice 406  ← CORRECTED (was 296)
+ *  C9  → dateShowCauseNotice 296
  *  C10 → dateFineOrder     300
  *  C11 → wagePeriodOfFine  432
- *  C12 → amountOfFine      215
+ *  C12 → amountOfFine      302 (fallback 215)
  *  C13 → dateOfRecovery    303
  *  C14 → amountRecovered   304
  *  C15 → balancePending    436
@@ -28,7 +28,7 @@
  */
 
 import ExcelJS from 'exceljs';
-import { MasterData, getString, getNumber, getDate, formatDate, round2 } from '../shared/masterReader.js';
+import { MasterData, getEmployeeName, getString, getNumber, getDate, formatDate, round2 } from '../shared/masterReader.js';
 import { CODE_ON_WAGES_COLUMNS as M } from './mapping.js';
 import { generateSingleSheetRegister, sumColumn } from './registerEngine.js';
 import { fillCellAddress } from '../shared/templateFiller.js';
@@ -43,7 +43,8 @@ function monthYearLabel(employees: MasterData['employees']): string {
   const first = employees
     .map((r) => getDate(r, M.dateOfPayment))
     .find((v): v is Date => v instanceof Date);
-  return (first ?? new Date()).toLocaleString('en-GB', { month: 'long', year: 'numeric' });
+  // No payment date → leave blank rather than print today's month on a statutory register.
+  return first ? first.toLocaleString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' }) : '';
 }
 
 function writeCompanyMeta(
@@ -55,7 +56,7 @@ function writeCompanyMeta(
   fillCellAddress(ws, 'J3', getString(companyInfo, M.registrationNumber));
   fillCellAddress(ws, 'C4', getString(companyInfo, M.address));
   const payDate = employees.map((r) => getDate(r, M.dateOfPayment)).find((v): v is Date => v instanceof Date);
-  fillCellAddress(ws, 'J4', String((payDate ?? new Date()).getFullYear()));
+  fillCellAddress(ws, 'J4', payDate ? String(payDate.getUTCFullYear()) : '');
   fillCellAddress(ws, 'C5', getString(companyInfo, M.natureOfIndustry));  // col 38 ← CORRECTED
   fillCellAddress(ws, 'C6', monthYearLabel(employees));
 }
@@ -72,7 +73,7 @@ export async function generateFinesRegister(
     usedColumns:  USED_COLUMNS,
     metaWriter: (ws) => writeCompanyMeta(ws, masterData.companyInfo, masterData.employees),
     rowWriter: (emp, _, oneIndex) => {
-      const fineAmt   = round2(getNumber(emp, M.amountOfFine));
+      const fineAmt   = round2(getNumber(emp, M.amountOfFineMw) ?? getNumber(emp, M.amountOfFine)); // 302, else 215
       const recovered = round2(getNumber(emp, M.amountRecovered));
       const balance   = fineAmt !== null && recovered !== null
         ? round2(fineAmt - recovered)
@@ -81,7 +82,7 @@ export async function generateFinesRegister(
       return {
         1:  oneIndex,
         2:  getString(emp, M.employeeCode),
-        3:  getString(emp, M.employeeName),        // 401 ← CORRECTED
+        3:  getEmployeeName(emp),        // 401 ← CORRECTED
         4:  getString(emp, M.department),
         5:  getString(emp, M.designation),
         6:  formatDate(getDate(emp, M.dateOfOffence)),          // 295

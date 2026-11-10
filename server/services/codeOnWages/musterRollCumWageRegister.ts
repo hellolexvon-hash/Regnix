@@ -17,14 +17,14 @@
  *  C2  → employeeCode               9
  *  C3  → employeeName               401 (fallback 101 — 401 often blank)
  *  C4  → establishmentName          391
- *  C5  → baseWorkLocation           526  (FLAGGED — template legend has no annotation for this col; using existing baseWorkLocation field as best fit for "Base working location")
- *  C6  → depute working location    UNRESOLVED — template legend has no annotation and no master field name fits "Depute working location". Left blank rather than guess. Please confirm intended source.
+ *  C5  → workingAreaProject         48   (was 526 'Address of Employer'; FLAGGED — template legend has no annotation for this col; using existing baseWorkLocation field as best fit for "Base working location")
+ *  C6  → depute working location    34 'Location Contract Work' (best fit; confirm)
  *  C7  → principalEmployerNatureOfWorkDone  400  (template legend: OJ — this is a DIFFERENT field from workingAreaProject; template wants OJ here specifically)
  *  C8  → projectName                44   (template legend: AR)
  *  C9  → employeeName               401 (fallback 101 — duplicate full name; template legend: OK)
  *  C10 → endClientName              525  (FLAGGED — template legend has no annotation; using existing endClientName field as best fit)
- *  C11 → ageAndSexGender            74   (template legend: BV — header says "Age" but source is the combined age/gender field)
- *  C12 → employeeAge                239  (template legend: IE — header says "Gender" but source is the numeric age field; this mismatch exists in the template's own header/legend pairing, not something we introduced)
+ *  C11 → employeeAge                239  (numeric age under the 'Age' header)
+ *  C12 → gender                     80   (gender under the 'Gender' header — the legend row pairs these the other way round)
  *  C13 → designation                47   (template legend: AU)
  *  C14 → skillCategory              64   (template legend: BL)
  *  C15 → dateOfEntryIntoService     270  (template legend: JJ)
@@ -41,7 +41,7 @@
  *  C56 → otAmount                   207  (template legend: GY)
  *  C57 → grossSalary                273  (template legend: JM)
  *  C58 → totalDeduction             292  (template legend: KF — single combined deduction total; this template does NOT itemize PF/ESIC/PT/LWF/tax/misc separately)
- *  C59 → netPaymentsAmountPaid      208  (template legend: GZ — distinct field from netSalary/274; added to masterColumns.ts)
+ *  C57 → grossSalary 273 + OT (207)   C59 → netPaymentsAmountPaid 208
  *  C60 → dateOfPayment              311  (template legend: KY)
  *  C61 → bankName                   244  (template legend: IJ)
  *  C62 → bankAccountNumber          276  (template legend: JP)
@@ -75,7 +75,8 @@ function monthYearLabel(employees: MasterData['employees']): string {
   const first = employees
     .map((r) => getDate(r, M.dateOfPayment))
     .find((v): v is Date => v instanceof Date);
-  return (first ?? new Date()).toLocaleString('en-GB', { month: 'long', year: 'numeric' });
+  // No payment date → leave blank rather than print today's month on a statutory register.
+  return first ? first.toLocaleString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' }) : '';
 }
 
 function writeCompanyMeta(
@@ -107,14 +108,14 @@ export async function generateMusterRollCumWageRegister(
         2:  getString(emp, M.employeeCode),                        // 9
         3:  getEmployeeName(emp),                                  // 401 (fallback 101)
         4:  getString(emp, M.establishmentName),                   // 391
-        5:  getString(emp, M.baseWorkLocation),                    // 526 (flagged, template legend blank)
-        6:  null,                                                  // UNRESOLVED — "Depute working location", no master field identified
+        5:  getString(emp, M.workingAreaProject),                  // 48  Work Location (526 is 'Address of Employer')
+        6:  getString(emp, M.deputeLocation),                      // 34  Location Contract Work (depute location) — confirm
         7:  getString(emp, M.principalEmployerNatureOfWorkDone),   // 400 (template legend OJ)
         8:  getString(emp, M.projectName),                         // 44
         9:  getEmployeeName(emp),                                  // 401 (fallback 101, full name duplicate)
         10: getString(emp, M.endClientName),                       // 525 (flagged, template legend blank)
-        11: getString(emp, M.ageAndSexGender),                     // 74
-        12: getNumber(emp, M.employeeAge),                         // 239
+        11: getNumber(emp, M.employeeAge),                         // 239 numeric age under the 'Age' header
+        12: getString(emp, M.genderText),                          // 80  gender under the 'Gender' header
         13: getString(emp, M.designation),                         // 47
         14: getString(emp, M.skillCategory),                       // 64
         15: formatDate(getDate(emp, M.dateOfEntryIntoService)),    // 270
@@ -136,13 +137,16 @@ export async function generateMusterRollCumWageRegister(
       row[55] = round2(getNumber(emp, M.hra));                     // 230
       row[56] = round2(getNumber(emp, M.otAmount));                // 207
 
-      const gross = round2(getNumber(emp, M.grossSalary));         // 273
+      // Master gross (273) excludes overtime; OT is listed as an earning (col 56) → gross = 273 + OT.
+      const baseGross = round2(getNumber(emp, M.grossSalary));
+      const otAmt = round2(getNumber(emp, M.otAmount));
+      const gross = baseGross !== null ? round2(baseGross + (otAmt ?? 0)) : null;
       row[57] = gross;
 
       const totalDedn = round2(getNumber(emp, M.totalDeduction));  // 292
       row[58] = totalDedn;
 
-      const netPaid = round2(getNumber(emp, M.netSalary)) ?? round2(
+      const netPaid = round2(getNumber(emp, M.netPaymentsAmountPaid)) ?? round2(
         (gross ?? 0) - (totalDedn ?? 0),
       );
       row[59] = netPaid;                                           // 208

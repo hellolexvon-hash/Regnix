@@ -22,7 +22,7 @@
  */
 
 import ExcelJS from 'exceljs';
-import { MasterData, getString, getNumber, getDate } from '../shared/masterReader.js';
+import { MasterData, getEmployeeName, getString, getNumber, getDate } from '../shared/masterReader.js';
 import { CODE_ON_WAGES_COLUMNS as M } from './mapping.js';
 import { generateSingleSheetRegister, sumColumn } from './registerEngine.js';
 import { fillCellAddress } from '../shared/templateFiller.js';
@@ -38,7 +38,8 @@ function monthYearLabel(employees: MasterData['employees']): string {
   const first = employees
     .map((r) => getDate(r, M.dateOfPayment))
     .find((v): v is Date => v instanceof Date);
-  return (first ?? new Date()).toLocaleString('en-GB', { month: 'long', year: 'numeric' });
+  // No payment date → leave blank rather than print today's month on a statutory register.
+  return first ? first.toLocaleString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' }) : '';
 }
 
 function writeCompanyMeta(
@@ -66,7 +67,7 @@ export async function generateMusterRoll(
       const row: Record<number, ExcelJS.CellValue | null> = {
         1: oneIndex,
         2: getString(emp, M.employeeCode),
-        3: getString(emp, M.employeeName),     // 401 ← CORRECTED
+        3: getEmployeeName(emp),     // 401 ← CORRECTED
         4: getString(emp, M.designation),
       };
 

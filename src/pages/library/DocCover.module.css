@@ -1,0 +1,28 @@
+.cover {
+  position: relative; display: flex; flex-direction: column; justify-content: space-between;
+  aspect-ratio: 3 / 4; border-radius: 6px 12px 12px 6px; color: #fff; overflow: hidden;
+  padding: 16px 16px 14px 22px; isolation: isolate;
+  box-shadow: var(--shadow-md), inset 0 0 0 1px rgba(255,255,255,0.08);
+}
+.cover::before { /* soft light */
+  content: ''; position: absolute; inset: 0; z-index: -1;
+  background: radial-gradient(120% 70% at 85% 0%, rgba(255,255,255,0.22), transparent 60%);
+}
+.cover::after { /* ruled lines */
+  content: ''; position: absolute; left: 22px; right: 16px; top: 46%; height: 34%; z-index: -1;
+  background: repeating-linear-gradient(to bottom, rgba(255,255,255,0.14) 0 1px, transparent 1px 9px);
+  mask-image: linear-gradient(to bottom, #000 40%, transparent);
+}
+.spine { position: absolute; left: 0; top: 0; bottom: 0; width: 9px; background: rgba(15,10,30,0.28); box-shadow: 1px 0 0 rgba(255,255,255,0.14); }
+
+.codes     { background: linear-gradient(150deg, #7C3AED 0%, #5B21B6 62%, #3B1480 100%); }
+.acts      { background: linear-gradient(150deg, #6D28D9 0%, #4C1D95 64%, #2E1065 100%); }
+.corporate { background: linear-gradient(150deg, #A78BFA 0%, #7C3AED 58%, #5B21B6 100%); }
+
+.cat  { padding-right: 0; font-size: 9px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; opacity: 0.82; }
+.name { font-family: var(--font-serif); font-weight: 600; font-size: 19px; line-height: 1.15; letter-spacing: -0.01em; margin-top: 10px; text-wrap: balance; }
+.year { font-family: var(--font-serif); font-style: italic; font-size: 34px; line-height: 1; opacity: 0.95; margin-top: auto; }
+.fmt  { position: absolute; right: 12px; bottom: 14px; font-size: 9px; font-weight: 700; letter-spacing: 0.08em; padding: 2px 7px; border-radius: 99px; background: rgba(255,255,255,0.18); }
+
+.sm .name { font-size: 12px; margin-top: 6px; } .sm .year { font-size: 20px; } .sm { padding: 10px 10px 9px 15px; } .sm .cat { font-size: 7px; } .sm .fmt { display: none; }
+.lg .name { font-size: 24px; } .lg .year { font-size: 44px; }

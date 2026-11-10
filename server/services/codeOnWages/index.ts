@@ -50,25 +50,30 @@ export async function generateCodeOnWages(masterBuffer: Buffer): Promise<CodeOnW
     throw new Error('generateCodeOnWages: no employee rows found in the master workbook.');
   }
 
+  // Run each form concurrently, but tag any failure with the form name so a bad
+  // template or mapping is identifiable instead of a bare exceljs error.
+  const run = async (label: string, task: () => Promise<Buffer>): Promise<Buffer> => {
+    try {
+      return await task();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new Error(`Code on Wages – ${label} failed: ${msg}`);
+    }
+  };
+
   const [formI, formII, formIIMuster, formIII, formIV, formVI] = await Promise.all([
-    generateFinesRegister(
-      loadTemplateBuffer('Form I - Register of Fines.xlsx'), masterData,
-    ),
-    generateDeductionsRegister(
-      loadTemplateBuffer('Form II - Deductions.xlsx'), masterData,
-    ),
-    generateMusterRollCumWageRegister(
-      loadTemplateBuffer('Form II Muster Roll cum Wage Register.xlsx'), masterData,
-    ),
-    generateOvertimeRegister(
-      loadTemplateBuffer('Form III - Overtime Register.xlsx'), masterData,
-    ),
-    generateWageRegister(
-      loadTemplateBuffer('Form IV - Wage Register.xlsx'), masterData,
-    ),
-    generateMusterRoll(
-      loadTemplateBuffer('Form VI - Muster Roll.xlsx'), masterData,
-    ),
+    run('Form I (Register of Fines)', () =>
+      generateFinesRegister(loadTemplateBuffer('Form I - Register of Fines.xlsx'), masterData)),
+    run('Form II (Deductions)', () =>
+      generateDeductionsRegister(loadTemplateBuffer('Form II - Deductions.xlsx'), masterData)),
+    run('Form II Muster Roll cum Wage Register', () =>
+      generateMusterRollCumWageRegister(loadTemplateBuffer('Form II Muster Roll cum Wage Register.xlsx'), masterData)),
+    run('Form III (Overtime Register)', () =>
+      generateOvertimeRegister(loadTemplateBuffer('Form III - Overtime Register.xlsx'), masterData)),
+    run('Form IV (Wage Register)', () =>
+      generateWageRegister(loadTemplateBuffer('Form IV - Wage Register.xlsx'), masterData)),
+    run('Form VI (Muster Roll)', () =>
+      generateMusterRoll(loadTemplateBuffer('Form VI - Muster Roll.xlsx'), masterData)),
   ]);
 
   const files: ZipFile[] = [
