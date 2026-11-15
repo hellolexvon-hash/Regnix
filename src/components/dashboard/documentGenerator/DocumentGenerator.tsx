@@ -19,6 +19,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { useValidationStore } from './validationStore';
 import styles from './DocumentGenerator.module.css';
 import LiveRegister from './LiveRegister';
+import { loadCompanyProfile, saveCompanyProfile } from './companyProfileApi';
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1010,6 +1011,20 @@ export default function DocumentGenerator() {
     setCompany((current) => mergeSeedIntoCompany(current, seeded));
   }, [authLoading, profile, user?.email]);
 
+  // Saved company details (from a previous visit) win over the profile seed.
+  useEffect(() => {
+    if (authLoading) return;
+    let active = true;
+    void loadCompanyProfile().then((saved) => {
+      if (!active || !saved) return;
+      const filled = Object.fromEntries(
+        Object.entries(saved).filter(([, v]) => typeof v === 'string' && v.trim() !== ''),
+      ) as Partial<CompanyDetails>;
+      if (Object.keys(filled).length) setCompany((current) => ({ ...current, ...filled }));
+    });
+    return () => { active = false; };
+  }, [authLoading]);
+
   useEffect(() => {
     if (authLoading) return;
 
@@ -1089,7 +1104,7 @@ export default function DocumentGenerator() {
           <Step1
             data={company}
             onChange={p => setCompany(d => ({ ...d, ...p }))}
-            onNext={() => setStep(2)}
+            onNext={() => { void saveCompanyProfile(company); setStep(2); }}
           />
         )}
         {step === 2 && (

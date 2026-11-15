@@ -1,5 +1,7 @@
 import { Router, type Request, type Response } from 'express';
+import { createHash } from 'node:crypto';
 import { getSupabaseAdmin } from '../lib/supabaseAdmin.js';
+import * as zoho from '../lib/zohoWorkDrive.js';
 
 const router = Router();
 
@@ -243,6 +245,117 @@ router.post('/validation/state', async (req: Request, res: Response) => {
       ok: false,
       message: error instanceof Error ? error.message : 'Failed to save validation state.',
     });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/validation/zoho-upload
+// Stores one validation document in the company's Zoho WorkDrive folder — the
+// same company folder the KYC documents use (profiles.zoho_folder_id), inside a
+// "Statutory - Company Related Docs" sub-folder.
+// Auth: Supabase access token in `Authorization: Bearer …`.
+// Body: { fileName, companyName?, dataBase64 }   (≤ 3 MB per file: Vercel body cap)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const ZOHO_SUBFOLDER = 'Statutory - Company Related Docs';
+const ZOHO_MAX_BYTES = 3 * 1024 * 1024;
+
+const ZOHO_MIME: Record<string, string> = {
+  pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  xlsm: 'application/vnd.ms-excel.sheet.macroEnabled.12',
+  xls: 'application/vnd.ms-excel', csv: 'text/csv',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  doc: 'application/msword',
+};
+
+/** Content sniffing — never trust the declared extension alone. */
+function zohoSniffOk(ext: string, b: Buffer): boolean {
+  const head = b.subarray(0, 8);
+  if (ext === 'pdf') return b.subarray(0, 4).toString('latin1') === '%PDF';
+  if (ext === 'png') return head.equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+  if (ext === 'jpg' || ext === 'jpeg') return b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff;
+  if (ext === 'xlsx' || ext === 'xlsm' || ext === 'docx') return b[0] === 0x50 && b[1] === 0x4b; // PK zip
+  if (ext === 'xls' || ext === 'doc') return b[0] === 0xd0 && b[1] === 0xcf && b[2] === 0x11 && b[3] === 0xe0; // OLE
+  if (ext === 'csv') return !b.includes(0);
+  return false;
+}
+
+type SubFolderFn = (parentId: string, name: string) => Promise<{ id: string; url?: string }>;
+
+router.post('/validation/zoho-upload', async (req: Request, res: Response) => {
+  try {
+    const token = String(req.headers.authorization ?? '').replace(/^Bearer\s+/i, '').trim();
+    if (!token) return res.status(401).json({ ok: false, message: 'Sign in required.' });
+
+    const supabase = getSupabaseAdmin();
+    const { data: auth, error: authErr } = await supabase.auth.getUser(token);
+    if (authErr || !auth.user) return res.status(401).json({ ok: false, message: 'Invalid session.' });
+    const userId = auth.user.id;
+
+    const { fileName, dataBase64 } = (req.body ?? {}) as Record<string, unknown>;
+    if (typeof fileName !== 'string' || !fileName || typeof dataBase64 !== 'string') {
+      return res.status(400).json({ ok: false, message: 'Missing fields.' });
+    }
+    const ext = (fileName.match(/\.([^./\\]+)$/)?.[1] ?? '').toLowerCase();
+    const mime = ZOHO_MIME[ext];
+    if (!mime) return res.status(415).json({ ok: false, message: 'Unsupported file type.' });
+
+    const bytes = Buffer.from(dataBase64, 'base64');
+    if (bytes.length === 0) return res.status(400).json({ ok: false, message: 'Empty file.' });
+    if (bytes.length > ZOHO_MAX_BYTES) return res.status(413).json({ ok: false, message: 'File is larger than 3 MB.' });
+    if (!zohoSniffOk(ext, bytes)) return res.status(415).json({ ok: false, message: 'File content does not match its type.' });
+
+    // Same content already stored for this user → nothing to do.
+    const sha256 = createHash('sha256').update(bytes).digest('hex');
+    const { data: dup } = await supabase
+      .from('validation_zoho_files').select('id, zoho_url')
+      .eq('profile_id', userId).eq('sha256', sha256).maybeSingle();
+    if (dup) return res.json({ ok: true, duplicate: true, url: dup.zoho_url ?? null });
+
+    // 1) Company folder — same one the KYC upload uses (created on first use).
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('company_name, firm_name, full_name, zoho_folder_id')
+      .eq('id', userId).maybeSingle();
+    let companyFolderId = (profile?.zoho_folder_id as string | null) ?? null;
+    if (!companyFolderId) {
+      const name = (profile?.company_name as string) || (profile?.firm_name as string)
+        || (profile?.full_name as string) || 'Unnamed company';
+      const folder = await zoho.createCompanyFolder(name);
+      companyFolderId = folder.id;
+      await supabase.from('profiles').update({ zoho_folder_id: folder.id, zoho_folder_url: folder.url }).eq('id', userId);
+    }
+
+    // 2) "Statutory - Company Related Docs" sub-folder (needs createSubFolder in
+    //    lib/zohoWorkDrive.ts; until it exists the file goes in the company
+    //    folder with the sub-folder name as a filename prefix).
+    const createSubFolder = (zoho as unknown as { createSubFolder?: SubFolderFn }).createSubFolder;
+    let targetFolderId = companyFolderId;
+    let storedName = `${ZOHO_SUBFOLDER} - ${fileName}`;
+    if (typeof createSubFolder === 'function') {
+      const { data: row } = await supabase
+        .from('zoho_company_folders').select('statutory_folder_id').eq('profile_id', userId).maybeSingle();
+      let subId = (row?.statutory_folder_id as string | null) ?? null;
+      if (!subId) {
+        subId = (await createSubFolder(companyFolderId, ZOHO_SUBFOLDER)).id;
+        await supabase.from('zoho_company_folders').upsert({ profile_id: userId, statutory_folder_id: subId });
+      }
+      targetFolderId = subId;
+      storedName = fileName;
+    }
+
+    const zf = await zoho.uploadFile(targetFolderId, storedName, mime, bytes);
+
+    await supabase.from('validation_zoho_files').insert({
+      profile_id: userId, sha256, file_name: storedName, size_bytes: bytes.length,
+      zoho_file_id: zf.id, zoho_url: zf.url,
+    });
+
+    res.json({ ok: true, fileName: storedName, url: zf.url ?? null });
+  } catch (error) {
+    console.error('[validation/zoho-upload]', error);
+    res.status(500).json({ ok: false, message: 'Upload to WorkDrive failed.' });
   }
 });
 

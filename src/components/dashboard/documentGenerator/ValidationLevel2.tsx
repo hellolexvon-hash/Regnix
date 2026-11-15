@@ -30,11 +30,14 @@
  * from Validation.module.css (new v2* classes).
  */
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useMemo } from 'react';
 import * as XLSX from 'xlsx';
 import s from './Validation.module.css';
 import TermsModal from './TermsModal';
 import type { UploadedDoc, SheetPreview } from './validationStore';
+import LiveRegister from './LiveRegister';
+import PdfViewer from './PdfViewer';
+import { uploadValidationDocs } from './validationDocsUpload';
 
 /* ════════════════════════════════════════════════════════════════════════
    TYPES
@@ -620,6 +623,14 @@ export default function ValidationLevel2({
   const [issFilt,      setIssFilt]      = useState<string>('All');
   const [expandedRule, setExpandedRule] = useState<string | null>(null);
 
+  /* Document viewer: 👁 opens the uploaded file in the PDF viewer (PDF) or the
+     Live Register workspace (Excel); "Live Register" opens the master register. */
+  const [viewDocId,  setViewDocId]  = useState<string | null>(null);
+  const [showMaster, setShowMaster] = useState(false);
+  const viewDoc  = docCards.find(d => d.id === viewDocId);
+  const viewFile = useMemo(() => viewDoc?.file ?? null, [viewDoc?.file]);
+  const viewIsPdf = !!viewFile && (viewFile.type === 'application/pdf' || /\.pdf$/i.test(viewFile.name));
+
   /* ── Derived stats ── */
   const totalDocs     = docCards.length;
   const uploaded      = docCards.filter(d => d.uploadStatus === 'Uploaded').length;
@@ -649,6 +660,8 @@ export default function ValidationLevel2({
     if (!files?.length) return;
     const file   = files[0];
     const sheets = /\.xlsx?$/i.test(file.name) ? await parseXlsx(file).catch(() => undefined) : undefined;
+    // Store a copy in the company's Zoho WorkDrive folder (background, never blocks the UI)
+    void uploadValidationDocs([{ file, name: file.name }], companyName);
 
     setDocCards(prev => prev.map(d => d.id === docId ? { ...d, uploadStatus: 'Uploaded', file, sheets } : d));
     setAiRunning(docId);
@@ -684,7 +697,7 @@ export default function ValidationLevel2({
         return { ...d, validationRules: rules, validated: true, rulesPassed: passed, rulesFailed: failed, score };
       }));
     }, 1600);
-  }, []);
+  }, [companyName]);
 
   /* ── Manual rule status update ── */
   function updateRuleStatus(docId: string, ruleId: string, status: RuleStatus) {
@@ -880,6 +893,9 @@ export default function ValidationLevel2({
                               </button>
                             </>
                           )}
+                          {doc.uploadStatus === 'Uploaded' && doc.file && (
+                            <button className={s.v2ActionBtn} title="View document" onClick={() => setViewDocId(doc.id)}>👁</button>
+                          )}
                           {doc.uploadStatus === 'Uploaded' && (
                             <button className={`${s.v2ActionBtn} ${s.v2ActionBtnPrimary}`} title="Open validation workspace"
                               onClick={() => { setActivDocId(doc.id); setActiveView('validate'); }}>
@@ -972,7 +988,19 @@ export default function ValidationLevel2({
                             <input ref={el => { fileInputRefs.current[activeDoc.id] = el; }} type="file" accept=".xlsx,.xls,.pdf"
                               className={s.hiddenInput} onChange={e => handleFileUpload(activeDoc.id, e.target.files)} />
                           </div>
-                        ) : <ScoreRing score={activeDoc.score} size={64} />}
+                        ) : (
+                          <>
+                            {activeDoc.file && (
+                              <button className={s.btnSecondary} title="Open this document in the viewer"
+                                onClick={() => setViewDocId(activeDoc.id)}>👁 View document</button>
+                            )}
+                            {liveRegisterFile && (
+                              <button className={s.btnSecondary} title="Open the master Live Register to cross-check"
+                                onClick={() => setShowMaster(true)}>📊 Live Register</button>
+                            )}
+                            <ScoreRing score={activeDoc.score} size={64} />
+                          </>
+                        )}
                       </div>
                     </div>
 
@@ -1218,6 +1246,34 @@ export default function ValidationLevel2({
         )}
 
       </div>
+
+      {/* Uploaded document viewer (PDF → PdfViewer, Excel → Live Register) */}
+      {viewIsPdf ? (
+        <PdfViewer
+          open={viewDocId !== null}
+          onClose={() => setViewDocId(null)}
+          file={viewFile}
+          fileName={viewFile?.name ?? 'Document.pdf'}
+          companyName={companyName}
+        />
+      ) : (
+        <LiveRegister
+          open={viewDocId !== null}
+          onClose={() => setViewDocId(null)}
+          uploadedFile={viewFile}
+          companyName={companyName}
+        />
+      )}
+
+      {/* Master Live Register for cross-checking */}
+      {liveRegisterFile && (
+        <LiveRegister
+          open={showMaster}
+          onClose={() => setShowMaster(false)}
+          uploadedFile={liveRegisterFile}
+          companyName={companyName}
+        />
+      )}
 
       {showTerms && (
         <TermsModal level={2} onAgree={() => { setShowTerms(false); onComplete(); }} onClose={() => setShowTerms(false)} />

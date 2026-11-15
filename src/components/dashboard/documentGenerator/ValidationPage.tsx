@@ -14,6 +14,7 @@ import ValidationLanding from './ValidationLanding';
 import ValidationLevel1  from './ValidationLevel1';
 import ValidationLevel2  from './ValidationLevel2';
 import ValidationLevel3  from './ValidationLevel3';
+import { uploadValidationDocs } from './validationDocsUpload';
 
 interface ValidationPageProps {
   companyName?:      string;
@@ -127,6 +128,8 @@ export default function ValidationPage({
     sig: string,
   ) {
     setUploadedDocs(docs);
+    // Background copy of every Level 1 document to the company's Zoho WorkDrive folder
+    void uploadValidationDocs(docs.map(d => ({ file: d.file, name: d.name })), resolvedCompanyName);
     setSignatureUrl(sig);
     setLevelState(0, 'done');
     setLevelState(1, 'pending');
