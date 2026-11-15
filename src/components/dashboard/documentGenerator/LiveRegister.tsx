@@ -19,7 +19,7 @@
  */
 
 import {
-  useState, useRef, useEffect, useCallback, useMemo,
+  useState, useRef, useEffect, useCallback, useMemo, useDeferredValue,
 } from 'react';
 import { createPortal } from 'react-dom';
 // Using standard xlsx library for spreadsheet operations
@@ -240,8 +240,16 @@ export default function LiveRegister({
   }, [winState]);
 
   // ── Auto-load uploaded file ─────────────────────────────────────────────────
+  // Only (re)parse when the file really changed. Parents often hand us a new
+  // File *object* on every render (e.g. new File([blob], …)); comparing by
+  // identity made the viewer reload + flash the spinner in a loop.
+  const loadedSigRef = useRef('');
+  const loadTokenRef = useRef(0);
   useEffect(() => {
-    if (uploadedFile && open) load(uploadedFile);
+    if (!uploadedFile || !open) return;
+    const sig = `${uploadedFile.name}|${uploadedFile.size}`;
+    if (sig === loadedSigRef.current) return;
+    load(uploadedFile);
   }, [uploadedFile, open]);
 
   // ── Reset visible cols when sheet changes ───────────────────────────────────
@@ -252,19 +260,25 @@ export default function LiveRegister({
 
   // ── Load file ───────────────────────────────────────────────────────────────
   const load = useCallback(async (file: File) => {
+    loadedSigRef.current = `${file.name}|${file.size}`;
+    const token = ++loadTokenRef.current;
     setLoading(true);
     setLoadErr('');
     setImportOpen(false);
     try {
       const parsed = await parseFile(file);
+      if (token !== loadTokenRef.current) return; // a newer load superseded this one
       setSheets(parsed);
       setActiveIdx(0);
       setSearch(''); setFilterCol(null); setFilterVal('');
       setSortCol(null); setSelectedRows(new Set());
     } catch (e: any) {
-      setLoadErr('Could not parse file: ' + (e?.message ?? 'unknown'));
+      if (token === loadTokenRef.current) {
+        loadedSigRef.current = ''; // allow a retry
+        setLoadErr('Could not parse file: ' + (e?.message ?? 'unknown'));
+      }
     } finally {
-      setLoading(false);
+      if (token === loadTokenRef.current) setLoading(false);
     }
   }, []);
 
@@ -290,10 +304,11 @@ export default function LiveRegister({
   };
 
   // ── Visible rows ────────────────────────────────────────────────────────────
+  const deferredSearch = useDeferredValue(search); // typing stays smooth on big sheets
   const visibleRows = useMemo(() => {
     if (!sheet) return [];
     let rows = sheet.rows;
-    const q  = search.trim().toLowerCase();
+    const q  = deferredSearch.trim().toLowerCase();
     if (q) {
       // Split on whitespace — all terms must match somewhere in the row
       const terms = q.split(/\s+/).filter(Boolean);
@@ -315,7 +330,7 @@ export default function LiveRegister({
       });
     }
     return rows;
-  }, [sheet, search, filterCol, filterVal, sortCol, sortDir]);
+  }, [sheet, deferredSearch, filterCol, filterVal, sortCol, sortDir]);
 
   // ── Column indices to show ───────────────────────────────────────────────────
   const shownCols = useMemo(
@@ -324,6 +339,9 @@ export default function LiveRegister({
   );
 
   // ── Audit computations ───────────────────────────────────────────────────────
+  // The heavy parts (duplicates + numeric stats over every column) only run
+  // while the Audit tab is actually open.
+  const auditActive = panelOpen && panelTab === 'audit';
   const auditData = useMemo(() => {
     if (!sheet || !visibleRows.length) return null;
 
@@ -340,13 +358,13 @@ export default function LiveRegister({
       const v = String(r[firstCi] ?? '');
       dupMap.set(v, (dupMap.get(v) ?? 0) + 1);
     });
-    const duplicates = [...dupMap.entries()]
+    const duplicates = auditActive ? [...dupMap.entries()]
       .filter(([, n]) => n > 1)
       .sort((a, b) => b[1] - a[1])
-      .slice(0, 8);
+      .slice(0, 8) : [];
 
     // Numeric summary per shown col
-    const numericSummary = shownCols.map(ci => {
+    const numericSummary = (auditActive ? shownCols : []).map(ci => {
       const vals = visibleRows.map(r => r[ci]).filter(v => typeof v === 'number') as number[];
       if (!vals.length) return null;
       const sum  = vals.reduce((a, b) => a + b, 0);
@@ -357,7 +375,30 @@ export default function LiveRegister({
     }).filter(Boolean) as { col: string; sum: number; min: number; max: number; avg: number; count: number }[];
 
     return { blanks, duplicates, numericSummary };
-  }, [sheet, visibleRows, shownCols]);
+  }, [sheet, visibleRows, shownCols, auditActive]);
+
+  // ── Row windowing: only render the rows currently in view ────────────────────
+  const ROW_H = 28, OVERSCAN = 15;
+  const [scrollTop, setScrollTop] = useState(0);
+  const [viewH,     setViewH]     = useState(800);
+  const rafRef = useRef(0);
+  const onTableScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    const el = e.currentTarget;
+    cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(() => {
+      setScrollTop(el.scrollTop);
+      setViewH(el.clientHeight);
+    });
+  }, []);
+  useEffect(() => () => cancelAnimationFrame(rafRef.current), []);
+  useEffect(() => {
+    // new sheet / filter / sort → back to the top
+    if (tableWrapRef.current) tableWrapRef.current.scrollTop = 0;
+    setScrollTop(0);
+  }, [activeIdx, deferredSearch, filterCol, filterVal, sortCol, sortDir, sheets]);
+  useEffect(() => {
+    if (tableWrapRef.current) setViewH(tableWrapRef.current.clientHeight);
+  }, [sheet, panelOpen, isFloating, winState]);
 
   // ── Sort toggle ──────────────────────────────────────────────────────────────
   const toggleSort = (ci: number) => {
@@ -574,6 +615,9 @@ export default function LiveRegister({
       : n >= 1000
         ? (n / 1000).toFixed(1) + 'K'
         : String(Math.round(n * 100) / 100);
+
+  const winStart = Math.max(0, Math.floor(scrollTop / ROW_H) - OVERSCAN);
+  const winEnd   = Math.min(visibleRows.length, Math.ceil((scrollTop + viewH) / ROW_H) + OVERSCAN);
 
   const windowClass = [
     lr.window,
@@ -818,7 +862,7 @@ export default function LiveRegister({
 
               {/* Table */}
               {!loading && sheet && searchMode === 'table' && (
-                <div className={lr.tableWrap} ref={tableWrapRef}>
+                <div className={lr.tableWrap} ref={tableWrapRef} onScroll={onTableScroll}>
                   <table className={lr.table}>
                     <thead>
                       <tr>
@@ -850,10 +894,17 @@ export default function LiveRegister({
                           </td>
                         </tr>
                       ) : (
-                        visibleRows.map((row, ri) => {
+                        <>
+                        {winStart > 0 && (
+                          <tr aria-hidden style={{ height: winStart * ROW_H }}>
+                            <td colSpan={shownCols.length + 1} style={{ padding: 0, border: 0 }} />
+                          </tr>
+                        )}
+                        {visibleRows.slice(winStart, winEnd).map((row, wi) => {
+                          const ri = winStart + wi;
                           const isSel = selectedRows.has(ri);
                           return (
-                            <tr key={ri}
+                            <tr key={ri} style={{ height: ROW_H }}
                               className={`${ri % 2 ? lr.rowOdd : lr.rowEven} ${isSel ? lr.rowSelected : ''}`}
                               onClick={() => toggleRow(ri)}>
                               <td className={`${lr.td} ${lr.tdRow}`}>{ri + 1}</td>
@@ -871,7 +922,13 @@ export default function LiveRegister({
                               })}
                             </tr>
                           );
-                        })
+                        })}
+                        {winEnd < visibleRows.length && (
+                          <tr aria-hidden style={{ height: (visibleRows.length - winEnd) * ROW_H }}>
+                            <td colSpan={shownCols.length + 1} style={{ padding: 0, border: 0 }} />
+                          </tr>
+                        )}
+                        </>
                       )}
                     </tbody>
                   </table>
@@ -885,7 +942,7 @@ export default function LiveRegister({
                     <div className={lr.noRows} style={{ gridColumn: '1/-1', textAlign:'center', padding:40 }}>
                       No rows match your search
                     </div>
-                  ) : visibleRows.map((row, ri) => {
+                  ) : visibleRows.slice(0, 300).map((row, ri) => {
                     const isSel = selectedRows.has(ri);
                     // Pick a display name from common identifier columns
                     const nameIdx  = shownCols.find(ci => /name|employee|worker|person/i.test(sheet.headers[ci] ?? '')) ?? shownCols[1] ?? shownCols[0];

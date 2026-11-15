@@ -22,7 +22,7 @@
  *   • Zero inline styles — all from Validation.module.css
  */
 
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import * as XLSX from 'xlsx';
 import JSZip from 'jszip';
 import s from './Validation.module.css';
@@ -286,6 +286,7 @@ export default function ValidationLevel1({ onComplete, onBack }: ValidationLevel
   const [creatingFolder, setCreatingFolder] = useState(false);
   const [newFolderName,  setNewFolderName]  = useState('');
   const [extracting,     setExtracting]     = useState<string | null>(null); // zip name being extracted
+  const [autoMsg,        setAutoMsg]        = useState('');
 
   /* Full-screen viewer launch — set when the 👁 button opens a register or PDF */
   const [registerViewerId, setRegisterViewerId] = useState<string | null>(null);
@@ -333,14 +334,24 @@ export default function ValidationLevel1({ onComplete, onBack }: ValidationLevel
      but typing them as File keeps the prop contracts simple and consistent
      with files uploaded directly, not via ZIP). */
   const registerEntry = entries.find(e => e.id === registerViewerId);
-  const registerFile  = registerEntry
-    ? (registerEntry.file ?? new File([registerEntry.blob!], `${registerEntry.name}${registerEntry.ext}`))
-    : null;
+  // Memoised: building a new File on every render made LiveRegister think the
+  // file changed and reload (spinner flicker) on each click/hover in this screen.
+  const registerFile = useMemo(
+    () => registerEntry
+      ? (registerEntry.file ?? new File([registerEntry.blob!], `${registerEntry.name}${registerEntry.ext}`))
+      : null,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [registerViewerId, registerEntry?.file, registerEntry?.blob],
+  );
 
   const pdfEntry = entries.find(e => e.id === pdfViewerId);
-  const pdfFile  = pdfEntry
-    ? (pdfEntry.file ?? new File([pdfEntry.blob!], `${pdfEntry.name}${pdfEntry.ext}`, { type: 'application/pdf' }))
-    : null;
+  const pdfFile  = useMemo(
+    () => pdfEntry
+      ? (pdfEntry.file ?? new File([pdfEntry.blob!], `${pdfEntry.name}${pdfEntry.ext}`, { type: 'application/pdf' }))
+      : null,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [pdfViewerId, pdfEntry?.file, pdfEntry?.blob],
+  );
 
   /* Breadcrumb chain from root to currentFolder */
   const breadcrumb: FmEntry[] = [];
@@ -527,6 +538,28 @@ export default function ValidationLevel1({ onComplete, onBack }: ValidationLevel
     setSelected(new Set());
   }
 
+  /**
+   * One-click auto-check: every readable, non-empty file is marked verified;
+   * unreadable / empty ones stay Pending and are listed so only those need a
+   * manual look. Replaces ticking 20–30 files one by one.
+   */
+  function autoCheckAll() {
+    const bad: string[] = [];
+    const okIds = new Set<string>();
+    for (const e of entries) {
+      if (e.kind !== 'file') continue;
+      const isSheet = e.fileType === 'xlsx' || e.fileType === 'xls';
+      const ok = e.size > 0 && (!isSheet || (e.sheets?.some(sh => sh.rows.length > 0) ?? false));
+      if (ok) okIds.add(e.id); else bad.push(`${e.name}${e.ext}`);
+    }
+    setEntries(prev => prev.map(e => okIds.has(e.id) ? { ...e, fixed: true } : e));
+    setAutoMsg(
+      bad.length === 0
+        ? `✓ ${okIds.size} files passed auto-check`
+        : `✓ ${okIds.size} passed · ⚠ ${bad.length} need review: ${bad.slice(0, 3).join(', ')}${bad.length > 3 ? '…' : ''}`,
+    );
+  }
+
   function verifySelected() {
     const ids = new Set(selected);
     setEntries(prev => prev.map(e => ids.has(e.id) ? { ...e, fixed: true } : e));
@@ -683,6 +716,15 @@ export default function ValidationLevel1({ onComplete, onBack }: ValidationLevel
                 <span className={s.fmBtnIcon}>📁</span> New Folder
               </button>
 
+              <button
+                className={s.fmBtn}
+                onClick={autoCheckAll}
+                disabled={allFiles.length === 0}
+                title="Mark every readable, non-empty file as verified"
+              >
+                <span className={s.fmBtnIcon}>⚡</span> Auto-check
+              </button>
+
               <div className={s.fmDivider} />
 
               {/* Breadcrumb inside toolbar on wide screens */}
@@ -747,6 +789,12 @@ export default function ValidationLevel1({ onComplete, onBack }: ValidationLevel
                 <span className={s.fmStat}>
                   <span className={s.fmStatNum}>{verifiedCount}</span>/{allFiles.length} verified (all folders)
                 </span>
+              </>
+            )}
+            {autoMsg && (
+              <>
+                <span className={s.fmStatSep}>·</span>
+                <span className={s.fmStat}>{autoMsg}</span>
               </>
             )}
             {extracting && (

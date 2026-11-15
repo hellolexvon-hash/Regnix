@@ -371,21 +371,35 @@ async function reviveLiveRegisterFile(scope: string, fileName: string | null, fi
 }
 
 
+// Signature of every file already written to IndexedDB, so a state change
+// never re-writes unchanged files (this was the main source of lag).
+const _persistedSigs = new Map<string, string>();
+const fileSig = (f: File) => `${f.name}|${f.size}|${f.lastModified}`;
+
 async function persistFilesToBrowser(scope: string, store: Store) {
   if (!isBrowser()) return;
 
   for (const doc of store.uploadedDocs) {
+    const key = `${scope}:doc:${doc.id}`;
+    const sig = fileSig(doc.file);
+    if (_persistedSigs.get(key) === sig) continue;
+    _persistedSigs.set(key, sig);
     await putFile(scope, `doc:${doc.id}`, doc.file, doc.file.name, doc.file.type || 'application/octet-stream');
   }
 
   if (store.liveRegisterFile) {
-    await putFile(
-      scope,
-      'live-register',
-      store.liveRegisterFile,
-      store.liveRegisterFile.name,
-      store.liveRegisterFile.type || 'application/octet-stream',
-    );
+    const key = `${scope}:live-register`;
+    const sig = fileSig(store.liveRegisterFile);
+    if (_persistedSigs.get(key) !== sig) {
+      _persistedSigs.set(key, sig);
+      await putFile(
+        scope,
+        'live-register',
+        store.liveRegisterFile,
+        store.liveRegisterFile.name,
+        store.liveRegisterFile.type || 'application/octet-stream',
+      );
+    }
   }
 }
 
@@ -478,25 +492,51 @@ async function syncStoreToBackend(scope: string, snapshot: PersistedStore): Prom
   }
 }
 
+let _persistTimer: ReturnType<typeof setTimeout> | null = null;
+let _backendTimer: ReturnType<typeof setTimeout> | null = null;
+
 function persistStore(scope: string, syncBackend = true) {
   const snapshot = createPersistedSnapshot(_store);
   storageSet(scope, snapshot);
   void persistFilesToBrowser(scope, _store);
   if (syncBackend) {
-    void syncStoreToBackend(scope, snapshot);
+    // Debounce the network call: many setters can fire in one tick.
+    if (_backendTimer) clearTimeout(_backendTimer);
+    _backendTimer = setTimeout(() => {
+      void syncStoreToBackend(scope, createPersistedSnapshot(_store));
+    }, 500);
   }
 }
 
+function schedulePersist(scope: string) {
+  if (_persistTimer) clearTimeout(_persistTimer);
+  _persistTimer = setTimeout(() => persistStore(scope), 120);
+}
+
+function sameValue(a: unknown, b: unknown): boolean {
+  if (Object.is(a, b)) return true;
+  if (Array.isArray(a) && Array.isArray(b)) {
+    return a.length === b.length && a.every((v, i) => Object.is(v, b[i]));
+  }
+  if (a instanceof Date && b instanceof Date) return a.getTime() === b.getTime();
+  if (typeof File !== 'undefined' && a instanceof File && b instanceof File) {
+    return fileSig(a) === fileSig(b);
+  }
+  return false;
+}
+
 function setField<K extends keyof Store>(scope: string, key: K, value: Store[K]) {
+  // No-op when nothing changed — prevents notify/persist loops from effects.
+  if (sameValue(_store[key], value)) return;
   _store = { ..._store, [key]: value };
   notify();
-  persistStore(scope);
+  schedulePersist(scope);
 }
 
 function setUploadedDocsInternal(scope: string, docs: UploadedDoc[]) {
   _store = { ..._store, uploadedDocs: docs };
   notify();
-  persistStore(scope);
+  schedulePersist(scope);
 }
 
 async function ensureHydrated(scope: string) {
@@ -505,9 +545,67 @@ async function ensureHydrated(scope: string) {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Stable actions — created ONCE, so their identity never changes between
+// renders. Components can safely list them in useEffect dependency arrays
+// (previously new functions on every render caused an endless
+// effect → setState → re-render loop).
+// ─────────────────────────────────────────────────────────────────────────────
+let _scope = 'anonymous';
+
+const ACTIONS = {
+  setLevelState(level: 0 | 1 | 2, state: LevelState) {
+    const next = [..._store.levelStates] as [LevelState, LevelState, LevelState];
+    next[level] = state;
+    setField(_scope, 'levelStates', next);
+  },
+  setUploadedDocs(docs: UploadedDoc[]) {
+    setUploadedDocsInternal(_scope, docs);
+  },
+  setSignatureUrl(url: string) {
+    setField(_scope, 'signatureUrl', url);
+  },
+  setSubmittedAt(date: Date | null) {
+    setField(_scope, 'submittedAt', date);
+  },
+  setApproved(val: boolean) {
+    setField(_scope, 'isApproved', val);
+  },
+  setCurrentRoute(route: ValidationRoute) {
+    setField(_scope, 'currentRoute', route);
+  },
+  setCompanyName(name: string) {
+    setField(_scope, 'companyName', name);
+  },
+  setSelectedActs(acts: string[]) {
+    setField(_scope, 'selectedActs', acts);
+  },
+  setLiveRegisterFile(file: File | null) {
+    setField(_scope, 'liveRegisterFile', file);
+  },
+  setValidationSessionId(id: string | null) {
+    setField(_scope, 'validationSessionId', id);
+  },
+  async reload() {
+    await hydrateFromBackendOrStorage(_scope);
+    notify();
+  },
+  resetAll() {
+    _store = cloneDefaultStore();
+    _hydrated = true;
+    _hydratedScope = _scope;
+    _persistedSigs.clear();
+    storageRemove(_scope);
+    void clearScopeFiles(_scope);
+    notify();
+    persistStore(_scope);
+  },
+};
+
 export function useValidationStore() {
   const { user, profile, loading: authLoading } = useAuth();
   const scope = getScopeKey(user?.id ?? null, profile?.email ?? user?.email ?? null);
+  _scope = scope;
   _currentUserId = user?.id ?? null;
   _currentContactEmail = profile?.email ?? user?.email ?? null;
   const [, forceRender] = useState(0);
@@ -517,10 +615,9 @@ export function useValidationStore() {
     _listeners.add(listener);
 
     if (!authLoading) {
-      void ensureHydrated(scope).then(() => {
-        notify();
-        forceRender((n) => n + 1);
-      });
+      // hydrateFromBackendOrStorage() already calls notify() when it finishes,
+      // so no extra notify / forceRender is needed here.
+      void ensureHydrated(scope);
     }
 
     return () => {
@@ -545,63 +642,6 @@ export function useValidationStore() {
   return {
     ..._store,
     hydrated: _hydrated && _hydratedScope === scope && !authLoading,
-
-    setLevelState(level: 0 | 1 | 2, state: LevelState) {
-      const next: [LevelState, LevelState, LevelState] = [..._store.levelStates] as [LevelState, LevelState, LevelState];
-      next[level] = state;
-      setField(scope, 'levelStates', next);
-    },
-
-    setUploadedDocs(docs: UploadedDoc[]) {
-      setUploadedDocsInternal(scope, docs);
-    },
-
-    setSignatureUrl(url: string) {
-      setField(scope, 'signatureUrl', url);
-    },
-
-    setSubmittedAt(date: Date | null) {
-      setField(scope, 'submittedAt', date);
-    },
-
-    setApproved(val: boolean) {
-      setField(scope, 'isApproved', val);
-    },
-
-    setCurrentRoute(route: ValidationRoute) {
-      setField(scope, 'currentRoute', route);
-    },
-
-    setCompanyName(name: string) {
-      setField(scope, 'companyName', name);
-    },
-
-    setSelectedActs(acts: string[]) {
-      setField(scope, 'selectedActs', acts);
-    },
-
-    setLiveRegisterFile(file: File | null) {
-      setField(scope, 'liveRegisterFile', file);
-    },
-
-    setValidationSessionId(id: string | null) {
-      setField(scope, 'validationSessionId', id);
-    },
-
-    async reload() {
-      await hydrateFromBackendOrStorage(scope);
-      notify();
-      forceRender((n) => n + 1);
-    },
-
-    resetAll() {
-      _store = cloneDefaultStore();
-      _hydrated = true;
-      _hydratedScope = scope;
-      storageRemove(scope);
-      void clearScopeFiles(scope);
-      notify();
-      persistStore(scope);
-    },
+    ...ACTIONS,
   };
 }

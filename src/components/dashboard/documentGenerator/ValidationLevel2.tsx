@@ -541,12 +541,28 @@ function initDocs(uploadedDocs: UploadedDoc[] = []): DocCard[] {
   for (const doc of uploadedDocs) {
     byName.set(normalizeName(doc.name), doc);
   }
+  const used = new Set<string>();
+
+  // Exact name first, then tolerant match (names differ in case / suffixes /
+  // underscores after ZIP extraction), so Level 1 uploads are carried over.
+  const findSeed = (masterName: string): UploadedDoc | undefined => {
+    const n = normalizeName(masterName).replace(/[_-]+/g, ' ');
+    const exact = byName.get(normalizeName(masterName));
+    if (exact && !used.has(exact.id)) return exact;
+    for (const [k, doc] of byName) {
+      if (used.has(doc.id)) continue;
+      const kk = k.replace(/[_-]+/g, ' ');
+      if (kk === n || kk.includes(n) || n.includes(kk)) return doc;
+    }
+    return undefined;
+  };
 
   return MASTER_DOCS.map((d, i) => {
     const key   = RULES_KEY_MAP[d.name] ?? (d.name.startsWith('Declaration') ? 'declaration' : 'other-doc');
     const rules = makeRules(key);
-    const seeded = byName.get(normalizeName(d.name));
+    const seeded = findSeed(d.name);
     if (seeded) {
+      used.add(seeded.id);
       return {
         ...d,
         id: `doc-${i}`,

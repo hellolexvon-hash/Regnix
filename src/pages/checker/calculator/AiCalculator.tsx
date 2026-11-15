@@ -3,7 +3,7 @@ import * as XLSX from 'xlsx';
 import styles from './Calculator.module.css';
 import type { Gender, PayrollRules } from './types';
 import { parseRegisterFile, type RegisterTable, type Cell } from './engine/parseRegister';
-import { analyze, key, type Finding } from './engine/patternEngine';
+import { analyze, key, withGrossColumn, type Finding } from './engine/patternEngine';
 import LiveRegister from '@/components/dashboard/documentGenerator/LiveRegister';
 
 interface Props { rules: PayrollRules; gender: Gender; month: number; }
@@ -47,8 +47,9 @@ export function AiCalculator({ rules, gender, month }: Props) {
     if (!base) return null;
     const rows = base.rows.map((r) => [...r]);
     Object.entries(edits).forEach(([k, v]) => { const [r, c] = k.split(':').map(Number); if (rows[r]) rows[r][c] = v; });
-    return { ...base, rows };
+    return withGrossColumn({ ...base, rows }).table;
   }, [base, edits]);
+  const grossAdded = useMemo(() => (base ? withGrossColumn(base).added : false), [base]);
 
   const analysis = useMemo(() => (table ? analyze(table, { rules, gender, month, tolerance }) : null), [table, rules, gender, month, tolerance]);
 
@@ -156,6 +157,8 @@ export function AiCalculator({ rules, gender, month }: Props) {
         <div className={styles.cardTitle}>Patterns found in this register</div>
         {analysis.patterns.length ? <div className={styles.pat}>{analysis.patterns.map((p) => <span key={p}>{p}</span>)}</div>
           : <div className={styles.empty}>No columns could be recognised. Check that the header row contains names like Basic, Gross, PF, ESIC, PT, Net Pay.</div>}
+        {grossAdded && <div className={styles.skip}>No Gross column found — a “Gross Wages (calculated)” column (sum of earnings) was added so the 50% rule can be checked. It is included in the export.</div>}
+        {analysis.notices.map((n) => <div key={n} className={styles.warn} style={{ marginTop: 8 }}>{n}</div>)}
         {analysis.skipped.length > 0 && <div className={styles.skip}>Not checked: {analysis.skipped.join(' · ')}</div>}
       </div>
 

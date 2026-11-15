@@ -1,6 +1,6 @@
 import type { Gender, PayrollRules } from '../types';
 import type { RegisterTable, Cell } from './parseRegister';
-import { ptFor, lwfFor, pfWage, r2 } from './salaryEngine';
+import { ptFor, lwfFor, r2 } from './salaryEngine';
 
 export type Role =
   | 'empId' | 'name' | 'designation' | 'basic' | 'da' | 'hra' | 'allowance' | 'gross'
@@ -31,6 +31,7 @@ export interface Analysis {
   checked: Set<string>;      // cells that were examined (green unless a finding exists)
   patterns: string[];        // human-readable patterns the engine learned from the register
   skipped: string[];         // checks that could not run (missing column etc.)
+  notices: string[];         // things the user should confirm (not errors)
 }
 
 export const key = (r: number, c: number) => `${r}:${c}`;
@@ -92,11 +93,13 @@ export function analyze(table: RegisterTable, opt: AnalysisOptions): Analysis {
   const checked = new Set<string>();
   const patterns: string[] = [];
   const skipped: string[] = [];
+  const notices: string[] = [];
   const tol = opt.tolerance;
   const P = opt.rules.params;
   let fid = 0;
 
   const first = (r: Role) => roles[r]?.[0];
+  const wageOf50 = (i: number) => (num(rows[i][first('basic') as number]) ?? 0) + (first('da') != null ? (num(rows[i][first('da') as number]) ?? 0) : 0);
   const val = (i: number, c: number | undefined) => (c == null ? null : num(rows[i][c]));
   const sumCols = (i: number, cols: number[] = []) => cols.reduce((s, c) => s + (val(i, c) ?? 0), 0);
 
@@ -146,37 +149,61 @@ export function analyze(table: RegisterTable, opt: AnalysisOptions): Analysis {
     });
   }
 
+  // ── 1b. 50% wage rule: Basic + DA must be at least 50% of Gross Wages ────
+  if (grossC != null && basicC != null) {
+    let n = 0, ok = 0;
+    rows.forEach((_, i) => {
+      const g = val(i, grossC); if (g == null || g <= 0) return;
+      n += 1;
+      const w = wageOf50(i);
+      mark(i, basicC);
+      const short = 0.5 * g - w;
+      if (short > tol) flag(i, basicC, 'Basic + DA ≥ 50% of Gross', 'statutory',
+        `Basic+DA is ₹${w.toLocaleString('en-IN')} = ${((w / g) * 100).toFixed(1)}% of Gross ₹${g.toLocaleString('en-IN')}; it must be at least 50%. Raise Basic/DA by ₹${r2(short)} (and reduce allowances so Gross stays the same).`, null);
+      else ok += 1;
+    });
+    if (n) patterns.push(`Basic + DA ≥ 50% of Gross Wages — met in ${ok} of ${n} rows`);
+  }
+
   // ── 2. Statutory checks using the state / industry rules ─────────────────
   const grossOf = (i: number) => (grossC != null ? val(i, grossC) : null);
 
-  if (pfEeC != null && basicC != null) {
-    const variants = rows.map((_, i) => {
-      const b = (val(i, basicC) ?? 0) + (val(i, daC) ?? 0);
-      return { cap: Math.round(pfWage(opt.rules, b, true) * P.pfEmployeeRate), actual: Math.round(b * P.pfEmployeeRate) };
-    });
-    let capHits = 0, actHits = 0, n = 0;
-    rows.forEach((_, i) => { const v = val(i, pfEeC); if (v == null) return; n += 1; if (!differs(v, variants[i].cap)) capHits += 1; if (!differs(v, variants[i].actual)) actHits += 1; });
-    const mode: 'cap' | 'actual' = actHits > capHits ? 'actual' : 'cap';
-    if (n) patterns.push(`PF is ${mode === 'cap' ? `12% of Basic+DA capped at ₹${P.pfWageCeiling.toLocaleString('en-IN')}` : '12% of actual Basic+DA (no wage ceiling)'} in ${Math.max(capHits, actHits)} of ${n} rows`);
+  // PF rule (compliance instruction): contribution wage = Basic + DA, capped at ₹25,000.
+  //   ≤ ₹15,000 → actual · ₹15,001–24,999 → actual (NOT capped at 15,000 / 25,000) · ≥ ₹25,000 → ₹25,000.
+  const wageOf = (i: number) => (val(i, basicC) ?? 0) + (val(i, daC) ?? 0);
+  const inr = (n: number) => n.toLocaleString('en-IN');
+  const ceilingTxt = `₹${inr(P.pfWageCeiling)}`;
+  const pfCheck = (col: number, rate: number, label: string, rule: string) => {
+    let n = 0, hits = 0, below = 0;
     rows.forEach((_, i) => {
-      const v = val(i, pfEeC); if (v == null) return;
-      mark(i, pfEeC);
-      const ok = !differs(v, variants[i].cap) || !differs(v, variants[i].actual);
-      if (!ok) flag(i, pfEeC, 'Employee PF 12%', 'statutory', (variants[i].cap === variants[i].actual ? `PF is ${v}; expected ${variants[i].cap} (12% of Basic+DA).` : `PF is ${v}; expected ${variants[i].cap} (12% of Basic+DA capped at ₹${P.pfWageCeiling.toLocaleString('en-IN')}) or ${variants[i].actual} (uncapped).`), variants[i][mode]);
-      else if (differs(variants[i].cap, variants[i].actual) && differs(v, variants[i][mode]) && Math.max(capHits, actHits) / n >= 0.7)
-        flag(i, pfEeC, 'PF basis consistency', 'pattern', `This row uses the ${mode === 'cap' ? 'uncapped' : 'capped'} PF basis, but ${Math.max(capHits, actHits)} of ${n} rows use the ${mode === 'cap' ? 'capped' : 'uncapped'} basis.`, variants[i][mode]);
+      const v = val(i, col); if (v == null) return;
+      n += 1;
+      const w = wageOf(i);
+      if (w < P.pfWageCeiling) below += 1;
+      const exp = Math.round(Math.min(w, P.pfWageCeiling) * rate);
+      mark(i, col);
+      if (!differs(v, exp)) { hits += 1; return; }
+      let why = `${label} is ${v}; expected ${exp} (${(rate * 100).toFixed(0)}% of Basic+DA ₹${inr(w)}${w > P.pfWageCeiling ? `, capped at ${ceilingTxt}` : ''}).`;
+      if (P.pfWageCeiling !== 15000 && w > 15000 && !differs(v, Math.round(Math.min(w, 15000) * rate)))
+        why = `${label} looks capped at the old ₹15,000 ceiling, but Basic+DA is ₹${inr(w)} — it must be on the actual Basic+DA up to ${ceilingTxt}. Expected ${exp}, found ${v}.`;
+      else if (w >= P.pfWageCeiling && !differs(v, Math.round(w * rate)))
+        why = `${label} is on the full Basic+DA of ₹${inr(w)}; the contribution wage is capped at ${ceilingTxt}. Expected ${exp}, found ${v}.`;
+      flag(i, col, rule, 'statutory', why, exp);
     });
+    return { n, hits, below };
+  };
+
+  if (pfEeC != null && basicC != null) {
+    const { n, hits, below } = pfCheck(pfEeC, P.pfEmployeeRate, 'Employee PF', 'Employee PF 12% (Basic+DA, cap)');
+    if (n) {
+      patterns.push(`Employee PF = 12% of Basic+DA, capped at ${ceilingTxt} — correct in ${hits} of ${n} rows`);
+      if (below) patterns.push(`PF reviewed for ${below} employees with Basic+DA below ${ceilingTxt}`);
+    }
+    const at20k = rows.filter((_, i) => Math.round(wageOf(i)) === 20000).length;
+    if (at20k) notices.push(`${at20k} employee(s) have Basic+DA of exactly ₹20,000. The instruction says "apply the separate PF calculation as discussed" — it was treated as 12% of the actual Basic+DA. Confirm if a different calculation applies.`);
   } else skipped.push('PF check (needs Employee PF and Basic columns)');
 
-  if (pfErC != null && basicC != null) {
-    rows.forEach((_, i) => {
-      const v = val(i, pfErC); if (v == null) return;
-      const b = (val(i, basicC) ?? 0) + (val(i, daC) ?? 0);
-      const cap = Math.round(pfWage(opt.rules, b, true) * P.pfEmployerRate), act = Math.round(b * P.pfEmployerRate);
-      mark(i, pfErC);
-      if (differs(v, cap) && differs(v, act)) flag(i, pfErC, 'Employer PF 12%', 'statutory', `Employer PF is ${v}; expected ${cap} (capped) or ${act} (uncapped).`, cap);
-    });
-  }
+  if (pfErC != null && basicC != null) pfCheck(pfErC, P.pfEmployerRate, 'Employer PF', 'Employer PF 12% (Basic+DA, cap)');
 
   if (esEeC != null && grossC != null) {
     rows.forEach((_, i) => {
@@ -296,7 +323,7 @@ export function analyze(table: RegisterTable, opt: AnalysisOptions): Analysis {
     }
   }
 
-  return { roles, findings, checked, patterns, skipped };
+  return { roles, findings, checked, patterns, skipped, notices };
 }
 
 /** Return the cells' final state given the findings that are still active. */
@@ -305,4 +332,19 @@ export function cellStates(a: Analysis, active: Finding[]): Map<string, CellStat
   a.checked.forEach((k) => m.set(k, 'ok'));
   active.forEach((f) => m.set(key(f.row, f.col), 'bad'));
   return m;
+}
+
+/**
+ * If the register has no Gross column, append a calculated "Gross Wages" column
+ * (sum of earnings, excluding overtime) so the 50% rule can be tested.
+ */
+export function withGrossColumn(table: RegisterTable): { table: RegisterTable; added: boolean } {
+  const roles = detectRoles(table.headers);
+  if (roles.gross?.length || roles.basic == null) return { table, added: false };
+  const earn = [roles.basic[0], roles.da?.[0], roles.hra?.[0], ...(roles.allowance ?? [])].filter((c): c is number => c != null);
+  const rows = table.rows.map((r) => {
+    const any = earn.some((c) => num(r[c]) !== null);
+    return [...r, any ? r2(earn.reduce((s, c) => s + (num(r[c]) ?? 0), 0)) : null] as Cell[];
+  });
+  return { table: { ...table, headers: [...table.headers, 'Gross Wages (calculated)'], rows }, added: true };
 }

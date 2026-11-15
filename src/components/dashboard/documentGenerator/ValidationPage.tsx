@@ -7,7 +7,7 @@
  * The UI stays the same; only the state source is persistent now.
  */
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useValidationStore } from './validationStore';
 import ValidationLanding from './ValidationLanding';
@@ -60,18 +60,25 @@ export default function ValidationPage({
   const resolvedCompanyName = routeState?.companyName ?? storedCompanyName ?? companyName;
   const resolvedLiveRegisterFile = routeState?.liveRegisterFile ?? storedLiveRegisterFile ?? liveRegisterFile;
 
-  // Keep persisted state aligned with the route and any route-state payload.
+  // Apply the route-state payload (coming from DocumentGenerator Step 5) ONCE,
+  // and only after the store has hydrated — otherwise hydration overwrites it.
+  // The ref guard + stable store actions stop the old render loop.
+  const appliedRouteKey = useRef('');
   useEffect(() => {
-    if (routeState?.companyName) {
-      setCompanyName(routeState.companyName);
-    }
-    if (routeState?.liveRegisterFile) {
-      setLiveRegisterFile(routeState.liveRegisterFile);
-    }
-    if (Array.isArray(routeState?.selectedActs)) {
-      setSelectedActs(routeState.selectedActs);
-    }
-  }, [routeState, setCompanyName, setLiveRegisterFile, setSelectedActs]);
+    if (!hydrated || !routeState) return;
+    const f = routeState.liveRegisterFile;
+    const key = [
+      routeState.companyName ?? '',
+      f ? `${f.name}|${f.size}|${f.lastModified}` : '',
+      (routeState.selectedActs ?? []).join(','),
+    ].join('#');
+    if (appliedRouteKey.current === key) return;
+    appliedRouteKey.current = key;
+
+    if (routeState.companyName) setCompanyName(routeState.companyName);
+    if (f) setLiveRegisterFile(f);
+    if (Array.isArray(routeState.selectedActs)) setSelectedActs(routeState.selectedActs);
+  }, [hydrated, routeState, setCompanyName, setLiveRegisterFile, setSelectedActs]);
 
   useEffect(() => {
     if (sub === 'level1' || sub === 'level2' || sub === 'level3') {
