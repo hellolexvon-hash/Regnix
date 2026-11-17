@@ -20,7 +20,7 @@ import * as zoho from '../lib/zohoWorkDrive.js';
 
 const router = Router();
 const BUCKET = 'validation-docs';
-const SUBFOLDER = 'Statutory - Company Related Docs';
+const SUBFOLDER = 'Company Details';
 const MAX_BYTES = 3 * 1024 * 1024;
 const TERMS_VERSION = 'auditor-terms-2026-11';
 
@@ -87,6 +87,34 @@ async function auditorFrom(req: Request) {
 // ── Zoho + Storage helpers ──────────────────────────────────────────────────
 type SubFolderFn = (parentId: string, name: string) => Promise<{ id: string; url?: string }>;
 
+// Creates a sub-folder inside the company's Zoho folder. Uses zohoWorkDrive.createSubFolder
+// if your lib has one; otherwise calls the WorkDrive API directly with the same env vars
+// (ZOHO_CLIENT_ID / ZOHO_CLIENT_SECRET / ZOHO_REFRESH_TOKEN, India DC by default).
+async function makeSubFolder(parentId: string, name: string): Promise<{ id: string }> {
+  const lib = (zoho as unknown as { createSubFolder?: SubFolderFn }).createSubFolder;
+  if (typeof lib === 'function') return lib(parentId, name);
+  const accounts = process.env.ZOHO_ACCOUNTS_URL ?? 'https://accounts.zoho.in';
+  const api = process.env.ZOHO_API_URL ?? 'https://www.zohoapis.in';
+  const tok = await fetch(`${accounts}/oauth/v2/token`, {
+    method: 'POST',
+    body: new URLSearchParams({
+      grant_type: 'refresh_token',
+      client_id: process.env.ZOHO_CLIENT_ID ?? '',
+      client_secret: process.env.ZOHO_CLIENT_SECRET ?? '',
+      refresh_token: process.env.ZOHO_REFRESH_TOKEN ?? '',
+    }),
+  }).then((r) => r.json() as Promise<{ access_token?: string }>);
+  if (!tok.access_token) throw new Error('zoho token refresh failed');
+  const r = await fetch(`${api}/workdrive/api/v1/files`, {
+    method: 'POST',
+    headers: { Authorization: `Zoho-oauthtoken ${tok.access_token}`, 'Content-Type': 'application/vnd.api+json' },
+    body: JSON.stringify({ data: { attributes: { name, parent_id: parentId }, type: 'files' } }),
+  });
+  const j = (await r.json()) as { data?: { id?: string } };
+  if (!r.ok || !j.data?.id) throw new Error(`zoho create folder failed (${r.status})`);
+  return { id: j.data.id };
+}
+
 async function pushToZoho(userId: string, fileName: string, mime: string, bytes: Buffer) {
   const supa = db();
   const { data: profile } = await supa.from('profiles')
@@ -98,17 +126,18 @@ async function pushToZoho(userId: string, fileName: string, mime: string, bytes:
     companyFolder = f.id;
     await supa.from('profiles').update({ zoho_folder_id: f.id, zoho_folder_url: f.url }).eq('id', userId);
   }
-  const sub = (zoho as unknown as { createSubFolder?: SubFolderFn }).createSubFolder;
   let target = companyFolder;
   let stored = `${SUBFOLDER} - ${fileName}`;
-  if (typeof sub === 'function') {
+  try {
     const { data: row } = await supa.from('zoho_company_folders').select('statutory_folder_id').eq('profile_id', userId).maybeSingle();
     let subId = (row?.statutory_folder_id as string | null) ?? null;
     if (!subId) {
-      subId = (await sub(companyFolder, SUBFOLDER)).id;
+      subId = (await makeSubFolder(companyFolder, SUBFOLDER)).id;
       await supa.from('zoho_company_folders').upsert({ profile_id: userId, statutory_folder_id: subId });
     }
     target = subId; stored = fileName;
+  } catch (e) {
+    console.error('[validation upload] sub-folder failed, using filename prefix', e);
   }
   const zf = await zoho.uploadFile(target, stored, mime, bytes);
   return { id: zf.id as string, url: (zf.url as string | undefined) ?? null, storedName: stored };
