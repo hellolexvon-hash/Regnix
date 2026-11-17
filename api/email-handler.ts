@@ -22,6 +22,16 @@ const ACTION_PATHS: Readonly<Record<string, string>> = {
   'kyc-info': '/api/kyc/info',
   'kyc-file': '/api/kyc/file',
   'kyc-submit': '/api/kyc/submit',
+  'val-upload': '/api/kyc/validation-upload',
+  'val-submit': '/api/kyc/validation-submit',
+  'val-status': '/api/kyc/validation-status',
+  'val-cert': '/api/kyc/validation-cert',
+  'aud-bootstrap': '/api/kyc/auditor-bootstrap',
+  'aud-claim': '/api/kyc/auditor-claim',
+  'aud-file': '/api/kyc/auditor-file',
+  'aud-decision': '/api/kyc/auditor-decision',
+  'aud-cert': '/api/kyc/auditor-cert',
+  'cert-verify': '/api/kyc/cert-verify',
 };
 
 const PATH_ACTIONS: Readonly<Record<string, string>> = {
@@ -33,6 +43,16 @@ const PATH_ACTIONS: Readonly<Record<string, string>> = {
   '/api/kyc/info': 'kyc-info',
   '/api/kyc/file': 'kyc-file',
   '/api/kyc/submit': 'kyc-submit',
+  '/api/validation/zoho-upload': 'val-upload',
+  '/api/validation/l2-submit': 'val-submit',
+  '/api/validation/l3-status': 'val-status',
+  '/api/validation/certificate': 'val-cert',
+  '/api/auditor/portal/bootstrap': 'aud-bootstrap',
+  '/api/auditor/reviews/claim': 'aud-claim',
+  '/api/auditor/file': 'aud-file',
+  '/api/auditor/reviews/decision': 'aud-decision',
+  '/api/auditor/certificate': 'aud-cert',
+  '/api/certificate/verify': 'cert-verify',
 };
 
 type RequestWithVercelQuery = IncomingMessage & {

@@ -1,0 +1,347 @@
+/* AuditCertificate.module.css
+   Dark navy / violet-neon theme, intentionally distinct from the light
+   Auditor Portal chrome — a compliance certificate is a standalone,
+   shareable credential (closer to the reference artwork) rather than
+   in-app UI, so it gets its own visual identity. Uses the Syne / DM Sans
+   pairing already loaded globally in index.html.
+*/
+
+:root {
+  --ac-bg: #060a12;
+  --ac-panel: #0c1220;
+  --ac-line: rgba(122, 159, 255, 0.16);
+  --ac-blue: #3aa8ff;
+  --ac-cyan: #7ef9ff;
+  --ac-violet: #a78bfa;
+  --ac-ink: #eaf6ff;
+  --ac-dim: #8b9ab3;
+  --ac-green: #34d399;
+  --ac-amber: #fbbf24;
+  --ac-red: #f87171;
+}
+
+.acOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: rgba(2, 4, 9, 0.88);
+  backdrop-filter: blur(6px);
+  display: flex;
+  flex-direction: column;
+}
+
+.acToolbar {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 22px;
+  flex-shrink: 0;
+}
+
+.acCloseBtn, .acDownloadBtn {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  padding: 9px 18px;
+  border-radius: 8px;
+  cursor: pointer;
+  border: 1px solid var(--ac-line);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--ac-ink);
+  transition: all 0.2s ease;
+}
+.acCloseBtn:hover { background: rgba(255, 255, 255, 0.08); }
+
+.acDownloadBtn {
+  background: linear-gradient(90deg, var(--ac-blue), var(--ac-violet));
+  border: none;
+  font-weight: 600;
+  color: #04070d;
+}
+.acDownloadBtn:hover { filter: brightness(1.08); }
+.acDownloadBtn:disabled { opacity: 0.6; cursor: default; }
+
+.acEmailBtn {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  padding: 9px 18px;
+  border-radius: 8px;
+  cursor: pointer;
+  border: 1px solid rgba(126, 249, 255, 0.35);
+  background: rgba(126, 249, 255, 0.08);
+  color: var(--ac-cyan);
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+.acEmailBtn:hover { background: rgba(126, 249, 255, 0.14); }
+.acEmailBtn:disabled { opacity: 0.6; cursor: default; }
+
+.acSendStatusOk, .acSendStatusErr {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 12px; padding: 7px 12px; border-radius: 999px;
+  margin-right: 4px;
+}
+.acSendStatusOk { color: var(--ac-green); background: rgba(52,211,153,.1); border: 1px solid rgba(52,211,153,.35); }
+.acSendStatusErr { color: var(--ac-red); background: rgba(248,113,113,.1); border: 1px solid rgba(248,113,113,.35); }
+
+/* Hidden export-only host — laid out just off-screen so html2canvas can
+   capture the CertificateSheet at full, un-clipped scrollWidth/scrollHeight
+   regardless of the visible modal's scroll position. Never shown to the user. */
+.acExportHost {
+  position: fixed;
+  top: 0;
+  left: -10000px;
+  width: 900px;
+  pointer-events: none;
+}
+.acExportHost .acSheet {
+  max-width: none;
+  width: 900px;
+}
+
+.acScroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 20px 40px;
+  display: flex;
+  justify-content: center;
+}
+
+.acSheet {
+  width: 100%;
+  max-width: 900px;
+  background: radial-gradient(ellipse at 50% 0%, #0d1526 0%, var(--ac-bg) 55%);
+  border: 1px solid var(--ac-line);
+  border-radius: 16px;
+  padding: 30px 34px 34px;
+  font-family: 'DM Sans', system-ui, sans-serif;
+  color: var(--ac-ink);
+}
+
+/* ── Header ─────────────────────────────────────────────────────────── */
+.acHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--ac-line);
+}
+.acBrand { display: flex; align-items: center; gap: 10px; }
+.acBrandMark {
+  width: 30px; height: 30px; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(135deg, var(--ac-blue), var(--ac-violet));
+  color: #04070d;
+}
+.acBrandName { margin: 0; font-family: 'Syne', sans-serif; font-weight: 800; font-size: 14px; letter-spacing: 0.08em; }
+.acBrandTag { margin: 1px 0 0; font-size: 9.5px; color: var(--ac-dim); letter-spacing: 0.02em; }
+
+.acHeaderTitle { text-align: center; flex: 1; }
+.acHeaderTitleLine1 {
+  margin: 0; font-family: 'Syne', sans-serif; font-weight: 700; font-size: 15px;
+  letter-spacing: 0.14em; color: var(--ac-ink);
+}
+.acHeaderTitleLine2 {
+  margin: 2px 0 0; font-family: 'Syne', sans-serif; font-weight: 800; font-size: 18px;
+  letter-spacing: 0.1em;
+  background: linear-gradient(90deg, var(--ac-blue), var(--ac-cyan), var(--ac-violet));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+
+.acHeaderBadges { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.acCompliantBadge {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.04em;
+  color: var(--ac-green); border: 1px solid rgba(52, 211, 153, 0.4);
+  background: rgba(52, 211, 153, 0.1); padding: 5px 10px; border-radius: 999px;
+}
+.acRiskBadge {
+  font-size: 10.5px; padding: 4px 10px; border-radius: 999px;
+  border: 1px solid var(--ac-line); color: var(--ac-dim);
+}
+.acRiskBadge[data-risk="Low"] { color: var(--ac-green); border-color: rgba(52,211,153,.35); }
+.acRiskBadge[data-risk="Medium"] { color: var(--ac-amber); border-color: rgba(251,191,36,.35); }
+.acRiskBadge[data-risk="High"] { color: var(--ac-red); border-color: rgba(248,113,113,.35); }
+
+/* ── Meta strip ─────────────────────────────────────────────────────── */
+.acMetaRow {
+  display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px;
+  margin: 16px 0;
+}
+.acMetaItem {
+  display: flex; flex-direction: column; gap: 3px;
+  padding: 9px 12px; border-radius: 9px;
+  background: rgba(255,255,255,0.03); border: 1px solid var(--ac-line);
+}
+.acMetaItem span { font-size: 9px; color: var(--ac-dim); text-transform: uppercase; letter-spacing: 0.05em; }
+.acMetaItem strong { font-size: 12px; font-weight: 600; color: var(--ac-ink); }
+
+/* ── Hero ───────────────────────────────────────────────────────────── */
+.acHero {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 22px 10px; margin-bottom: 18px;
+  border-radius: 14px;
+  background: radial-gradient(ellipse at 50% 50%, rgba(122,159,255,0.08), transparent 70%);
+  border: 1px solid var(--ac-line);
+}
+.acHeroSide { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 180px; }
+.acHeroLabel { font-size: 10px; color: var(--ac-dim); text-transform: uppercase; letter-spacing: 0.06em; }
+.acHeroValue { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 17px; }
+.acHeroSub { font-size: 10.5px; color: var(--ac-dim); }
+
+.acHeroCenter { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.acHeroCenterLabel { font-size: 11px; color: var(--ac-dim); text-transform: uppercase; letter-spacing: 0.08em; }
+
+.acStars { display: flex; gap: 2px; }
+.acStarFilled { color: var(--ac-amber); font-size: 13px; }
+.acStarEmpty { color: rgba(255,255,255,0.15); font-size: 13px; }
+
+/* ── Ring ───────────────────────────────────────────────────────────── */
+.acRingWrap { position: relative; }
+.acRingCenter {
+  position: absolute; inset: 0; display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+}
+.acRingPct { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 22px; }
+.acRingLabel { font-size: 8px; color: var(--ac-dim); }
+
+/* ── Act ring grid ──────────────────────────────────────────────────── */
+.acActGrid {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;
+  margin-bottom: 18px;
+}
+.acActCard {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px; border-radius: 10px;
+  background: rgba(255,255,255,0.025); border: 1px solid var(--ac-line);
+}
+.acActCard .acRingPct { font-size: 14px; }
+.acActMeta { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.acActName { font-size: 11px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.acActTrend { display: flex; align-items: center; gap: 4px; font-size: 9.5px; color: var(--ac-dim); }
+
+.acTrendUp { color: var(--ac-green); font-size: 8px; }
+.acTrendDown { color: var(--ac-red); font-size: 8px; }
+.acTrendFlat { color: var(--ac-amber); font-size: 6px; }
+
+/* ── Stat strip ─────────────────────────────────────────────────────── */
+.acStatStrip {
+  display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px;
+  margin-bottom: 18px;
+}
+.acStat {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 10px 6px; border-radius: 10px;
+  background: rgba(255,255,255,0.025); border: 1px solid var(--ac-line);
+  text-align: center;
+}
+.acStat strong { font-family: 'Syne', sans-serif; font-size: 15px; font-weight: 700; }
+.acStat[data-warn="true"] strong { color: var(--ac-amber); }
+.acStat span { font-size: 8.5px; color: var(--ac-dim); text-transform: uppercase; letter-spacing: 0.03em; }
+
+/* ── Analytics panels ───────────────────────────────────────────────── */
+.acAnalyticsRow {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
+  margin-bottom: 12px;
+}
+.acPanel {
+  padding: 14px; border-radius: 12px;
+  background: rgba(255,255,255,0.025); border: 1px solid var(--ac-line);
+}
+.acPanelTitle {
+  margin: 0 0 10px; font-family: 'Syne', sans-serif; font-weight: 700; font-size: 11.5px;
+  text-transform: uppercase; letter-spacing: 0.04em; color: var(--ac-ink);
+}
+
+.acMatrixTable { width: 100%; border-collapse: collapse; font-size: 10.5px; }
+.acMatrixTable th {
+  text-align: left; font-weight: 600; color: var(--ac-dim); font-size: 9px;
+  text-transform: uppercase; padding: 4px 4px; border-bottom: 1px solid var(--ac-line);
+}
+.acMatrixTable td { padding: 6px 4px; border-bottom: 1px solid rgba(255,255,255,0.04); }
+
+.acTrendSvg { width: 100%; height: auto; }
+.acTrendFoot { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; font-size: 10px; color: var(--ac-dim); }
+.acTrendFoot strong { color: var(--ac-ink); }
+.acPos { color: var(--ac-green) !important; }
+.acNeg { color: var(--ac-red) !important; }
+
+.acForecastGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.acForecastGrid div { display: flex; flex-direction: column; gap: 3px; }
+.acForecastGrid span { font-size: 9px; color: var(--ac-dim); }
+.acForecastGrid strong { font-family: 'Syne', sans-serif; font-size: 14px; }
+
+.acIntelNote { font-size: 10.5px; color: var(--ac-dim); line-height: 1.5; margin: 0 0 10px; }
+.acIntelSubhead { font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ac-dim); margin: 8px 0 4px; }
+.acIntelList { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
+.acIntelList li { display: flex; gap: 6px; align-items: flex-start; font-size: 10.5px; color: var(--ac-ink); line-height: 1.4; }
+.acIntelList li svg { flex-shrink: 0; margin-top: 2px; color: var(--ac-cyan); }
+
+.acHeatList { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+.acHeatRow { display: flex; justify-content: space-between; font-size: 10.5px; padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.04); }
+.acEnterpriseRisk {
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 10.5px; font-weight: 600; padding-top: 8px; border-top: 1px solid var(--ac-line);
+}
+
+.acRiskLow { color: var(--ac-green); font-weight: 600; }
+.acRiskMed { color: var(--ac-amber); font-weight: 600; }
+.acRiskHigh { color: var(--ac-red); font-weight: 600; }
+
+.acDocList { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+.acDocRow { display: flex; justify-content: space-between; font-size: 10.5px; padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.04); }
+.acVerifyTotal {
+  display: flex; justify-content: space-between; font-size: 10.5px;
+  padding-top: 8px; border-top: 1px solid var(--ac-line);
+}
+.acVerifyTotal strong { color: var(--ac-cyan); }
+
+/* ── Trust / signature row ──────────────────────────────────────────── */
+.acTrustRow {
+  display: flex; gap: 14px; padding: 16px;
+  border-radius: 12px; background: rgba(255,255,255,0.025);
+  border: 1px solid var(--ac-line); margin-bottom: 14px;
+}
+.acTrustLeft { flex: 1; }
+.acTrustTags { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.acTrustTags span {
+  display: flex; align-items: center; gap: 5px; font-size: 10px;
+  padding: 5px 9px; border-radius: 999px; border: 1px solid var(--ac-line); color: var(--ac-dim);
+}
+.acTrustTags svg { color: var(--ac-cyan); }
+
+.acSignatures { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.acSigBlock { border-top: 1px solid var(--ac-line); padding-top: 8px; }
+.acSigName { margin: 0; font-family: 'Syne', sans-serif; font-weight: 700; font-size: 11.5px; }
+.acSigRole { margin: 2px 0 0; font-size: 9.5px; color: var(--ac-dim); }
+.acSigMeta { margin: 2px 0 0; font-size: 9px; color: var(--ac-dim); }
+
+.acTrustRight { display: flex; flex-direction: column; align-items: center; gap: 6px; flex-shrink: 0; }
+.acQr {
+  display: grid; width: 78px; height: 78px; padding: 5px;
+  background: #fff; border-radius: 6px; gap: 1px;
+}
+.acQrCellOn { background: #04070d; }
+.acQrCellOff { background: #fff; }
+.acQrLabel { font-size: 8.5px; color: var(--ac-dim); }
+
+/* ── Footer badges ──────────────────────────────────────────────────── */
+.acFooterBadges {
+  display: flex; align-items: center; justify-content: center; gap: 18px;
+  flex-wrap: wrap; padding-top: 14px; border-top: 1px solid var(--ac-line);
+}
+.acFooterBadges span { font-size: 9px; letter-spacing: 0.08em; color: var(--ac-dim); text-transform: uppercase; }
+.acFooterBadgeMain {
+  display: flex; align-items: center; gap: 5px;
+  color: var(--ac-green) !important; font-weight: 700;
+}
+
+@media (max-width: 760px) {
+  .acMetaRow { grid-template-columns: repeat(2, 1fr); }
+  .acActGrid { grid-template-columns: repeat(2, 1fr); }
+  .acStatStrip { grid-template-columns: repeat(2, 1fr); }
+  .acAnalyticsRow { grid-template-columns: 1fr; }
+  .acHero { flex-direction: column; gap: 16px; }
+  .acSignatures { grid-template-columns: 1fr; }
+  .acTrustRow { flex-direction: column; }
+}

@@ -20,6 +20,7 @@
 import { Router, json, type Request, type Response } from 'express';
 import { createClient } from '@supabase/supabase-js';
 import { createCompanyFolder, uploadFile } from '../lib/zohoWorkDrive.js';
+import validationDocsRouter from './validationDocsRoute.js';
 
 const MAX_BYTES = 3 * 1024 * 1024;
 const MAX_FILES_PER_REQUEST = 25;
@@ -196,5 +197,8 @@ router.post('/kyc/submit', async (req: Request, res: Response) => {
     res.status(500).json({ ok: false, error: 'Could not submit. Please try again.' });
   }
 });
+
+// Validation documents, auditor portal and certificates (same serverless function)
+router.use(validationDocsRouter);
 
 export default router;

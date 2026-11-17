@@ -1,493 +1,288 @@
 /**
  * AuditCertificate.tsx
  *
- * Renders the Regnix Compliance Intelligence Certificate for a company that
- * has been approved at Level 3. Every number on this certificate comes from
- * `buildCertificateData(company, auditor)` in certificateData.ts — nothing
- * here is hardcoded per company.
+ * The Regnix Compliance Certificate for a company approved at Level 3. All figures come
+ * from buildCertificateData() (real documents / issues / decision). The QR code encodes the
+ * public verification URL (/verify/<certificate no>), which is checked against the database.
  *
- * Usage (from AuditorCompanyReview.tsx, once company.status === 'approved'):
+ * Export: a hidden, fixed-width, un-clipped copy is captured with html2canvas and paginated
+ * into an A4 PDF (JPEG, to stay under Vercel's request-body cap). "Download" and "Email" both
+ * also store the PDF for the company (their Level 3 page) and in Zoho WorkDrive.
  *
- *   <AuditCertificate open={showCertificate} onClose={...} company={company} auditor={auditor} />
- *
- * ── Export architecture ─────────────────────────────────────────────────
- * The certificate is rendered TWICE while the modal is open:
- *   1. A visible, scrollable copy the auditor actually looks at.
- *   2. A hidden, fixed-width, un-clipped copy used ONLY for html2canvas
- *      capture (position: fixed; left: -10000px — laid out in the document,
- *      just off-screen, so it is never scroll-clipped or viewport-clipped).
- * html2canvas by default only captures what fits in the current viewport
- * unless you feed it an element with its own real scrollWidth/scrollHeight
- * outside of any overflow:auto ancestor — capturing the visible modal
- * directly (which lives inside a scrollable container) truncates the
- * output. The hidden copy sidesteps that entirely.
- *
- * Install: npm install html2canvas jspdf
+ * Install: npm install html2canvas jspdf qrcode && npm install -D @types/qrcode
  */
-
-import { useRef, useState, forwardRef } from 'react';
+import { useEffect, useRef, useState, forwardRef } from 'react';
+import QRCode from 'qrcode';
 import s from './AuditCertificate.module.css';
 import type { Auditor, CompanyReview } from './auditorStore';
 import { buildCertificateData, type CertificateData, type RiskLevel } from './certificateData';
-import { sendCertificateEmail } from './certificateEmailService';
-import {
-  IconScale, IconCheckCircle, IconShieldCheck, IconAlertTriangle,
-} from './icons';
+import { saveCertificate } from './certificateApi';
+import { IconScale, IconCheckCircle, IconShieldCheck, IconAlertTriangle } from './icons';
 
-interface AuditCertificateProps {
-  open: boolean;
-  onClose: () => void;
-  company: CompanyReview;
-  auditor: Auditor;
-}
+interface Props { open: boolean; onClose: () => void; company: CompanyReview; auditor: Auditor }
 
-const RISK_CLASS: Record<RiskLevel, string> = {
-  Low: 'acRiskLow', Medium: 'acRiskMed', High: 'acRiskHigh',
-};
+const RISK_CLASS: Record<RiskLevel, string> = { Low: 'acRiskLow', Medium: 'acRiskMed', High: 'acRiskHigh' };
+const clamp = (n: number) => Math.max(0, Math.min(100, n));
 
-function clamp01(n: number) { return Math.max(0, Math.min(100, n)); }
-
-function Ring({ pct, size = 78, stroke = 7, label }: { pct: number; size?: number; stroke?: number; label?: string }) {
-  const r = (size - stroke) / 2;
-  const c = 2 * Math.PI * r;
-  const offset = c - (clamp01(pct) / 100) * c;
+function Ring({ pct, size = 78, stroke = 7, id }: { pct: number; size?: number; stroke?: number; id: string }) {
+  const r = (size - stroke) / 2, c = 2 * Math.PI * r;
   return (
     <div className={s.acRingWrap} style={{ width: size, height: size }}>
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgba(122,159,255,.14)" strokeWidth={stroke} />
-        <circle
-          cx={size / 2} cy={size / 2} r={r} fill="none"
-          stroke="url(#acRingGrad)" strokeWidth={stroke} strokeLinecap="round"
-          strokeDasharray={c} strokeDashoffset={offset}
-          transform={`rotate(-90 ${size / 2} ${size / 2})`}
-        />
         <defs>
-          <linearGradient id="acRingGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#3aa8ff" />
-            <stop offset="100%" stopColor="#c084fc" />
+          <linearGradient id={id} x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#3aa8ff" /><stop offset="100%" stopColor="#c084fc" />
           </linearGradient>
         </defs>
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgba(122,159,255,.14)" strokeWidth={stroke} />
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={`url(#${id})`} strokeWidth={stroke} strokeLinecap="round"
+          strokeDasharray={c} strokeDashoffset={c - (clamp(pct) / 100) * c} transform={`rotate(-90 ${size / 2} ${size / 2})`} />
       </svg>
-      <div className={s.acRingCenter}>
-        <span className={s.acRingPct}>{pct}%</span>
-        {label && <span className={s.acRingLabel}>{label}</span>}
-      </div>
+      <div className={s.acRingCenter}><span className={s.acRingPct}>{pct}%</span></div>
     </div>
   );
-}
-
-function TrendArrow({ dir }: { dir: 'up' | 'down' | 'flat' }) {
-  if (dir === 'up') return <span className={s.acTrendUp}>&#9650;</span>;
-  if (dir === 'down') return <span className={s.acTrendDown}>&#9660;</span>;
-  return <span className={s.acTrendFlat}>&#9679;</span>;
 }
 
 function Stars({ count }: { count: number }) {
-  return (
-    <span className={s.acStars}>
-      {Array.from({ length: 5 }).map((_, i) => (
-        <span key={i} className={i < count ? s.acStarFilled : s.acStarEmpty}>&#9733;</span>
-      ))}
-    </span>
-  );
+  return <span className={s.acStars}>{Array.from({ length: 5 }).map((_, i) => <span key={i} className={i < count ? s.acStarFilled : s.acStarEmpty}>&#9733;</span>)}</span>;
 }
 
-function TrendChart({ points }: { points: { label: string; score: number }[] }) {
-  const w = 300, h = 110, pad = 10;
-  const min = Math.min(...points.map(p => p.score)) - 3;
-  const max = Math.max(...points.map(p => p.score)) + 3;
-  const xStep = (w - pad * 2) / (points.length - 1);
-  const yFor = (v: number) => h - pad - ((v - min) / (max - min)) * (h - pad * 2);
-  const coords = points.map((p, i) => [pad + i * xStep, yFor(p.score)] as const);
-  const linePath = coords.map(([x, y], i) => `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
-  const areaPath = `${linePath} L${coords[coords.length - 1][0]},${h - pad} L${coords[0][0]},${h - pad} Z`;
+const Seal = () => (
+  <svg viewBox="0 0 100 100" className={s.acSeal} aria-hidden="true">
+    <defs><linearGradient id="acGold" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#fde68a" /><stop offset="100%" stopColor="#b45309" /></linearGradient></defs>
+    <circle cx="50" cy="50" r="46" fill="none" stroke="url(#acGold)" strokeWidth="2.5" />
+    <circle cx="50" cy="50" r="38" fill="rgba(251,191,36,.08)" stroke="url(#acGold)" strokeWidth="1" strokeDasharray="2 3" />
+    <path d="M50 28 34 35v13c0 10 7 17 16 20 9-3 16-10 16-20V35L50 28z" fill="none" stroke="url(#acGold)" strokeWidth="2.5" strokeLinejoin="round" />
+    <path d="m43 49 5 5 9-10" fill="none" stroke="url(#acGold)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
 
-  return (
-    <svg viewBox={`0 0 ${w} ${h}`} className={s.acTrendSvg}>
-      <defs>
-        <linearGradient id="acAreaGrad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#7ef9ff" stopOpacity="0.35" />
-          <stop offset="100%" stopColor="#7ef9ff" stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      <path d={areaPath} fill="url(#acAreaGrad)" stroke="none" />
-      <path d={linePath} fill="none" stroke="#7ef9ff" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
-      {coords.map(([x, y], i) => (
-        <circle key={i} cx={x} cy={y} r={i === coords.length - 1 ? 3.2 : 1.8}
-          fill={i === coords.length - 1 ? '#ffffff' : '#7ef9ff'} />
-      ))}
-    </svg>
-  );
-}
-
-/** Deterministic decorative QR-style placeholder — see file header note in certificateData.ts. */
-function QrPlaceholder({ seed }: { seed: string }) {
-  let h = 0;
-  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
-  const size = 9;
-  const cells: boolean[] = Array.from({ length: size * size }, () => {
-    h = (h * 1664525 + 1013904223) >>> 0;
-    return (h % 100) < 46;
-  });
-  return (
-    <div className={s.acQr} style={{ gridTemplateColumns: `repeat(${size}, 1fr)` }}>
-      {cells.map((on, i) => <div key={i} className={on ? s.acQrCellOn : s.acQrCellOff} />)}
-    </div>
-  );
-}
-
-/** The full certificate markup, rendered identically for on-screen viewing and off-screen export. */
-const CertificateSheet = forwardRef<HTMLDivElement, { data: CertificateData }>(function CertificateSheet(
-  { data }, ref,
-) {
+const Sheet = forwardRef<HTMLDivElement, { data: CertificateData; qr: string }>(function Sheet({ data, qr }, ref) {
+  const { issues } = data;
   return (
     <div className={s.acSheet} ref={ref}>
+      <div className={s.acFrame}>
+        <div className={s.acWatermark} aria-hidden="true">REGNIX</div>
 
-      {/* ── Header ─────────────────────────────────────────────────── */}
-      <div className={s.acHeader}>
-        <div className={s.acBrand}>
-          <span className={s.acBrandMark}><IconScale size={16} /></span>
-          <div>
-            <p className={s.acBrandName}>REGNIX</p>
-            <p className={s.acBrandTag}>Compliance Intelligence. Simplified.</p>
+        <div className={s.acHeader}>
+          <div className={s.acBrand}>
+            <span className={s.acBrandMark}><IconScale size={16} /></span>
+            <div><p className={s.acBrandName}>REGNIX</p><p className={s.acBrandTag}>Compliance Intelligence. Simplified.</p></div>
+          </div>
+          <div className={s.acHeaderTitle}>
+            <p className={s.acHeaderTitleLine1}>CERTIFICATE OF</p>
+            <p className={s.acHeaderTitleLine2}>STATUTORY COMPLIANCE</p>
+          </div>
+          <div className={s.acHeaderBadges}>
+            <Seal />
+            <span className={s.acRiskBadge} data-risk={data.riskLevel}>Risk: {data.riskLevel}</span>
           </div>
         </div>
-        <div className={s.acHeaderTitle}>
-          <p className={s.acHeaderTitleLine1}>REGNIX COMPLIANCE</p>
-          <p className={s.acHeaderTitleLine2}>INTELLIGENCE CERTIFICATE</p>
-        </div>
-        <div className={s.acHeaderBadges}>
-          <span className={s.acCompliantBadge}><IconCheckCircle size={13} /> COMPLIANT</span>
-          <span className={s.acRiskBadge} data-risk={data.riskLevel}>Risk: {data.riskLevel}</span>
-        </div>
-      </div>
 
-      {/* ── Meta strip ─────────────────────────────────────────────── */}
-      <div className={s.acMetaRow}>
-        <div className={s.acMetaItem}><span>Reporting Month</span><strong>{data.reportingMonth}</strong></div>
-        <div className={s.acMetaItem}><span>Certificate No.</span><strong>{data.certificateId}</strong></div>
-        <div className={s.acMetaItem}><span>Client Name</span><strong>{data.clientName}</strong></div>
-        <div className={s.acMetaItem}><span>Industry</span><strong>{data.entityLocation}</strong></div>
-        <div className={s.acMetaItem}><span>Generated On</span><strong>{data.generatedOn}</strong></div>
-      </div>
+        <p className={s.acCertifies}>This is to certify that the statutory compliance records of</p>
+        <p className={s.acClient}>{data.clientName}</p>
+        <p className={s.acClientSub}>{data.industry}{data.cin ? ` · CIN/Reg. ${data.cin}` : ''} · {data.employees} employees</p>
+        <p className={s.acCertifies}>have been independently reviewed against the live payroll register and the Regnix audit checklist, and approved at Level 3.</p>
 
-      {/* ── Hero: maturity / score / coverage ─────────────────────── */}
-      <div className={s.acHero}>
-        <div className={s.acHeroSide}>
-          <span className={s.acHeroLabel}>Compliance Maturity</span>
-          <span className={s.acHeroValue}>{data.complianceMaturity}</span>
-          <Stars count={data.maturityStars} />
+        <div className={s.acMetaRow}>
+          <div className={s.acMetaItem}><span>Certificate No.</span><strong>{data.certificateNo}</strong></div>
+          <div className={s.acMetaItem}><span>Issued on</span><strong>{data.issuedOn}</strong></div>
+          <div className={s.acMetaItem}><span>Reporting month</span><strong>{data.reportingMonth}</strong></div>
+          <div className={s.acMetaItem}><span>Re-audit due</span><strong>{data.reauditBy}</strong></div>
         </div>
 
-        <div className={s.acHeroCenter}>
-          <span className={s.acHeroCenterLabel}>Overall Compliance Score</span>
-          <Ring pct={data.overallScore} size={148} stroke={11} />
+        <div className={s.acHero}>
+          <div className={s.acHeroSide}>
+            <span className={s.acHeroLabel}>Compliance maturity</span>
+            <span className={s.acHeroValue}>{data.complianceMaturity}</span>
+            <Stars count={data.maturityStars} />
+          </div>
+          <div className={s.acHeroCenter}>
+            <span className={s.acHeroCenterLabel}>Overall compliance score</span>
+            <Ring pct={data.overallScore} size={148} stroke={11} id="acRingMain" />
+          </div>
+          <div className={s.acHeroSide}>
+            <span className={s.acHeroLabel}>Document coverage</span>
+            <span className={s.acHeroValue}>{data.regulatoryCoverage}%</span>
+            <span className={s.acHeroSub}>Audit readiness {data.auditReadiness}%</span>
+          </div>
         </div>
 
-        <div className={s.acHeroSide}>
-          <span className={s.acHeroLabel}>Regulatory Coverage</span>
-          <span className={s.acHeroValue}>{data.regulatoryCoverage}%</span>
-          <span className={s.acHeroSub}>Audit Readiness {data.auditReadiness}%</span>
+        <div className={s.acStatStrip}>
+          <div className={s.acStat}><strong>{data.documentsReviewed}</strong><span>Documents reviewed</span></div>
+          <div className={s.acStat}><strong>{data.documentsVerified}</strong><span>Verified clean</span></div>
+          <div className={s.acStat}><strong>{data.l2Score}</strong><span>Level 2 score</span></div>
+          <div className={s.acStat} data-warn={issues.open > 0}><strong>{issues.open}</strong><span>Open issues</span></div>
+          <div className={s.acStat}><strong>{issues.resolved}</strong><span>Resolved in L2</span></div>
         </div>
-      </div>
 
-      {/* ── Per-act ring grid ──────────────────────────────────────── */}
-      <div className={s.acActGrid}>
-        {data.acts.map(a => (
-          <div className={s.acActCard} key={a.act}>
-            <Ring pct={a.pct} size={62} stroke={6} />
-            <div className={s.acActMeta}>
-              <span className={s.acActName}>{a.act}</span>
-              <span className={s.acActTrend}><TrendArrow dir={a.trend} /> Trend</span>
+        <div className={s.acAnalyticsRow}>
+          <div className={s.acPanel}>
+            <p className={s.acPanelTitle}>Compliance by act</p>
+            <table className={s.acMatrixTable}>
+              <thead><tr><th>Act</th><th>Docs</th><th>Score</th><th>Open</th><th>Status</th></tr></thead>
+              <tbody>
+                {data.acts.map(a => (
+                  <tr key={a.act}><td>{a.act}</td><td>{a.documents}</td><td>{a.pct}%</td><td>{a.openIssues}</td>
+                    <td><span className={s[RISK_CLASS[a.risk]]}>{a.status}</span></td></tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className={s.acPanel}>
+            <p className={s.acPanelTitle}>Issue profile (open)</p>
+            <div className={s.acSevList}>
+              <div className={s.acSevRow}><span className={s.acRiskHigh}>Critical</span><strong>{issues.critical}</strong></div>
+              <div className={s.acSevRow}><span className={s.acRiskMed}>Major</span><strong>{issues.major}</strong></div>
+              <div className={s.acSevRow}><span className={s.acRiskLow}>Minor</span><strong>{issues.minor}</strong></div>
             </div>
+            <div className={s.acEnterpriseRisk}>Enterprise risk <span className={s[RISK_CLASS[data.riskLevel]]}>{data.riskLevel}</span></div>
           </div>
-        ))}
-      </div>
+        </div>
 
-      {/* ── Stat strip ─────────────────────────────────────────────── */}
-      <div className={s.acStatStrip}>
-        <div className={s.acStat}><strong>{data.totalApplicableCompliances}</strong><span>Applicable compliances</span></div>
-        <div className={s.acStat}><strong>{data.compliancesMet}</strong><span>Compliances met</span></div>
-        <div className={s.acStat} data-warn={data.openDeviations > 0}><strong>{data.openDeviations}</strong><span>Open deviations</span></div>
-        <div className={s.acStat}><strong>{data.documentsVerified}</strong><span>Documents verified</span></div>
-        <div className={s.acStat}><strong>{data.employeesCovered}</strong><span>Employees covered</span></div>
-        <div className={s.acStat}><strong>{data.suppliersAssessed}</strong><span>Suppliers assessed</span></div>
-        <div className={s.acStat}><strong>{data.regulatoryCoveragePct}%</strong><span>Regulatory coverage</span></div>
-        <div className={s.acStat}><strong>{data.complianceMaturityIndex}/10</strong><span>Maturity index</span></div>
-        <div className={s.acStat}><strong>{data.auditIndexPct}%</strong><span>Audit index</span></div>
-        <div className={s.acStat}><strong>{data.aiConfidenceScore}%</strong><span>AI confidence score</span></div>
-      </div>
-
-      {/* ── Analytics row: matrix / trend / forecast ──────────────── */}
-      <div className={s.acAnalyticsRow}>
         <div className={s.acPanel}>
-          <p className={s.acPanelTitle}>Statutory Compliance Coverage Matrix</p>
+          <p className={s.acPanelTitle}>Document scorecard</p>
           <table className={s.acMatrixTable}>
-            <thead>
-              <tr><th>Act</th><th>Applicable</th><th>Compliant</th><th>Pending</th><th>Status</th></tr>
-            </thead>
+            <thead><tr><th>Document</th><th>Act</th><th>Score</th><th>Open</th><th>Result</th></tr></thead>
             <tbody>
-              {data.matrix.map(row => (
-                <tr key={row.act}>
-                  <td>{row.act}</td>
-                  <td>Yes</td>
-                  <td>{row.compliant ? 'Yes' : 'Partial'}</td>
-                  <td>{row.pending}</td>
-                  <td><span className={s[RISK_CLASS[row.risk]]}>{row.status}</span></td>
-                </tr>
+              {data.docs.map(d => (
+                <tr key={d.name}><td>{d.name}</td><td>{d.act}</td><td>{d.score}%</td><td>{d.openIssues}</td>
+                  <td><span className={d.status === 'validated' ? s.acRiskLow : s.acRiskMed}>{d.status === 'validated' ? 'Verified' : 'Flagged'}</span></td></tr>
               ))}
             </tbody>
           </table>
         </div>
 
-        <div className={s.acPanel}>
-          <p className={s.acPanelTitle}>12-Month Compliance Trend</p>
-          <TrendChart points={data.trend} />
-          <div className={s.acTrendFoot}>
-            <span>Change vs prior month <strong className={data.trendDeltaVsPrior >= 0 ? s.acPos : s.acNeg}>
-              {data.trendDeltaVsPrior >= 0 ? '+' : ''}{data.trendDeltaVsPrior}%
-            </strong></span>
-            <span>Best month <strong>{data.bestMonth.label} ({data.bestMonth.score}%)</strong></span>
+        <div className={s.acAnalyticsRow}>
+          <div className={s.acPanel}>
+            <p className={s.acPanelTitle}>Auditor's assessment</p>
+            <p className={s.acIntelNote}>{data.narrative.summary}</p>
+            <ul className={s.acIntelList}>{data.narrative.achievements.map((t, i) => <li key={i}><IconCheckCircle size={11} /> {t}</li>)}</ul>
+            {data.remarks && <p className={s.acRemarks}>“{data.remarks}”</p>}
+          </div>
+          <div className={s.acPanel}>
+            <p className={s.acPanelTitle}>Focus areas &amp; next steps</p>
+            <ul className={s.acIntelList}>
+              {data.narrative.focusAreas.map((t, i) => <li key={`f${i}`}><IconAlertTriangle size={11} /> {t}</li>)}
+              {data.narrative.actions.map((t, i) => <li key={`a${i}`}><IconShieldCheck size={11} /> {t}</li>)}
+            </ul>
           </div>
         </div>
 
-        <div className={s.acPanel}>
-          <p className={s.acPanelTitle}>AI Predictive Analytics</p>
-          <div className={s.acForecastGrid}>
-            <div><span>Next-Month Forecast</span><strong>{data.forecast.nextMonthPct}%</strong></div>
-            <div><span>3-Month Forecast</span><strong>{data.forecast.next3MonthPct}%</strong></div>
-            <div><span>Annual Projection</span><strong>{data.forecast.annualPct}%</strong></div>
-            <div><span>Compliance Stability</span><strong>{data.forecast.stability}</strong></div>
-            <div><span>AI Confidence Level</span><strong>{data.forecast.confidence}%</strong></div>
-            <div><span>Forecast Reliability</span><strong>{data.forecast.reliability}</strong></div>
-          </div>
-        </div>
-      </div>
-
-      {/* ── Intelligence / heatmap / doc verification ─────────────── */}
-      <div className={s.acAnalyticsRow}>
-        <div className={s.acPanel}>
-          <p className={s.acPanelTitle}>AI Compliance Intelligence</p>
-          <p className={s.acIntelNote}>{data.intelligence.excellenceNote}</p>
-          <p className={s.acIntelSubhead}>Key achievements</p>
-          <ul className={s.acIntelList}>
-            {data.intelligence.keyAchievements.map((t, i) => <li key={i}><IconCheckCircle size={11} /> {t}</li>)}
-          </ul>
-          {data.intelligence.recommendedActions.length > 0 && (
-            <>
-              <p className={s.acIntelSubhead}>Recommended actions</p>
-              <ul className={s.acIntelList}>
-                {data.intelligence.recommendedActions.map((t, i) => <li key={i}><IconAlertTriangle size={11} /> {t}</li>)}
-              </ul>
-            </>
-          )}
-        </div>
-
-        <div className={s.acPanel}>
-          <p className={s.acPanelTitle}>Compliance Risk Heatmap</p>
-          <div className={s.acHeatList}>
-            {data.heatmap.map(h => (
-              <div className={s.acHeatRow} key={h.act}>
-                <span>{h.act}</span>
-                <span className={s[RISK_CLASS[h.risk]]}>{h.risk}</span>
+        <div className={s.acTrustRow}>
+          <div className={s.acTrustLeft}>
+            <p className={s.acPanelTitle}>Verification &amp; signatures</p>
+            <div className={s.acSignatures}>
+              <div className={s.acSigBlock}>
+                <p className={s.acSigName}>{data.auditor.name}</p>
+                <p className={s.acSigRole}>Independent Auditor · Licence {data.auditor.licenseId}</p>
+                <p className={s.acSigMeta}>{data.auditor.specialization} · Signed {data.issuedOn}</p>
               </div>
-            ))}
-          </div>
-          <div className={s.acEnterpriseRisk}>
-            Enterprise Risk Score
-            <span className={s[RISK_CLASS[data.enterpriseRiskScore]]}>{data.enterpriseRiskScore}</span>
-          </div>
-        </div>
-
-        <div className={s.acPanel}>
-          <p className={s.acPanelTitle}>Document Verification Status</p>
-          <div className={s.acDocList}>
-            {data.docVerification.map(d => (
-              <div className={s.acDocRow} key={d.label}>
-                <span>{d.label}</span>
-                <span>{d.pct}%</span>
+              <div className={s.acSigBlock}>
+                <p className={s.acSigName}>{data.contactPerson || data.clientName}</p>
+                <p className={s.acSigRole}>Company point of contact</p>
+                <p className={s.acSigMeta}>{data.clientName}</p>
               </div>
-            ))}
-          </div>
-          <div className={s.acVerifyTotal}>
-            Verification Completion <strong>{data.verificationCompletionPct}%</strong>
-          </div>
-        </div>
-      </div>
-
-      {/* ── Verification & trust layer ─────────────────────────────── */}
-      <div className={s.acTrustRow}>
-        <div className={s.acTrustLeft}>
-          <p className={s.acPanelTitle}>Verification &amp; Trust Layer</p>
-          <div className={s.acTrustTags}>
-            <span><IconShieldCheck size={12} /> Certificate ID: {data.certificateId}</span>
-            <span><IconCheckCircle size={12} /> Digital Signature Verified</span>
-            <span><IconShieldCheck size={12} /> Tamper Protection Enabled</span>
-          </div>
-
-          <div className={s.acSignatures}>
-            <div className={s.acSigBlock}>
-              <p className={s.acSigName}>{data.auditor.name}</p>
-              <p className={s.acSigRole}>Independent Auditor &middot; Licence {data.auditor.licenseId}</p>
-              <p className={s.acSigMeta}>Decision recorded {data.decidedOn}</p>
+              <div className={s.acSigBlock}>
+                <p className={s.acSigName}>Regnix Platform</p>
+                <p className={s.acSigRole}>Verification registry</p>
+                <p className={s.acSigMeta}>Cert. {data.certificateNo}</p>
+              </div>
             </div>
-            <div className={s.acSigBlock}>
-              <p className={s.acSigName}>{data.companyContact.name}</p>
-              <p className={s.acSigRole}>Company Point of Contact</p>
-              <p className={s.acSigMeta}>{data.companyContact.email}</p>
-            </div>
-            <div className={s.acSigBlock}>
-              <p className={s.acSigName}>Regnix Platform</p>
-              <p className={s.acSigRole}>Automated Verification Engine</p>
-              <p className={s.acSigMeta}>Generated {data.generatedOn}</p>
-            </div>
+          </div>
+          <div className={s.acTrustRight}>
+            {qr ? <img className={s.acQrImg} src={qr} alt="Verification QR code" /> : <div className={s.acQrImg} />}
+            <span className={s.acQrLabel}>Scan to verify</span>
+            <span className={s.acQrUrl}>{data.verifyUrl.replace(/^https?:\/\//, '')}</span>
           </div>
         </div>
 
-        <div className={s.acTrustRight}>
-          <QrPlaceholder seed={data.certificateId} />
-          <span className={s.acQrLabel}>Scan to verify</span>
+        <div className={s.acFooterBadges}>
+          <span>CONFIDENTIAL</span><span>INDEPENDENTLY AUDITED</span>
+          <span className={s.acFooterBadgeMain}><IconCheckCircle size={12} /> VERIFIABLE ONLINE</span>
+          <span>REGNIX COMPLIANCE</span>
         </div>
       </div>
-
-      {/* ── Footer badges ───────────────────────────────────────────── */}
-      <div className={s.acFooterBadges}>
-        <span>CONFIDENTIAL</span>
-        <span>AI VALIDATED</span>
-        <span className={s.acFooterBadgeMain}><IconCheckCircle size={12} /> COMPLIANCE VERIFIED</span>
-        <span>AUDIT READY</span>
-        <span>REGULATORY ASSURANCE</span>
-      </div>
-
     </div>
   );
 });
 
-type SendState = 'idle' | 'sending' | 'sent' | 'error';
+type Notice = { kind: 'ok' | 'err'; text: string } | null;
 
-export default function AuditCertificate({ open, onClose, company, auditor }: AuditCertificateProps) {
+export default function AuditCertificate({ open, onClose, company, auditor }: Props) {
   const exportRef = useRef<HTMLDivElement>(null);
-  const [exporting, setExporting] = useState(false);
-  const [sendState, setSendState] = useState<SendState>('idle');
-  const [sendError, setSendError] = useState('');
-
-  if (!open) return null;
+  const [busy, setBusy] = useState<'' | 'pdf' | 'email'>('');
+  const [notice, setNotice] = useState<Notice>(null);
+  const [qr, setQr] = useState('');
 
   const data = buildCertificateData(company, auditor);
 
-  /** Captures the hidden, full-width export copy and builds a paginated A4 PDF. Shared by download + email. */
-  async function renderPdf(): Promise<{ pdf: import('jspdf').jsPDF; base64: string } | null> {
-    if (!exportRef.current) return null;
-    const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
-      import('html2canvas'),
-      import('jspdf'),
-    ]);
+  useEffect(() => {
+    if (!open) return;
+    let alive = true;
+    QRCode.toDataURL(data.verifyUrl, { margin: 1, width: 240, color: { dark: '#04070d', light: '#ffffff' } })
+      .then(u => { if (alive) setQr(u); }).catch(() => { if (alive) setQr(''); });
+    return () => { alive = false; };
+  }, [open, data.verifyUrl]);
 
+  if (!open) return null;
+
+  async function renderPdf() {
+    if (!exportRef.current) return null;
+    const [{ default: html2canvas }, { jsPDF }] = await Promise.all([import('html2canvas'), import('jspdf')]);
     const node = exportRef.current;
     const canvas = await html2canvas(node, {
-      scale: 2,
-      backgroundColor: '#060a12',
-      useCORS: true,
-      logging: false,
-      // Explicitly size the capture window to the node's full, un-clipped
-      // content — this is what fixes the truncated-PDF bug. Without this,
-      // html2canvas defaults to the current browser viewport size.
-      width: node.scrollWidth,
-      height: node.scrollHeight,
-      windowWidth: node.scrollWidth,
-      windowHeight: node.scrollHeight,
+      scale: 2, backgroundColor: '#060a12', useCORS: true, logging: false,
+      width: node.scrollWidth, height: node.scrollHeight, windowWidth: node.scrollWidth, windowHeight: node.scrollHeight,
     });
-
-    const imgData = canvas.toDataURL('image/png');
+    const img = canvas.toDataURL('image/jpeg', 0.9);
     const pdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
-    const pageWidth = pdf.internal.pageSize.getWidth();
-    const pageHeight = pdf.internal.pageSize.getHeight();
-    const imgWidth = pageWidth;
-    const imgHeight = (canvas.height * imgWidth) / canvas.width;
-
-    // Paginate: if the certificate is taller than one A4 page, keep adding
-    // pages, shifting the same full image up by one page-height each time.
-    let heightLeft = imgHeight;
-    let position = 0;
-    pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-    heightLeft -= pageHeight;
-    while (heightLeft > 0) {
-      position -= pageHeight;
-      pdf.addPage();
-      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-      heightLeft -= pageHeight;
-    }
-
-    const base64 = pdf.output('datauristring').split(',')[1];
-    return { pdf, base64 };
+    const pw = pdf.internal.pageSize.getWidth(), ph = pdf.internal.pageSize.getHeight();
+    const ih = (canvas.height * pw) / canvas.width;
+    let left = ih, pos = 0;
+    pdf.addImage(img, 'JPEG', 0, pos, pw, ih);
+    left -= ph;
+    while (left > 0) { pos -= ph; pdf.addPage(); pdf.addImage(img, 'JPEG', 0, pos, pw, ih); left -= ph; }
+    return { pdf, base64: pdf.output('datauristring').split(',')[1] };
   }
 
-  async function handleDownloadPdf() {
-    setExporting(true);
-    try {
-      const result = await renderPdf();
-      if (!result) return;
-      result.pdf.save(`${company.name.replace(/\s+/g, '_')}_Compliance_Certificate.pdf`);
-    } finally {
-      setExporting(false);
-    }
-  }
+  const snapshot = {
+    certificateNo: data.certificateNo, overallScore: data.overallScore, complianceMaturity: data.complianceMaturity,
+    regulatoryCoverage: data.regulatoryCoverage, riskLevel: data.riskLevel, issues: data.issues, acts: data.acts,
+    auditor: data.auditor, issuedOn: data.issuedOn,
+  };
 
-  async function handleEmail() {
-    if (!company.contactEmail) {
-      setSendState('error');
-      setSendError('No company contact email on file.');
-      return;
-    }
-    setSendState('sending');
-    setSendError('');
+  async function run(kind: 'pdf' | 'email') {
+    setBusy(kind); setNotice(null);
     try {
-      const result = await renderPdf();
-      if (!result) throw new Error('Could not render certificate.');
-      const emailResult: Awaited<ReturnType<typeof sendCertificateEmail>> = await sendCertificateEmail({
-        certificateId: data.certificateId,
-        companyName: company.name,
-        toEmail: company.contactEmail,
-        toName: company.contactPerson,
-        fileName: `${company.name.replace(/\s+/g, '_')}_Compliance_Certificate.pdf`,
-        pdfBase64: result.base64,
-      });
-      if (emailResult.ok === true) {
-        setSendState('sent');
-      } else {
-        setSendState('error');
-        setSendError(emailResult.error);
-      }
+      const out = await renderPdf();
+      if (!out) throw new Error('render');
+      if (kind === 'pdf') out.pdf.save(`${data.certificateNo}_${company.name.replace(/\s+/g, '_')}.pdf`);
+      const r = await saveCertificate({ companyId: company.id, pdfBase64: out.base64, sendEmail: kind === 'email', snapshot });
+      if (!r.ok) setNotice({ kind: 'err', text: r.error ?? 'Could not save the certificate.' });
+      else if (kind === 'email' && r.emailed === false) setNotice({ kind: 'err', text: 'Saved for the company, but email is not configured or the contact has no email.' });
+      else setNotice({ kind: 'ok', text: kind === 'email' ? `Emailed to ${company.contactEmail} and saved to the company's portal.` : 'Downloaded and saved to the company\'s portal.' });
     } catch {
-      setSendState('error');
-      setSendError('Something went wrong while preparing the certificate.');
-    }
+      setNotice({ kind: 'err', text: 'Something went wrong while preparing the certificate.' });
+    } finally { setBusy(''); }
   }
 
   return (
     <div className={s.acOverlay} role="dialog" aria-modal="true">
       <div className={s.acToolbar}>
-        {sendState === 'sent' && <span className={s.acSendStatusOk}><IconCheckCircle size={13} /> Emailed to {company.contactEmail}</span>}
-        {sendState === 'error' && <span className={s.acSendStatusErr}><IconAlertTriangle size={13} /> {sendError}</span>}
-
+        {notice && (notice.kind === 'ok'
+          ? <span className={s.acSendStatusOk}><IconCheckCircle size={13} /> {notice.text}</span>
+          : <span className={s.acSendStatusErr}><IconAlertTriangle size={13} /> {notice.text}</span>)}
         <button className={s.acCloseBtn} onClick={onClose}>Close</button>
-        <button className={s.acEmailBtn} onClick={handleEmail} disabled={sendState === 'sending'}>
-          {sendState === 'sending' ? 'Sending…' : `Email to ${company.contactPerson.split(' ')[0]}`}
+        <button className={s.acEmailBtn} onClick={() => { void run('email'); }} disabled={busy !== '' || !company.contactEmail}>
+          {busy === 'email' ? 'Sending…' : `Email to ${(company.contactPerson || 'company').split(' ')[0]}`}
         </button>
-        <button className={s.acDownloadBtn} onClick={handleDownloadPdf} disabled={exporting}>
-          {exporting ? 'Preparing PDF…' : 'Download PDF'}
+        <button className={s.acDownloadBtn} onClick={() => { void run('pdf'); }} disabled={busy !== ''}>
+          {busy === 'pdf' ? 'Preparing PDF…' : 'Download PDF'}
         </button>
       </div>
-
-      <div className={s.acScroll}>
-        <CertificateSheet data={data} />
-      </div>
-
-      {/* Hidden, fixed-width, fully un-clipped copy used only for html2canvas
-          capture — see file header note. Never visible to the user. */}
-      <div className={s.acExportHost} aria-hidden="true">
-        <CertificateSheet data={data} ref={exportRef} />
-      </div>
+      <div className={s.acScroll}><Sheet data={data} qr={qr} /></div>
+      <div className={s.acExportHost} aria-hidden="true"><Sheet data={data} qr={qr} ref={exportRef} /></div>
     </div>
   );
 }

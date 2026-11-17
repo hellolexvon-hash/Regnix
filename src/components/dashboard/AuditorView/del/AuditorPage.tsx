@@ -73,6 +73,10 @@ export default function AuditorPage() {
 
   const auditor = store.currentAuditor;
 
+  if (store.loading && auditor) {
+    return null;
+  }
+
   const navCounts = useMemo(() => {
     const c = store.companies;
     return {

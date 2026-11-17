@@ -168,8 +168,9 @@ export function analyze(table: RegisterTable, opt: AnalysisOptions): Analysis {
   // ── 2. Statutory checks using the state / industry rules ─────────────────
   const grossOf = (i: number) => (grossC != null ? val(i, grossC) : null);
 
-  // PF rule (compliance instruction): contribution wage = Basic + DA, capped at ₹25,000.
-  //   ≤ ₹15,000 → actual · ₹15,001–24,999 → actual (NOT capped at 15,000 / 25,000) · ≥ ₹25,000 → ₹25,000.
+  // PF rule (EPFO illustration table, wage ceiling ₹25,000): contribution wage = Basic + DA, capped at ₹25,000.
+  //   ₹10,000 → 1,200 · ₹15,000 → 1,800 · ₹20,000 → 2,400 · ₹25,000 → 3,000 · ₹35,000 (above cap) → 3,000.
+  //   i.e. 12% of the actual Basic+DA up to the ceiling, and 12% of ₹25,000 beyond it. No special ₹20,000 case.
   const wageOf = (i: number) => (val(i, basicC) ?? 0) + (val(i, daC) ?? 0);
   const inr = (n: number) => n.toLocaleString('en-IN');
   const ceilingTxt = `₹${inr(P.pfWageCeiling)}`;
@@ -199,8 +200,6 @@ export function analyze(table: RegisterTable, opt: AnalysisOptions): Analysis {
       patterns.push(`Employee PF = 12% of Basic+DA, capped at ${ceilingTxt} — correct in ${hits} of ${n} rows`);
       if (below) patterns.push(`PF reviewed for ${below} employees with Basic+DA below ${ceilingTxt}`);
     }
-    const at20k = rows.filter((_, i) => Math.round(wageOf(i)) === 20000).length;
-    if (at20k) notices.push(`${at20k} employee(s) have Basic+DA of exactly ₹20,000. The instruction says "apply the separate PF calculation as discussed" — it was treated as 12% of the actual Basic+DA. Confirm if a different calculation applies.`);
   } else skipped.push('PF check (needs Employee PF and Basic columns)');
 
   if (pfErC != null && basicC != null) pfCheck(pfErC, P.pfEmployerRate, 'Employer PF', 'Employer PF 12% (Basic+DA, cap)');

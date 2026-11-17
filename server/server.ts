@@ -22,8 +22,7 @@ import validationRouter from './routes/validationRoute.js';
 import superAdminRouter from './routes/superAdminRoute.js';
 import certificateRouter from './routes/certificateRoute.js';
 import emailRouter from './routes/emailRoute.js';
-import populateRouter from './routes/populateRoute.js';   // with the other imports
-
+import validationDocsRouter from './routes/validationDocsRoute.js';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
@@ -85,12 +84,12 @@ app.use('/api', clraRouter);
 app.use('/api', factoriesRouter);
 app.use('/api', seActRouter);
 app.use('/api', manualRegistersRouter);
+app.use('/api', validationDocsRouter);
 app.use('/api', validationRouter);
 app.use('/api', auditorRouter);
 app.use('/api', superAdminRouter);
 app.use('/api', certificateRouter);
 app.use('/api', emailRouter);
-app.use('/api', populateRouter); 
 
 if (isProduction && fs.existsSync(path.join(distDir, 'index.html'))) {
   app.get('*', (_req, res) => {

@@ -65,6 +65,20 @@ function fmtDate(d: Date): string {
   return d.toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
 }
 
+function toFileFromBlob(blob: Blob, fileName: string): File {
+  return new File([blob], fileName, { type: blob.type || 'application/octet-stream' });
+}
+
+async function fetchBlob(url: string): Promise<Blob | null> {
+  try {
+    const res = await fetch(url, { credentials: 'include' });
+    if (!res.ok) return null;
+    return await res.blob();
+  } catch {
+    return null;
+  }
+}
+
 export default function AuditorCompanyReview({
   company, auditor, onBack, onClaim, onDecide,
 }: AuditorCompanyReviewProps) {
@@ -80,12 +94,15 @@ export default function AuditorCompanyReview({
   const [liveRegisterOpen, setLiveRegisterOpen] = useState(false);
   const [showCertificate, setShowCertificate] = useState(false);
 
-  // Built once per company — a real, openable .xlsx standing in for the
-  // master payroll register the company submitted at Level 2.
-  const liveRegisterFile = useMemo(
-    () => buildMockLiveRegisterFile(company),
-    [company.id],
-  );
+  // The live register is pulled from the database-backed snapshot when
+  // available; the demo generator remains only as a fallback for local dev.
+  const liveRegisterFile = useMemo(() => {
+    if (company.liveRegisterFile) return company.liveRegisterFile;
+    if (company.liveRegisterUrl) return null;
+    return buildMockLiveRegisterFile(company);
+  }, [company.id, company.liveRegisterFile, company.liveRegisterUrl]);
+
+
 
   const isDecided   = company.status === 'approved' || company.status === 'changes_requested' || company.status === 'rejected';
   const openIssues  = company.issues.filter(i => !i.resolvedL2);
@@ -106,7 +123,21 @@ export default function AuditorCompanyReview({
     }, 700);
   }
 
-  function handleOpenDocument(doc: ReviewDoc) {
+  async function handleOpenDocument(doc: ReviewDoc) {
+    if (doc.blob) {
+      setOpenDoc({ doc, blob: doc.blob });
+      return;
+    }
+
+    if (doc.fileUrl) {
+      const blob = await fetchBlob(doc.fileUrl);
+      if (blob) {
+        setOpenDoc({ doc, blob });
+        return;
+      }
+    }
+
+    // Fallback only for local demo data when no uploaded file exists.
     const blob = buildMockDocumentPdf(doc, company);
     setOpenDoc({ doc, blob });
   }
@@ -209,14 +240,13 @@ export default function AuditorCompanyReview({
 
           <div className={s.arDemoNote}>
             <IconAlertTriangle size={12} />
-            Sample dataset — documents and register values below are generated for this
-            demo. Connect your document store to tally against the real filed values.
+            Database-backed review — the submitted registers below are loaded from the company's uploaded files, and the tally panel uses stored comparison data when available.
           </div>
 
           <div className={s.arDocList}>
             {company.docs.map(doc => {
               const expanded = expandedDocId === doc.id;
-              const fields = expanded ? getTallyFields(doc, company) : [];
+              const fields = expanded ? (doc.tallyRows ?? getTallyFields(doc, company)) : [];
               const mismatchCount = fields.filter(f => !f.match).length;
               const ruleSet = expanded ? resolveRuleSet(doc.name) : null;
               const flaggedRules = expanded
@@ -254,7 +284,7 @@ export default function AuditorCompanyReview({
                             <IconCheckCircle size={11} /> All fields tally
                           </span>
                         )}
-                        <button className={s.arOpenDocBtn} onClick={() => handleOpenDocument(doc)}>
+                        <button className={s.arOpenDocBtn} onClick={() => { void handleOpenDocument(doc); }}>
                           <IconFileText size={13} /> Open filed document
                         </button>
                       </div>

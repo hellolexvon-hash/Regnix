@@ -5,7 +5,7 @@ export const DEFAULT_PARAMS: PayrollParams = {
   hraPctOfBasic: 0.4,
   pfEmployeeRate: 0.12,
   pfEmployerRate: 0.12,
-  pfWageCeiling: 25000,   // PF contribution wage is capped at Basic+DA of ₹25,000 (per compliance instruction)
+  pfWageCeiling: 25000,   // PF contribution wage = Basic+DA, capped at ₹25,000 (EPFO table: 12% of actual up to the cap, 3,000 above it)
   esicEmployeeRate: 0.0075,
   esicEmployerRate: 0.0325,
   esicGrossCeiling: 21000,

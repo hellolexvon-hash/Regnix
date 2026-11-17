@@ -18,6 +18,7 @@
   --ac-green: #34d399;
   --ac-amber: #fbbf24;
   --ac-red: #f87171;
+  --ac-gold: #fbbf24;
 }
 
 .acOverlay {
@@ -112,7 +113,7 @@
   background: radial-gradient(ellipse at 50% 0%, #0d1526 0%, var(--ac-bg) 55%);
   border: 1px solid var(--ac-line);
   border-radius: 16px;
-  padding: 30px 34px 34px;
+  padding: 14px;
   font-family: 'DM Sans', system-ui, sans-serif;
   color: var(--ac-ink);
 }
@@ -345,3 +346,29 @@
   .acSignatures { grid-template-columns: 1fr; }
   .acTrustRow { flex-direction: column; }
 }
+/* ── Enhanced certificate additions ─────────────────────────────────── */
+.acFrame {
+  position: relative; overflow: hidden; border-radius: 10px; padding: 26px 28px 28px;
+  border: 1px solid rgba(251, 191, 36, 0.35);
+  box-shadow: inset 0 0 0 4px rgba(6, 10, 18, 1), inset 0 0 0 5px rgba(251, 191, 36, 0.18);
+}
+.acFrame > *:not(.acWatermark) { position: relative; z-index: 1; }
+.acWatermark {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  font-family: 'Syne', sans-serif; font-weight: 800; font-size: 190px; letter-spacing: 0.1em;
+  color: rgba(122, 159, 255, 0.035); transform: rotate(-18deg); pointer-events: none; z-index: 0;
+}
+.acSeal { width: 54px; height: 54px; }
+.acCertifies { margin: 10px 0 0; text-align: center; font-size: 11px; color: var(--ac-dim); letter-spacing: 0.02em; }
+.acClient { margin: 6px 0 0; text-align: center; font-family: 'Syne', sans-serif; font-weight: 800; font-size: 26px; color: var(--ac-ink); }
+.acClientSub { margin: 3px 0 0; text-align: center; font-size: 11px; color: var(--ac-cyan); }
+.acMetaRow { grid-template-columns: repeat(4, 1fr); }
+.acPanel { margin-bottom: 12px; }
+.acAnalyticsRow { grid-template-columns: repeat(2, 1fr); }
+.acSevList { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+.acSevRow { display: flex; justify-content: space-between; font-size: 11px; padding: 5px 0; border-bottom: 1px solid rgba(255,255,255,0.04); }
+.acRemarks { margin: 10px 0 0; font-size: 10.5px; font-style: italic; color: var(--ac-dim); line-height: 1.5; border-left: 2px solid var(--ac-gold); padding-left: 8px; }
+.acQrImg { width: 92px; height: 92px; border-radius: 6px; background: #fff; display: block; }
+.acQrUrl { max-width: 120px; font-size: 7.5px; color: var(--ac-dim); text-align: center; word-break: break-all; }
+.acHeaderBadges { align-items: center; }
+@media (max-width: 760px) { .acMetaRow { grid-template-columns: repeat(2, 1fr); } .acAnalyticsRow { grid-template-columns: 1fr; } }

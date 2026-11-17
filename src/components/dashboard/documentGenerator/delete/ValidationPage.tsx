@@ -4,24 +4,17 @@
  * Top-level orchestrator for the 3-level compliance validation workflow.
  * Mounted at /dashboard/validation (and sub-paths via DashboardPage).
  *
- * Routing strategy:
- *   /dashboard/validation            → landing (level overview)
- *   /dashboard/validation/level1     → Level 1 upload & verify
- *   /dashboard/validation/level2     → Level 2 live comparison
- *   /dashboard/validation/level3     → Level 3 auditor waiting
- *
- * Uses useNavigate + useParams so the browser back button works correctly.
- * DashboardPage already has:  <Route path="/dashboard/:section/:sub" element={<DashboardPage />} />
- * so these sub-paths resolve automatically.
+ * The UI stays the same; only the state source is persistent now.
  */
 
-import { useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useEffect, useRef } from 'react';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useValidationStore } from './validationStore';
 import ValidationLanding from './ValidationLanding';
 import ValidationLevel1  from './ValidationLevel1';
 import ValidationLevel2  from './ValidationLevel2';
 import ValidationLevel3  from './ValidationLevel3';
+import { uploadValidationDocs } from './validationDocsUpload';
 
 interface ValidationPageProps {
   companyName?:      string;
@@ -29,30 +22,85 @@ interface ValidationPageProps {
   liveRegisterFile?: File | null;
 }
 
+interface ValidationRouteState {
+  companyName?: string;
+  liveRegisterFile?: File | null;
+  selectedActs?: string[];
+}
+
 export default function ValidationPage({
   companyName      = 'Your Company',
   liveRegisterFile = null,
 }: ValidationPageProps) {
-  const navigate   = useNavigate();
-  const { sub }    = useParams<{ sub?: string }>();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { sub }  = useParams<{ sub?: string }>();
+
+  const routeState = (location.state as ValidationRouteState | null) ?? null;
 
   const {
     levelStates,
     uploadedDocs,
-    signatureUrl,
     submittedAt,
     isApproved,
+    currentRoute,
+    companyName: storedCompanyName,
+    liveRegisterFile: storedLiveRegisterFile,
+    hydrated,
     setLevelState,
     setUploadedDocs,
     setSignatureUrl,
     setSubmittedAt,
     setApproved,
+    setCurrentRoute,
+    setCompanyName,
+    setSelectedActs,
+    setLiveRegisterFile,
   } = useValidationStore();
 
-  // Sync URL → keep /dashboard/validation canonical for the landing screen
-  const screen = sub ?? 'landing';
+  const resolvedCompanyName = routeState?.companyName ?? storedCompanyName ?? companyName;
+  const resolvedLiveRegisterFile = routeState?.liveRegisterFile ?? storedLiveRegisterFile ?? liveRegisterFile;
+
+  // Apply the route-state payload (coming from DocumentGenerator Step 5) ONCE,
+  // and only after the store has hydrated — otherwise hydration overwrites it.
+  // The ref guard + stable store actions stop the old render loop.
+  const appliedRouteKey = useRef('');
+  useEffect(() => {
+    if (!hydrated || !routeState) return;
+    const f = routeState.liveRegisterFile;
+    const key = [
+      routeState.companyName ?? '',
+      f ? `${f.name}|${f.size}|${f.lastModified}` : '',
+      (routeState.selectedActs ?? []).join(','),
+    ].join('#');
+    if (appliedRouteKey.current === key) return;
+    appliedRouteKey.current = key;
+
+    if (routeState.companyName) setCompanyName(routeState.companyName);
+    if (f) setLiveRegisterFile(f);
+    if (Array.isArray(routeState.selectedActs)) setSelectedActs(routeState.selectedActs);
+  }, [hydrated, routeState, setCompanyName, setLiveRegisterFile, setSelectedActs]);
+
+  useEffect(() => {
+    if (sub === 'level1' || sub === 'level2' || sub === 'level3') {
+      setCurrentRoute(sub);
+    }
+  }, [sub, setCurrentRoute]);
+
+  // If the user refreshes on /dashboard/validation, restore the saved stage.
+  useEffect(() => {
+    if (!hydrated) return;
+    if (!sub && (currentRoute === 'level1' || currentRoute === 'level2' || currentRoute === 'level3')) {
+      navigate(`/dashboard/validation/${currentRoute}`, { replace: true });
+    }
+  }, [hydrated, sub, currentRoute, navigate]);
+
+  // If the user lands on /dashboard/validation after being in stage 2/3,
+  // render the saved stage instead of restarting the workflow.
+  const screen = (sub ?? currentRoute ?? 'landing') as 'landing' | 'level1' | 'level2' | 'level3';
 
   function goTo(path: 'landing' | 'level1' | 'level2' | 'level3') {
+    setCurrentRoute(path);
     if (path === 'landing') {
       navigate('/dashboard/validation', { replace: false });
     } else {
@@ -75,8 +123,13 @@ export default function ValidationPage({
     }
   }
 
-  function handleLevel1Complete(docs: Parameters<typeof setUploadedDocs>[0], sig: string) {
+  function handleLevel1Complete(
+    docs: Parameters<typeof setUploadedDocs>[0],
+    sig: string,
+  ) {
     setUploadedDocs(docs);
+    // Background copy of every Level 1 document to the company's Zoho WorkDrive folder
+    void uploadValidationDocs(docs.map(d => ({ file: d.file, name: d.name })), resolvedCompanyName);
     setSignatureUrl(sig);
     setLevelState(0, 'done');
     setLevelState(1, 'pending');
@@ -93,10 +146,12 @@ export default function ValidationPage({
   function handleDownloadReport() {
     // Production: fetch signed PDF from backend
     const link     = document.createElement('a');
-    link.href     = '#';
-    link.download = `Audit_Report_${companyName.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.pdf`;
+    link.href      = '#';
+    link.download  = `Audit_Report_${resolvedCompanyName.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.pdf`;
     link.click();
   }
+
+  if (!hydrated) return null;
 
   // ── Render ──────────────────────────────────────────────────────────────────
 
@@ -105,8 +160,9 @@ export default function ValidationPage({
       <ValidationLevel1
         onComplete={handleLevel1Complete}
         onBack={() => {
+          setCurrentRoute('landing');
           setLevelState(0, uploadedDocs.length > 0 ? 'active' : 'pending');
-          goTo('landing');
+          navigate('/dashboard/validation', { replace: false });
         }}
       />
     );
@@ -116,10 +172,13 @@ export default function ValidationPage({
     return (
       <ValidationLevel2
         docs={uploadedDocs}
-        liveRegisterFile={liveRegisterFile}
-        companyName={companyName}
+        liveRegisterFile={resolvedLiveRegisterFile}
+        companyName={resolvedCompanyName}
         onComplete={handleLevel2Complete}
-        onBack={() => goTo('landing')}
+        onBack={() => {
+          setCurrentRoute('landing');
+          navigate('/dashboard/validation', { replace: false });
+        }}
       />
     );
   }
@@ -127,12 +186,15 @@ export default function ValidationPage({
   if (screen === 'level3') {
     return (
       <ValidationLevel3
-        companyName={companyName}
+        companyName={resolvedCompanyName}
         submittedAt={submittedAt ?? undefined}
         isApproved={isApproved}
         onApprove={() => setApproved(true)}
         onDownloadReport={handleDownloadReport}
-        onBack={() => goTo('landing')}
+        onBack={() => {
+          setCurrentRoute('landing');
+          navigate('/dashboard/validation', { replace: false });
+        }}
       />
     );
   }
@@ -140,7 +202,7 @@ export default function ValidationPage({
   // Default: landing
   return (
     <ValidationLanding
-      companyName={companyName}
+      companyName={resolvedCompanyName}
       levelStates={levelStates}
       onStartLevel={handleStartLevel}
     />

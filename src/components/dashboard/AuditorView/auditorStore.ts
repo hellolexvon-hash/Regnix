@@ -75,6 +75,7 @@ export interface TallyRow {
 }
 
 export interface ReviewDoc {
+  hasFile?:  boolean;
   id:        string;
   name:      string;
   act:       string;
@@ -116,8 +117,15 @@ export interface CompanyReview {
   // Materialized master register file for the live comparison viewer.
   liveRegisterUrl?:   string | null;
   liveRegisterFile?:  File | null;
+  liveRegisterFileName?: string | null;
   requestId?:         string | null;
   submittedByUserId?: string | null;
+
+  // Real audit flow
+  locked?:            boolean;          // true until THIS auditor claims it and accepts the terms
+  termsAcceptedAt?:   Date | null;
+  missingFiles?:      string[];         // files that could not be stored (e.g. over 3 MB)
+  certificate?:       { certificateNo: string; issuedAt: Date; sha256: string | null; revoked: boolean } | null;
 }
 
 interface Store {
@@ -131,650 +139,66 @@ interface Store {
   hydrated:         boolean;
 }
 
-// ── Demo auditor gate (kept so the current portal flow still works) ──────────
+// ── Server access (Supabase session → Bearer token) ──────────────────────────
 
-const DEMO_AUDITOR: Auditor = {
-  id: 'demo-auditor',
-  fullName: 'Ananya Rao',
-  email: 'ananya.rao@regnix-audit.in',
-  licenseId: 'RGX-AUD-2291',
-  specialization: 'PF & ESIC',
-  joinedAt: new Date('2025-01-01T10:00:00.000Z'),
-};
+export async function authFetch(url: string, init: RequestInit = {}): Promise<Response> {
+  const { data } = await supabase.auth.getSession();
+  const headers = new Headers(init.headers);
+  if (data.session?.access_token) headers.set('Authorization', `Bearer ${data.session.access_token}`);
+  return fetch(url, { ...init, headers });
+}
+
+type Result = { ok: true } | { ok: false; error: string };
+type DecisionResult = { ok: true; certificateNo?: string } | { ok: false; error: string };
 
 let _store: Store = {
-  auditors:         [DEMO_AUDITOR],
-  credentials:      { [DEMO_AUDITOR.email]: 'demo1234' },
-  currentAuditorId: null,
-  companies:        [],
-  auditLog:         [],
-  loading:          true,
-  error:            null,
-  hydrated:         false,
+  auditors: [], credentials: {}, currentAuditorId: null, companies: [], auditLog: [],
+  loading: true, error: null, hydrated: false,
 };
-
 let _hydratePromise: Promise<void> | null = null;
-
-const AUDITOR_SESSION_KEY = 'regnix.auditor.currentAuditorId.v1';
-
-function isBrowser(): boolean {
-  return typeof window !== 'undefined';
-}
-
-function readStoredCurrentAuditorId(): string | null {
-  if (!isBrowser()) return null;
-  try {
-    const raw = window.sessionStorage.getItem(AUDITOR_SESSION_KEY);
-    return raw && raw.trim() ? raw : null;
-  } catch {
-    return null;
-  }
-}
-
-function persistCurrentAuditorId(value: string | null) {
-  if (!isBrowser()) return;
-  try {
-    if (value) window.sessionStorage.setItem(AUDITOR_SESSION_KEY, value);
-    else window.sessionStorage.removeItem(AUDITOR_SESSION_KEY);
-  } catch {
-    // Ignore storage errors; the in-memory gate still works.
-  }
-}
-
-// ── Module utilities ────────────────────────────────────────────────────────
 
 type Listener = () => void;
 const _listeners = new Set<Listener>();
+function notify() { _listeners.forEach((fn) => fn()); }
+function patch(p: Partial<Store>) { _store = { ..._store, ...p }; notify(); }
 
-function notify() {
-  _listeners.forEach((fn) => fn());
-}
+const d = (v: unknown): Date | null => { if (!v) return null; const x = new Date(String(v)); return Number.isNaN(x.getTime()) ? null : x; };
 
-function setField<K extends keyof Store>(key: K, value: Store[K]) {
-  _store = { ..._store, [key]: value };
-  if (key === 'currentAuditorId') {
-    persistCurrentAuditorId(value as string | null);
-  }
-  notify();
-}
-
-function daysAgo(n: number, h = 10, m = 0): Date {
-  const d = new Date();
-  d.setDate(d.getDate() - n);
-  d.setHours(h, m, 0, 0);
-  return d;
-}
-
-function pickString(...values: unknown[]): string {
-  for (const value of values) {
-    if (value == null) continue;
-    if (typeof value === 'string' && value.trim()) return value.trim();
-    if (typeof value === 'number' && Number.isFinite(value)) return String(value);
-  }
-  return '';
-}
-
-function pickNumber(...values: unknown[]): number {
-  for (const value of values) {
-    if (typeof value === 'number' && Number.isFinite(value)) return value;
-    if (typeof value === 'string' && value.trim() && !Number.isNaN(Number(value))) {
-      return Number(value);
-    }
-  }
-  return 0;
-}
-
-function parseDateish(value: unknown): Date | null {
-  if (value == null || value === '') return null;
-  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
-  const d = new Date(String(value));
-  return Number.isNaN(d.getTime()) ? null : d;
-}
-
-function ensureArray(value: unknown): unknown[] {
-  if (Array.isArray(value)) return value;
-  if (typeof value === 'string') {
-    try {
-      const parsed = JSON.parse(value);
-      return Array.isArray(parsed) ? parsed : [];
-    } catch {
-      return value
-        .split(',')
-        .map((v) => v.trim())
-        .filter(Boolean);
-    }
-  }
-  return [];
-}
-
-function toSpecialization(value: unknown): Specialization {
-  const text = String(value ?? '').toLowerCase();
-  if (text.includes('tax')) return 'Tax & Wages';
-  if (text.includes('general')) return 'General Compliance';
-  if (text.includes('labour')) return 'Labour Law';
-  return 'PF & ESIC';
-}
-
-function normalizeReviewStatus(value: unknown): ReviewStatus {
-  const text = String(value ?? '').toLowerCase();
-  if (text === 'approved') return 'approved';
-  if (text === 'changes_requested' || text === 'changes requested') return 'changes_requested';
-  if (text === 'rejected') return 'rejected';
-  if (text === 'in_review' || text === 'in review') return 'in_review';
-  return 'pending';
-}
-
-function normalizeIssueSeverity(value: unknown): IssueSeverity {
-  const text = String(value ?? '').toLowerCase();
-  if (text === 'critical') return 'critical';
-  if (text === 'minor') return 'minor';
-  return 'major';
-}
-
-function normalizeDocStatus(value: unknown): 'validated' | 'flagged' {
-  const text = String(value ?? '').toLowerCase();
-  return text === 'flagged' || text === 'issue' ? 'flagged' : 'validated';
-}
-
-function normalizeTallyRows(value: unknown): TallyRow[] | null {
-  if (!value) return null;
-  const rows = ensureArray(value);
-  if (!rows.length) return null;
-
-  const out: TallyRow[] = [];
-  for (const row of rows) {
-    if (!row || typeof row !== 'object') continue;
-    const r = row as Record<string, unknown>;
-    const label = pickString(r.label, r.field, r.name);
-    const docValue = pickString(r.docValue, r.filedValue, r.asFiled, r.filed);
-    const regValue = pickString(r.regValue, r.liveValue, r.registerValue, r.masterValue);
-    const matchRaw = r.match;
-    const match = typeof matchRaw === 'boolean'
-      ? matchRaw
-      : docValue === regValue;
-    if (label) {
-      out.push({ label, docValue, regValue, match });
-    }
-  }
-  return out.length ? out : null;
-}
-
-async function fetchBlobFromUrl(url: string): Promise<Blob | null> {
-  try {
-    const res = await fetch(url, { credentials: 'include' });
-    if (!res.ok) return null;
-    return await res.blob();
-  } catch {
-    return null;
-  }
-}
-
-async function fetchFileFromUrl(url: string, fileName: string, mimeType?: string | null): Promise<File | null> {
-  const blob = await fetchBlobFromUrl(url);
-  if (!blob) return null;
-  return new File([blob], fileName, { type: mimeType || blob.type || 'application/octet-stream' });
-}
-
-function createLocalAuditLog(actor: string, actorRole: AuditLogEntry['actorRole'], action: string, detail: string) {
-  const entry: AuditLogEntry = {
-    id: `log-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    actor,
-    actorRole,
-    action,
-    detail,
-    createdAt: new Date(),
-  };
-  _store = { ..._store, auditLog: [entry, ..._store.auditLog].slice(0, 500) };
-  notify();
-}
-
-// ── Demo fallback seed for sign-in only (not for portal company data) ────────
-
-function seedDemoIfMissing() {
-  if (_store.auditors.length === 0) {
-    _store = {
-      ..._store,
-      auditors: [DEMO_AUDITOR],
-      credentials: { [DEMO_AUDITOR.email]: 'demo1234' },
-    };
-  }
-}
-
-function resolveCurrentAuditorId(auditors: Auditor[], preferredId: string | null | undefined): string | null {
-  if (!preferredId) return null;
-  return auditors.some((auditor) => auditor.id === preferredId) ? preferredId : null;
-}
-
-// ── Database bootstrap / normalization ──────────────────────────────────────
-
-interface ApiBootstrapPayload {
-  auditors?: unknown;
-  companies?: unknown;
-  reviewCycles?: unknown;
-  auditLog?: unknown;
-  currentAuditorId?: string | null;
-  error?: string;
-}
-
-async function tryBootstrapApi(): Promise<ApiBootstrapPayload | null> {
-  try {
-    const res = await fetch('/api/auditor/portal/bootstrap', {
-      method: 'GET',
-      credentials: 'include',
-      headers: { Accept: 'application/json' },
-    });
-    if (!res.ok) return null;
-    return (await res.json()) as ApiBootstrapPayload;
-  } catch {
-    return null;
-  }
-}
-
-function normalizeAuditors(raw: unknown): Auditor[] {
-  const rows = ensureArray(raw);
-  const auditors: Auditor[] = [];
-
-  for (const row of rows) {
-    if (!row || typeof row !== 'object') continue;
-    const r = row as Record<string, unknown>;
-    const fullName = pickString(r.full_name, r.fullName, r.name, r.display_name);
-    const email = pickString(r.email, r.work_email);
-    if (!fullName || !email) continue;
-    auditors.push({
-      id: pickString(r.id, r.auditor_id, r.profile_id, email),
-      fullName,
-      email: email.toLowerCase(),
-      licenseId: pickString(r.license_id, r.licenseId, r.registration_no, r.registrationNumber),
-      specialization: toSpecialization(r.specialization),
-      joinedAt: parseDateish(r.joined_at ?? r.joinedAt) ?? daysAgo(1),
-    });
-  }
-
-  return auditors.length ? auditors : [DEMO_AUDITOR];
-}
-
-function normalizeAuditLog(raw: unknown): AuditLogEntry[] {
-  const rows = ensureArray(raw);
-  return rows
-    .map((row) => {
-      if (!row || typeof row !== 'object') return null;
-      const r = row as Record<string, unknown>;
-      const actorRole = String(r.actor_role ?? r.actorRole ?? '').toLowerCase() === 'system' ? 'system' : 'auditor';
-      const createdAt = parseDateish(r.created_at ?? r.createdAt) ?? new Date();
-      const actor = pickString(r.actor, r.actor_name, r.actorName, 'System');
-      const action = pickString(r.action, r.event, 'unknown.action');
-      const detail = pickString(r.detail, r.message, '');
-      if (!detail && !action) return null;
-      return {
-        id: pickString(r.id, `log-${createdAt.getTime()}`),
-        actor,
-        actorRole,
-        action,
-        detail,
-        createdAt,
-      } satisfies AuditLogEntry;
-    })
-    .filter((entry): entry is AuditLogEntry => Boolean(entry))
-    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
-    .slice(0, 500);
-}
-
-async function normalizeDocs(rawDocs: unknown): Promise<ReviewDoc[]> {
-  const rows = ensureArray(rawDocs);
-  const docs: ReviewDoc[] = [];
-
-  for (const row of rows) {
-    if (!row || typeof row !== 'object') continue;
-    const r = row as Record<string, unknown>;
-    const fileUrl = pickString(r.file_url, r.fileUrl, r.storage_url, r.storageUrl, r.url);
-    const fileName = pickString(r.file_name, r.fileName, r.name, r.original_name);
-    const mimeType = pickString(r.mime_type, r.mimeType, r.content_type, r.contentType) || null;
-    const blob = fileUrl ? await fetchBlobFromUrl(fileUrl) : null;
-    const tallyRows = normalizeTallyRows(r.tally_rows ?? r.tallyRows ?? r.comparison_rows);
-
-    docs.push({
-      id: pickString(r.id, r.document_id, fileUrl || fileName || `doc-${docs.length + 1}`),
-      name: pickString(r.name, r.document_name, fileName, 'Uploaded document'),
-      act: pickString(r.act, r.act_name, r.category, 'Compliance'),
-      status: normalizeDocStatus(r.status),
-      score: pickNumber(r.score, r.review_score, 100),
-      fileUrl: fileUrl || null,
-      fileName: fileName || null,
-      mimeType,
-      storagePath: pickString(r.storage_path, r.storagePath) || null,
-      uploadedAt: parseDateish(r.uploaded_at ?? r.uploadedAt),
-      blob,
-      tallyRows,
-    });
-  }
-
-  return docs;
-}
-
-async function normalizeCompaniesFromApi(rawCompanies: unknown): Promise<CompanyReview[]> {
-  const rows = ensureArray(rawCompanies);
-  const companies: CompanyReview[] = [];
-
-  for (const row of rows) {
-    if (!row || typeof row !== 'object') continue;
-    const r = row as Record<string, unknown>;
-    const documents = await normalizeDocs(r.docs ?? r.documents ?? r.uploaded_documents ?? []);
-    const issuesRaw = ensureArray(r.issues);
-    const issues: CarriedIssue[] = issuesRaw
-      .map((issue) => {
-        if (!issue || typeof issue !== 'object') return null;
-        const i = issue as Record<string, unknown>;
-        const docName = pickString(i.doc_name, i.docName, i.document_name, i.documentName);
-        const rule = pickString(i.rule, i.issue, i.description, 'Unspecified');
-        return {
-          id: pickString(i.id, `issue-${companies.length}-${Math.random().toString(36).slice(2, 7)}`),
-          docName: docName || 'Uploaded document',
-          severity: normalizeIssueSeverity(i.severity),
-          rule,
-          rootCause: pickString(i.root_cause, i.rootCause, i.reason, ''),
-          resolvedL2: Boolean(i.resolved_l2 ?? i.resolvedL2),
-        } satisfies CarriedIssue;
-      })
-      .filter((item): item is CarriedIssue => Boolean(item));
-
-    const organization = (r.organization && typeof r.organization === 'object')
-      ? (r.organization as Record<string, unknown>)
-      : r;
-
-    const liveRegisterUrl = pickString(
-      r.live_register_url,
-      r.liveRegisterUrl,
-      organization.live_register_url,
-      organization.liveRegisterUrl,
-      organization.master_register_url,
-      organization.masterRegisterUrl,
-    ) || null;
-
-    const liveRegisterFileName = pickString(
-      r.live_register_file_name,
-      r.liveRegisterFileName,
-      organization.live_register_file_name,
-      organization.liveRegisterFileName,
-      `${pickString(organization.name, r.name, 'Live Register')}.xlsx`,
-    ) || 'Live Register.xlsx';
-
-    const liveRegisterFile = liveRegisterUrl
-      ? await fetchFileFromUrl(liveRegisterUrl, liveRegisterFileName, pickString(organization.mime_type, r.live_register_mime_type) || null)
-      : null;
-
-    const actsCovered = ensureArray(
-      organization.acts_covered ?? organization.actsCovered ?? r.acts_covered ?? r.actsCovered,
-    ).map((v) => String(v)).filter(Boolean);
-
-    companies.push({
-      id: pickString(r.id, r.review_cycle_id, r.reviewCycleId, organization.id, `company-${companies.length + 1}`),
-      name: pickString(organization.name, r.company_name, r.name, 'Unnamed company'),
-      industry: pickString(organization.industry, r.industry, 'Unspecified'),
-      cin: pickString(organization.cin, r.cin, ''),
-      contactPerson: pickString(
-        organization.contact_person,
-        organization.contactPerson,
-        r.contact_person,
-        r.contactPerson,
-        '',
-      ),
-      contactEmail: pickString(
-        organization.contact_email,
-        organization.contactEmail,
-        r.contact_email,
-        r.contactEmail,
-        '',
-      ),
-      employeeCount: pickNumber(
-        organization.employee_count,
-        organization.employeeCount,
-        r.employee_count,
-        r.employeeCount,
-      ),
-      actsCovered: actsCovered.length ? actsCovered : documents.map((doc) => doc.act).filter(Boolean),
-      docs: documents,
-      issues,
-      l2Score: pickNumber(r.l2_score, r.l2Score, 0),
-      l2CompletedAt: parseDateish(r.l2_completed_at ?? r.l2CompletedAt) ?? daysAgo(1),
-      status: normalizeReviewStatus(r.status),
-      assignedTo: pickString(r.assigned_to, r.assignedTo) || null,
-      decisionRemarks: pickString(r.decision_remarks, r.decisionRemarks),
-      decidedAt: parseDateish(r.decided_at ?? r.decidedAt),
-      liveRegisterUrl,
-      liveRegisterFile,
-      requestId: pickString(r.request_id, r.requestId) || null,
-      submittedByUserId: pickString(r.submitted_by_user_id, r.submittedByUserId) || null,
-    });
-  }
-
-  return companies
-    .filter((company) => company.docs.length > 0 || company.liveRegisterFile !== null || company.liveRegisterUrl)
-    .sort((a, b) => b.l2CompletedAt.getTime() - a.l2CompletedAt.getTime());
-}
-
-async function fetchFromSupabase(): Promise<{ auditors: Auditor[]; companies: CompanyReview[]; auditLog: AuditLogEntry[] }> {
-  const [reviewCyclesRes, organizationsRes, documentsRes, issuesRes, auditLogRes, auditorsRes] = await Promise.all([
-    supabase.from('review_cycles').select('*'),
-    supabase.from('organizations').select('*'),
-    supabase.from('documents').select('*'),
-    supabase.from('issues').select('*'),
-    supabase.from('audit_log').select('*'),
-    supabase.from('auditors').select('*'),
-  ]);
-
-  const firstError =
-    reviewCyclesRes.error ??
-    organizationsRes.error ??
-    documentsRes.error ??
-    issuesRes.error ??
-    auditLogRes.error ??
-    auditorsRes.error;
-
-  if (firstError) throw firstError;
-
-  const reviewCycles = reviewCyclesRes.data ?? [];
-  const organizations = organizationsRes.data ?? [];
-  const documents = documentsRes.data ?? [];
-  const issues = issuesRes.data ?? [];
-  const auditLog = normalizeAuditLog(auditLogRes.data ?? []);
-  const auditors = normalizeAuditors(auditorsRes.data ?? []);
-
-  const orgById = new Map<string, Record<string, unknown>>();
-  for (const org of organizations as unknown[]) {
-    if (org && typeof org === 'object') {
-      const r = org as Record<string, unknown>;
-      const id = pickString(r.id, r.organization_id, r.organizationId);
-      if (id) orgById.set(id, r);
-    }
-  }
-
-  const docsByCycle = new Map<string, unknown[]>();
-  for (const doc of documents as unknown[]) {
-    if (!doc || typeof doc !== 'object') continue;
-    const r = doc as Record<string, unknown>;
-    const cycleId = pickString(r.review_cycle_id, r.reviewCycleId, r.cycle_id, r.cycleId, r.company_id, r.companyId);
-    if (!cycleId) continue;
-    const arr = docsByCycle.get(cycleId) ?? [];
-    arr.push(r);
-    docsByCycle.set(cycleId, arr);
-  }
-
-  const issuesByCycle = new Map<string, unknown[]>();
-  for (const issue of issues as unknown[]) {
-    if (!issue || typeof issue !== 'object') continue;
-    const r = issue as Record<string, unknown>;
-    const cycleId = pickString(r.review_cycle_id, r.reviewCycleId, r.cycle_id, r.cycleId, r.company_id, r.companyId);
-    if (!cycleId) continue;
-    const arr = issuesByCycle.get(cycleId) ?? [];
-    arr.push(r);
-    issuesByCycle.set(cycleId, arr);
-  }
-
-  const companies: CompanyReview[] = [];
-
-  for (const cycle of reviewCycles as unknown[]) {
-    if (!cycle || typeof cycle !== 'object') continue;
-    const r = cycle as Record<string, unknown>;
-    const organizationId = pickString(r.organization_id, r.organizationId, r.company_id, r.companyId);
-    const org = organizationId ? orgById.get(organizationId) ?? null : null;
-    const cycleId = pickString(r.id, r.review_cycle_id, r.reviewCycleId, organizationId);
-
-    const documentsForCycle = docsByCycle.get(cycleId) ?? [];
-    const issuesForCycle = issuesByCycle.get(cycleId) ?? [];
-    const normalizedDocs = await normalizeDocs(documentsForCycle);
-    const normalizedIssues: CarriedIssue[] = issuesForCycle
-      .map((issue) => {
-        if (!issue || typeof issue !== 'object') return null;
-        const i = issue as Record<string, unknown>;
-        return {
-          id: pickString(i.id, `issue-${cycleId}-${Math.random().toString(36).slice(2, 7)}`),
-          docName: pickString(i.doc_name, i.docName, i.document_name, i.documentName, 'Uploaded document'),
-          severity: normalizeIssueSeverity(i.severity),
-          rule: pickString(i.rule, i.description, i.reason, 'Unspecified'),
-          rootCause: pickString(i.root_cause, i.rootCause, ''),
-          resolvedL2: Boolean(i.resolved_l2 ?? i.resolvedL2),
-        } satisfies CarriedIssue;
-      })
-      .filter((item): item is CarriedIssue => Boolean(item));
-
-    const liveRegisterUrl = pickString(
-      r.live_register_url,
-      r.liveRegisterUrl,
-      org?.live_register_url,
-      org?.liveRegisterUrl,
-      org?.master_register_url,
-      org?.masterRegisterUrl,
-    ) || null;
-
-    const liveRegisterFileName = pickString(
-      r.live_register_file_name,
-      r.liveRegisterFileName,
-      org?.live_register_file_name,
-      org?.liveRegisterFileName,
-      `${pickString(org?.name, r.company_name, 'Live Register')}.xlsx`,
-    ) || 'Live Register.xlsx';
-
-    const liveRegisterFile = liveRegisterUrl
-      ? await fetchFileFromUrl(liveRegisterUrl, liveRegisterFileName, pickString(r.live_register_mime_type, org?.live_register_mime_type) || null)
-      : null;
-
-    const actsCovered = ensureArray(org?.acts_covered ?? org?.actsCovered ?? r.acts_covered ?? r.actsCovered)
-      .map((v) => String(v))
-      .filter(Boolean);
-
-    companies.push({
-      id: cycleId || pickString(organizationId, `company-${companies.length + 1}`),
-      name: pickString(org?.name, r.company_name, r.name, 'Unnamed company'),
-      industry: pickString(org?.industry, r.industry, 'Unspecified'),
-      cin: pickString(org?.cin, r.cin, ''),
-      contactPerson: pickString(
-        org?.contact_person,
-        org?.contactPerson,
-        r.contact_person,
-        r.contactPerson,
-        '',
-      ),
-      contactEmail: pickString(
-        org?.contact_email,
-        org?.contactEmail,
-        r.contact_email,
-        r.contactEmail,
-        '',
-      ),
-      employeeCount: pickNumber(org?.employee_count, org?.employeeCount, r.employee_count, r.employeeCount),
-      actsCovered: actsCovered.length ? actsCovered : normalizedDocs.map((doc) => doc.act).filter(Boolean),
-      docs: normalizedDocs,
-      issues: normalizedIssues,
-      l2Score: pickNumber(r.l2_score, r.l2Score, 0),
-      l2CompletedAt: parseDateish(r.l2_completed_at ?? r.l2CompletedAt) ?? daysAgo(1),
-      status: normalizeReviewStatus(r.status),
-      assignedTo: pickString(r.assigned_to, r.assignedTo) || null,
-      decisionRemarks: pickString(r.decision_remarks, r.decisionRemarks),
-      decidedAt: parseDateish(r.decided_at ?? r.decidedAt),
-      liveRegisterUrl,
-      liveRegisterFile,
-      requestId: pickString(r.request_id, r.requestId) || null,
-      submittedByUserId: pickString(r.submitted_by_user_id, r.submittedByUserId) || null,
-    });
-  }
-
+function mapCompany(r: any): CompanyReview {
   return {
-    auditors,
-    companies: companies
-      .filter((company) => company.docs.length > 0 || company.liveRegisterFile !== null || company.liveRegisterUrl)
-      .sort((a, b) => b.l2CompletedAt.getTime() - a.l2CompletedAt.getTime()),
-    auditLog,
+    id: r.id, name: r.name, industry: r.industry, cin: r.cin ?? '', contactPerson: r.contactPerson ?? '', contactEmail: r.contactEmail ?? '',
+    employeeCount: Number(r.employeeCount) || 0, actsCovered: r.actsCovered ?? [],
+    docs: (r.docs ?? []).map((x: any): ReviewDoc => ({ ...x, uploadedAt: d(x.uploadedAt), blob: null, tallyRows: null })),
+    issues: r.issues ?? [], l2Score: Number(r.l2Score) || 0, l2CompletedAt: d(r.l2CompletedAt) ?? new Date(),
+    status: r.status, assignedTo: r.assignedTo ?? null, decisionRemarks: r.decisionRemarks ?? '', decidedAt: d(r.decidedAt),
+    liveRegisterUrl: r.liveRegisterUrl ?? null, liveRegisterFile: null, liveRegisterFileName: r.liveRegisterFileName ?? null,
+    locked: !!r.locked, termsAcceptedAt: d(r.termsAcceptedAt), missingFiles: r.missingFiles ?? [],
+    certificate: r.certificate ? { ...r.certificate, issuedAt: d(r.certificate.issuedAt) ?? new Date() } : null,
   };
 }
 
 async function hydrateStore(): Promise<void> {
-  if (_store.hydrated) return;
-
-  setField('loading', true);
-  setField('error', null);
-
-  const storedCurrentAuditorId = readStoredCurrentAuditorId();
-
+  patch({ loading: true, error: null });
   try {
-    const api = await tryBootstrapApi();
-    if (api && (api.companies || api.reviewCycles || api.auditors || api.auditLog)) {
-      const companies = await normalizeCompaniesFromApi(api.companies ?? api.reviewCycles ?? []);
-      const auditors = api.auditors ? normalizeAuditors(api.auditors) : [_store.auditors[0]];
-      const auditLog = api.auditLog ? normalizeAuditLog(api.auditLog) : [];
-      const currentAuditorId = resolveCurrentAuditorId(auditors, api.currentAuditorId ?? storedCurrentAuditorId);
-      _store = {
-        ..._store,
-        auditors,
-        companies,
-        auditLog,
-        currentAuditorId,
-        loading: false,
-        hydrated: true,
-      };
-      persistCurrentAuditorId(currentAuditorId);
-      notify();
+    const { data: sess } = await supabase.auth.getSession();
+    if (!sess.session) { patch({ loading: false, hydrated: true, currentAuditorId: null, companies: [] }); return; }
+    const res = await authFetch('/api/auditor/portal/bootstrap', { headers: { Accept: 'application/json' } });
+    if (res.status === 403 || res.status === 401) {
+      patch({ loading: false, hydrated: true, currentAuditorId: null, companies: [], error: 'This account is not registered as an auditor.' });
       return;
     }
-
-    const snapshot = await fetchFromSupabase();
-    const currentAuditorId = resolveCurrentAuditorId(snapshot.auditors, storedCurrentAuditorId);
-    _store = {
-      ..._store,
-      auditors: snapshot.auditors.length ? snapshot.auditors : _store.auditors,
-      companies: snapshot.companies,
-      auditLog: snapshot.auditLog,
-      currentAuditorId,
-      loading: false,
-      hydrated: true,
-    };
-    persistCurrentAuditorId(currentAuditorId);
-    notify();
+    if (!res.ok) throw new Error(`Server responded ${res.status}`);
+    const p = await res.json();
+    const auditors: Auditor[] = (p.auditors ?? []).map((a: any) => ({ ...a, email: String(a.email ?? '').toLowerCase(), joinedAt: d(a.joinedAt) ?? new Date() }));
+    const me = p.auditor ? { ...p.auditor, joinedAt: d(p.auditor.joinedAt) ?? new Date() } as Auditor : null;
+    if (me && !auditors.some((a) => a.id === me.id)) auditors.push(me);
+    patch({ auditors, companies: (p.companies ?? []).map(mapCompany), currentAuditorId: me?.id ?? null, loading: false, hydrated: true, error: null });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Failed to load auditor portal data.';
-    _store = {
-      ..._store,
-      currentAuditorId: resolveCurrentAuditorId(_store.auditors, storedCurrentAuditorId),
-      loading: false,
-      hydrated: true,
-      error: message,
-    };
-    persistCurrentAuditorId(_store.currentAuditorId);
-    notify();
+    patch({ loading: false, hydrated: true, error: err instanceof Error ? err.message : 'Failed to load auditor portal data.' });
   }
 }
 
-async function persistAuditAction(path: string, payload: unknown): Promise<void> {
-  try {
-    await fetch(path, {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-  } catch {
-    // Best-effort persistence; local UI remains responsive even if the backend is unavailable.
-  }
-}
+async function reload() { _hydratePromise = hydrateStore(); await _hydratePromise; }
 
 // ── Hook ─────────────────────────────────────────────────────────────────────
 
@@ -782,162 +206,70 @@ export function useAuditorStore() {
   const [, forceRender] = useState(0);
 
   useEffect(() => {
-    seedDemoIfMissing();
-
-    if (!_hydratePromise) {
-      _hydratePromise = hydrateStore().finally(() => {
-        _store = { ..._store, loading: false };
-        notify();
-      });
-    }
-
+    if (!_hydratePromise) _hydratePromise = hydrateStore();
     const listener: Listener = () => forceRender((n) => n + 1);
     _listeners.add(listener);
-
-    return () => {
-      _listeners.delete(listener);
-    };
+    return () => { _listeners.delete(listener); };
   }, []);
 
   const currentAuditor = _store.auditors.find((a) => a.id === _store.currentAuditorId) ?? null;
 
   return {
-    auditors:  _store.auditors,
+    auditors: _store.auditors,
     companies: _store.companies,
-    auditLog:  _store.auditLog,
+    auditLog: _store.auditLog,
     currentAuditor,
     isAuthenticated: currentAuditor !== null,
     loading: _store.loading,
     error: _store.error,
     hydrated: _store.hydrated,
 
-    async refresh() {
-      _store = { ..._store, hydrated: false, loading: true, error: null };
-      notify();
-      _hydratePromise = hydrateStore().finally(() => {
-        _store = { ..._store, loading: false };
-        notify();
-      });
-      await _hydratePromise;
-    },
+    refresh: reload,
 
-    signUp(input: {
-      fullName: string;
-      email: string;
-      password: string;
-      licenseId: string;
-      specialization: Specialization;
-    }): { ok: true } | { ok: false; error: string } {
-      const email = input.email.trim().toLowerCase();
-      if (_store.credentials[email]) {
-        return { ok: false, error: 'An auditor account with this email already exists. Try signing in instead.' };
+    /** Real sign-in: Supabase account that has an auditor_profiles row. */
+    async signIn(email: string, password: string): Promise<Result> {
+      const { error } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password });
+      if (error) return { ok: false, error: 'Incorrect email or password.' };
+      await reload();
+      if (!_store.currentAuditorId) {
+        await supabase.auth.signOut();
+        return { ok: false, error: _store.error || 'This account is not registered as an auditor.' };
       }
-
-      const auditor: Auditor = {
-        id: `a-${Date.now()}`,
-        fullName: input.fullName.trim(),
-        email,
-        licenseId: input.licenseId.trim(),
-        specialization: input.specialization,
-        joinedAt: new Date(),
-      };
-
-      _store = {
-        ..._store,
-        auditors: [..._store.auditors, auditor],
-        credentials: { ..._store.credentials, [email]: input.password },
-        currentAuditorId: auditor.id,
-      };
-      notify();
-      createLocalAuditLog(auditor.fullName, 'auditor', 'auditor.signup', `New auditor account created (${auditor.specialization}, licence ${auditor.licenseId}).`);
-      void persistAuditAction('/api/auditor/auth/signup', {
-        fullName: auditor.fullName,
-        email: auditor.email,
-        licenseId: auditor.licenseId,
-        specialization: auditor.specialization,
-      });
       return { ok: true };
     },
 
-    signIn(email: string, password: string): { ok: true } | { ok: false; error: string } {
-      const key = email.trim().toLowerCase();
-      if (!_store.credentials[key]) {
-        createLocalAuditLog(email, 'auditor', 'auditor.signin_failed', 'Sign-in attempt with an unrecognized email.');
-        return { ok: false, error: 'No auditor account found with this email.' };
-      }
-      if (_store.credentials[key] !== password) {
-        createLocalAuditLog(email, 'auditor', 'auditor.signin_failed', 'Sign-in attempt with an incorrect password.');
-        return { ok: false, error: 'Incorrect password. Please try again.' };
-      }
-      const auditor = _store.auditors.find((a) => a.email === key)!;
-      setField('currentAuditorId', auditor.id);
-      persistCurrentAuditorId(auditor.id);
-      createLocalAuditLog(auditor.fullName, 'auditor', 'auditor.signin', 'Signed in to the Auditor Portal.');
-      void persistAuditAction('/api/auditor/auth/signin', { email: auditor.email });
-      return { ok: true };
+    signUp(): Result {
+      return { ok: false, error: 'Auditor accounts are created by a Regnix administrator.' };
     },
 
-    signOut() {
-      setField('currentAuditorId', null);
-      persistCurrentAuditorId(null);
-      void persistAuditAction('/api/auditor/auth/signout', {});
+    async signOut() {
+      await supabase.auth.signOut();
+      patch({ currentAuditorId: null, companies: [], auditLog: [] });
     },
 
-    claimCompany(companyId: string) {
-      if (!_store.currentAuditorId) return;
-      const auditor = _store.auditors.find((a) => a.id === _store.currentAuditorId);
-      const company = _store.companies.find((c) => c.id === companyId);
-
-      const companies = _store.companies.map((c) =>
-        c.id === companyId && c.status === 'pending'
-          ? { ...c, status: 'in_review' as ReviewStatus, assignedTo: _store.currentAuditorId }
-          : c,
-      );
-
-      setField('companies', companies);
-
-      if (auditor && company) {
-        createLocalAuditLog(auditor.fullName, 'auditor', 'review.claim', `Claimed ${company.name} for review.`);
-        void persistAuditAction('/api/auditor/reviews/claim', {
-          companyId,
-          auditorId: auditor.id,
+    /** Self-assign: needs the auditor to have accepted the terms. Only one auditor can win. */
+    async claimCompany(companyId: string, acceptedTerms: boolean): Promise<Result> {
+      try {
+        const res = await authFetch('/api/auditor/reviews/claim', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ companyId, acceptedTerms }),
         });
-      }
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) { if (res.status === 409) await reload(); return { ok: false, error: body?.message ?? `Server ${res.status}` }; }
+        await reload();
+        return { ok: true };
+      } catch { return { ok: false, error: 'Could not reach the server.' }; }
     },
 
-    decide(companyId: string, decision: 'approved' | 'changes_requested' | 'rejected', remarks: string) {
-      const auditor = _store.auditors.find((a) => a.id === _store.currentAuditorId);
-      const company = _store.companies.find((c) => c.id === companyId);
-
-      const companies = _store.companies.map((c) =>
-        c.id === companyId
-          ? {
-              ...c,
-              status: decision,
-              decisionRemarks: remarks,
-              decidedAt: new Date(),
-              assignedTo: c.assignedTo ?? _store.currentAuditorId,
-            }
-          : c,
-      );
-
-      setField('companies', companies);
-
-      if (auditor && company) {
-        const label = decision === 'approved'
-          ? 'Approved'
-          : decision === 'rejected'
-            ? 'Rejected'
-            : 'Requested changes on';
-
-        createLocalAuditLog(auditor.fullName, 'auditor', `review.${decision}`, `${label} ${company.name}.`);
-        void persistAuditAction('/api/auditor/reviews/decision', {
-          companyId,
-          auditorId: auditor.id,
-          decision,
-          remarks,
+    async decide(companyId: string, decision: 'approved' | 'changes_requested' | 'rejected', remarks: string): Promise<DecisionResult> {
+      try {
+        const res = await authFetch('/api/auditor/reviews/decision', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ companyId, decision, remarks }),
         });
-      }
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) return { ok: false, error: body?.message ?? `Server ${res.status}` };
+        await reload();
+        return { ok: true, certificateNo: body?.certificate?.certificateNo };
+      } catch { return { ok: false, error: 'Could not reach the server.' }; }
     },
   };
 }

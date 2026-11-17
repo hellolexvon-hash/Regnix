@@ -11,6 +11,9 @@ declare const console: {
 declare function structuredClone<T>(value: T): T;
 
 declare class Buffer extends Uint8Array {
+  equals(arg0: Buffer<ArrayBufferLike>): boolean {
+    throw new Error('Method not implemented.');
+  }
   constructor(input: string | ArrayBuffer | ArrayBufferView | readonly number[]);
   static from(data: string | ArrayBuffer | ArrayBufferView | readonly number[], encoding?: string): Buffer;
   static from(data: ArrayBuffer | ArrayBufferView): Buffer;
