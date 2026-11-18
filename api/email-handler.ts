@@ -32,6 +32,10 @@ const ACTION_PATHS: Readonly<Record<string, string>> = {
   'aud-decision': '/api/kyc/auditor-decision',
   'aud-cert': '/api/kyc/auditor-cert',
   'cert-verify': '/api/kyc/cert-verify',
+  'admin-overview': '/api/kyc/admin-overview',
+  'admin-detail': '/api/kyc/admin-detail',
+  'admin-file': '/api/kyc/admin-file',
+  'admin-action': '/api/kyc/admin-action',
 };
 
 const PATH_ACTIONS: Readonly<Record<string, string>> = {
@@ -53,6 +57,10 @@ const PATH_ACTIONS: Readonly<Record<string, string>> = {
   '/api/auditor/reviews/decision': 'aud-decision',
   '/api/auditor/certificate': 'aud-cert',
   '/api/certificate/verify': 'cert-verify',
+  '/api/admin/portal/overview': 'admin-overview',
+  '/api/admin/portal/review': 'admin-detail',
+  '/api/admin/portal/file': 'admin-file',
+  '/api/admin/portal/action': 'admin-action',
 };
 
 type RequestWithVercelQuery = IncomingMessage & {
