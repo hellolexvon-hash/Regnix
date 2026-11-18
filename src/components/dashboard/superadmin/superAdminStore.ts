@@ -681,13 +681,37 @@ export interface PortalDetail {
   activity: Array<{ id: string; action: string; detail: string; actorRole: string; createdAt: string }>;
 }
 
+const PORTAL_ACTIONS: Record<string, string> = {
+  '/api/admin/portal/overview': 'admin-overview',
+  '/api/admin/portal/review': 'admin-detail',
+  '/api/admin/portal/file': 'admin-file',
+  '/api/admin/portal/action': 'admin-action',
+};
+
+/**
+ * Calls the admin portal API. Goes through /api/email-handler?action=… first (a real serverless function,
+ * so it works on Vercel without any vercel.json rewrite); if that does not answer with JSON (local dev
+ * server without the function) it falls back to the public /api/admin/portal/* path.
+ */
 async function adminAuthFetch(path: string, init?: RequestInit): Promise<Response> {
   const { data } = await supabase.auth.getSession();
   const token = data.session?.access_token ?? '';
-  return fetch(`${API_BASE}${path}`, {
+  const opts: RequestInit = {
     ...init,
     headers: { ...(init?.body ? { 'Content-Type': 'application/json' } : {}), Authorization: `Bearer ${token}`, ...(init?.headers ?? {}) },
-  });
+  };
+  const [base, qs = ''] = path.split('?');
+  const action = PORTAL_ACTIONS[base];
+  if (action) {
+    const viaHandler = `${API_BASE}/api/email-handler?action=${action}${qs ? `&${qs}` : ''}`;
+    try {
+      const r = await fetch(viaHandler, opts);
+      const ct = r.headers.get('content-type') ?? '';
+      // file downloads are not JSON on success; treat any non-HTML answer as the real one
+      if (!ct.includes('text/html') && r.status !== 404 && r.status !== 405) return r;
+    } catch { /* fall through to the public path */ }
+  }
+  return fetch(`${API_BASE}${path}`, opts);
 }
 
 /** Open a stored document in a new tab (needs the Authorization header, so fetch → blob URL). */
