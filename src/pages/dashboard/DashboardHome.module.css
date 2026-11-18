@@ -259,3 +259,45 @@
   font-size: 10.5px; font-weight: 600; color: #4A4468; background: #F4F2FF;
   border: 1px solid #E5E2F0; border-radius: 6px; padding: 4px 10px; cursor: pointer;
 }
+
+
+/* ── NEW: Reviews & Requests ── */
+.countPill { font-size: 10px; font-weight: 700; color: #fff; background: #7C3AED; border-radius: 99px; padding: 2px 8px; }
+.reqEmpty { display: flex; align-items: center; gap: 10px; color: #8B85A8; font-size: 12px; padding: 6px 0; }
+.reqList { display: flex; flex-direction: column; }
+.reqRow {
+  display: flex; align-items: center; gap: 12px; text-align: left; width: 100%;
+  padding: 10px 6px; background: none; border: none; border-bottom: 1px solid #F0EEF9;
+  cursor: pointer; border-radius: 8px; transition: background 150ms; font-family: var(--font-sans);
+}
+.reqRow:last-child { border-bottom: none; }
+.reqRow:hover { background: #F9F8FF; }
+.reqIcon { width: 30px; height: 30px; border-radius: 8px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.reqReview  { background: #EDE9FE; color: #7C3AED; }
+.reqRequest { background: rgba(217,119,6,0.1); color: #D97706; }
+.reqBody { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.reqTitle { font-size: 12.5px; font-weight: 600; color: #0F0A1E; display: flex; align-items: center; gap: 8px; }
+.reqUnread .reqTitle::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: #7C3AED; flex-shrink: 0; }
+.reqUrgent { font-size: 9px; font-weight: 700; color: #DC2626; background: rgba(220,38,38,0.08); border-radius: 99px; padding: 1px 6px; text-transform: uppercase; }
+.reqText { font-size: 11.5px; color: #4A4468; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.reqMeta { display: flex; flex-direction: column; align-items: flex-end; font-size: 10.5px; color: #8B85A8; flex-shrink: 0; }
+
+/* ── NEW: Resources & Support ── */
+.resourceGrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+@media(max-width: 1100px) { .resourceGrid { grid-template-columns: 1fr 1fr; } }
+@media(max-width: 560px)  { .resourceGrid { grid-template-columns: 1fr; } }
+.resourceCard {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 6px; text-align: left;
+  background: #fff; border: 1px solid #E5E2F0; border-radius: 14px; padding: 16px;
+  box-shadow: 0 1px 4px rgba(91,33,182,0.06); cursor: pointer; font-family: var(--font-sans);
+  transition: transform 180ms, border-color 180ms, box-shadow 180ms;
+}
+.resourceCard:hover { transform: translateY(-2px); border-color: #A78BFA; box-shadow: 0 6px 18px rgba(91,33,182,0.12); }
+.resourceIcon {
+  width: 36px; height: 36px; border-radius: 10px; margin-bottom: 4px;
+  background: linear-gradient(135deg, #EDE9FE, #DDD6FE); color: #6D28D9;
+  display: flex; align-items: center; justify-content: center;
+}
+.resourceTitle { font-size: 13px; font-weight: 700; color: #0F0A1E; }
+.resourceSub { font-size: 11.5px; color: #8B85A8; line-height: 1.45; }
+.resourceCta { margin-top: 4px; font-size: 11.5px; font-weight: 600; color: #7C3AED; display: inline-flex; align-items: center; gap: 2px; }

@@ -5,6 +5,7 @@
 
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useNotifications } from '@/hooks/useNotifications';
 import styles from './DashboardSidebar.module.css';
 
 const logoSrc = '/regnix-mark.png';
@@ -38,13 +39,12 @@ const NAV: NavSection[] = [
       {
         id: 'compliance',
         icon: <Icon d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />,
-        label: 'Compliance', badge: '3',
+        label: 'Compliance',
         children: [
           { id: 'calendar',   label: 'Compliance Calendar'  },
           { id: 'generator',  label: 'Document Generator'   },
           { id: 'checker',    label: 'Applicability Checker'},
-          { id: 'register',   label: 'Statutory Register'   },
-          { id: 'filing',     label: 'Filing Tracker'       },
+
         ],
       },
       {
@@ -53,45 +53,16 @@ const NAV: NavSection[] = [
         label: 'Audit',
         children: [
           { id: 'planner',   label: 'Audit Planner' },
-          { id: 'checklist', label: 'Checklists'    },
-          { id: 'findings',  label: 'Findings'      },
+
         ],
       },
-      {
-        id: 'legal',
-        icon: <Icon d="M3 6h18M3 12h18M3 18h18" />,
-        label: 'Legal AI', badge: '1',
-        children: [
-          { id: 'notices',  label: 'Notices & Summons' },
-          { id: 'analyzer', label: 'AI Analyzer'       },
-          { id: 'cases',    label: 'Case Tracker'      },
-        ],
-      },
+      
     ],
   },
   {
     label: 'Operations',
     items: [
-      {
-        id: 'payroll',
-        icon: <Icon d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" />,
-        label: 'Payroll & Statutory',
-        children: [
-          { id: 'salary',  label: 'Salary Structure'  },
-          { id: 'pfesic',  label: 'PF / ESIC / PT'    },
-          { id: 'payslip', label: 'Payslip Generator' },
-        ],
-      },
-      {
-        id: 'workforce',
-        icon: <Icon d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" />,
-        label: 'Workforce',
-        children: [
-          { id: 'employees', label: 'Employees' },
-          { id: 'vendors',   label: 'Vendors'   },
-          { id: 'lifecycle', label: 'Lifecycle' },
-        ],
-      },
+      
       {
         id: 'documents',
         icon: <Icon d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8zM14 2v6h6" />,
@@ -135,7 +106,13 @@ interface Props {
 
 export function DashboardSidebar({ collapsed, onToggle, activeView, onNavigate }: Props) {
   const [expanded, setExpanded] = useState<string | null>('compliance');
-  const navSections = useMemo(() => NAV, []);
+  const { unreadCount } = useNotifications();
+  // Live unread count on the Notifications item (replaces the hard-coded badge)
+  const navSections = useMemo(() => NAV.map(sec => ({
+    ...sec,
+    items: sec.items.map(it => it.id === 'notifications' && unreadCount > 0
+      ? { ...it, badge: String(unreadCount) } : it),
+  })), [unreadCount]);
   const toggle = (id: string) => setExpanded(prev => prev === id ? null : id);
 
   return (

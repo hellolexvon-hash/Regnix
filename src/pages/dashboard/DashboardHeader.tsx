@@ -1,18 +1,31 @@
 /**
  * src/pages/dashboard/DashboardHeader.tsx
- * Real user name/role from Supabase profile — no changes to visual design.
+ * Same layout as before. Emojis replaced by SVG icons; bell is now a live
+ * notification dropdown (reviews/requests from admins & auditors).
  */
 
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
+import { Icon } from '@/components/ui/Icons';
+import { AiOrb } from './AiAssistantPanel';
+import { NotificationBell } from './NotificationBell';
 import styles from './DashboardHeader.module.css';
 
 interface Props {
   onAiToggle: () => void;
   aiOpen: boolean;
+  /** Current dashboard section id, used for the breadcrumb */
+  activeView?: string;
 }
 
-export function DashboardHeader({ onAiToggle, aiOpen }: Props) {
+const VIEW_LABELS: Record<string, string> = {
+  dashboard: 'Dashboard', calendar: 'Compliance Calendar', generator: 'Document Generator',
+  checker: 'Applicability Checker', planner: 'Audit Planner', documents: 'Documents',
+  library: 'E-Library', reports: 'Analytics & Reports', tasks: 'Tasks & Workflow',
+  notifications: 'Notifications', settings: 'Settings',
+};
+
+export function DashboardHeader({ onAiToggle, aiOpen, activeView = 'dashboard' }: Props) {
   const { user, profile, logout } = useAuth();
   const navigate = useNavigate();
 
@@ -29,14 +42,14 @@ export function DashboardHeader({ onAiToggle, aiOpen }: Props) {
     <header className={styles.header}>
       <div className={styles.breadcrumb}>
         <span className={styles.breadRoot}>Regnix</span>
-        <span className={styles.breadSep}>›</span>
-        <span className={styles.breadCurrent}>Dashboard</span>
+        <span className={styles.breadSep}><Icon name="chevronRight" size={12} /></span>
+        <span className={styles.breadCurrent}>{VIEW_LABELS[activeView] ?? 'Dashboard'}</span>
       </div>
 
       <div className={styles.right}>
         <div className={styles.search}>
-          <span className={styles.searchIcon}>⌕</span>
-          <input className={styles.searchInput} placeholder="Search modules, tasks…" />
+          <span className={styles.searchIcon}><Icon name="search" size={14} /></span>
+          <input className={styles.searchInput} placeholder="Search modules, tasks…" aria-label="Search" />
           <kbd className={styles.kbd}>⌘K</kbd>
         </div>
 
@@ -44,18 +57,18 @@ export function DashboardHeader({ onAiToggle, aiOpen }: Props) {
           className={`${styles.aiToggleBtn} ${aiOpen ? styles.aiToggleActive : ''}`}
           onClick={onAiToggle}
           title="AI Compliance Assistant"
+          aria-pressed={aiOpen}
         >
-          <svg width="14" height="14" viewBox="0 0 15 15" fill="none" style={{ flexShrink: 0 }}>
-            <path d="M2 3.5C2 2.95 2.45 2.5 3 2.5H7.5C9.43 2.5 11 4.07 11 6C11 7.93 9.43 9.5 7.5 9.5H6.25V12H4.5V9.5H3C2.45 9.5 2 9.05 2 8.5V3.5Z" fill="currentColor" />
-            <path d="M7.5 9.5H8.75L11 12H9.25L7.5 9.5Z" fill="currentColor" opacity="0.55" />
-          </svg>
-          AI Compliance Assistant
+          <span className={styles.aiToggleIcon}><AiOrb size={18} /></span>
+          <span className={styles.aiToggleLabel}>AI Compliance Assistant</span>
         </button>
 
-        <button className={styles.iconBtn} title="Calendar">📅</button>
-        <button className={styles.iconBtn} title="Notifications">
-          🔔<span className={styles.notifDot} />
+        <button className={styles.iconBtn} title="Compliance Calendar" aria-label="Compliance Calendar"
+          onClick={() => navigate('/dashboard/calendar')}>
+          <Icon name="calendar" size={16} />
         </button>
+
+        <NotificationBell />
 
         <div className={styles.userMenu}>
           <div className={styles.avatar}>{initials}</div>
@@ -63,7 +76,9 @@ export function DashboardHeader({ onAiToggle, aiOpen }: Props) {
             <p className={styles.userName}>{displayName}</p>
             <p className={styles.userRole}>{role}</p>
           </div>
-          <button className={styles.logoutBtn} onClick={handleLogout} title="Sign out">↩</button>
+          <button className={styles.logoutBtn} onClick={handleLogout} title="Sign out" aria-label="Sign out">
+            <Icon name="logout" size={14} />
+          </button>
         </div>
       </div>
     </header>

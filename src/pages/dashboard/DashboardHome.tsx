@@ -1,10 +1,13 @@
 /**
  * src/pages/dashboard/DashboardHome.tsx
- * Company name, industry pulled from Supabase profile.
- * All charts/widgets unchanged visually.
+ * Existing cockpit unchanged. Added: emoji -> SVG icons, live Reviews & Requests
+ * panel (from notifications), and a Resources & Support hub.
  */
 
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
+import { Icon } from '@/components/ui/Icons';
+import { useNotifications, timeAgo } from '@/hooks/useNotifications';
 import styles from './DashboardHome.module.css';
 
 /* ── Mini Components ──────────────────────────────────────────── */
@@ -147,6 +150,9 @@ function TimelineBar({ label, pastW, nextW, pastColor, nextColor }: {
 /* ── Main Dashboard ────────────────────────────────────────────── */
 export default function DashboardHome() {
   const { profile } = useAuth();
+  const navigate = useNavigate();
+  const { actionable, markRead } = useNotifications();
+  const openReq = actionable.filter(n => !n.read);
 
   const companyName = profile?.company_name || profile?.firm_name || 'Your Organisation';
   const industry    = profile?.industry || '';
@@ -158,12 +164,78 @@ export default function DashboardHome() {
       {profile && (
         <div className={styles.welcomeStrip}>
           <span className={styles.welcomeText}>
-            👋 Welcome back, <strong>{profile.full_name.split(' ')[0]}</strong>
+            <Icon name="hand" size={14} style={{ marginRight: 8, verticalAlign: '-2px' }} />
+            Welcome back, <strong>{profile.full_name.split(' ')[0]}</strong>
             {companyName ? ` — ${companyName}` : ''}
             {industry    ? ` · ${industry}`     : ''}
           </span>
         </div>
       )}
+
+
+      {/* ── Reviews & Requests (live, from admins / auditors) ── */}
+      <section className={styles.section}>
+        <div className={styles.sectionHeader}>
+          <span className={styles.sectionTitle}>REVIEWS &amp; REQUESTS</span>
+          {openReq.length > 0 && <span className={styles.countPill}>{openReq.length} new</span>}
+        </div>
+        <div className={styles.card}>
+          {actionable.length === 0 ? (
+            <div className={styles.reqEmpty}>
+              <Icon name="inbox" size={20} />
+              <span>No reviews or requests from your admin or auditor right now.</span>
+            </div>
+          ) : (
+            <div className={styles.reqList}>
+              {actionable.slice(0, 5).map(n => (
+                <button
+                  key={n.id}
+                  className={`${styles.reqRow} ${n.read ? '' : styles.reqUnread}`}
+                  onClick={() => { markRead(n.id); if (n.link) navigate(n.link); }}
+                >
+                  <span className={`${styles.reqIcon} ${n.type === 'review' ? styles.reqReview : styles.reqRequest}`}>
+                    <Icon name={n.type === 'review' ? 'clipboard' : 'inbox'} size={14} />
+                  </span>
+                  <span className={styles.reqBody}>
+                    <span className={styles.reqTitle}>
+                      {n.title}
+                      {n.priority === 'high' && <span className={styles.reqUrgent}>Urgent</span>}
+                    </span>
+                    {n.body && <span className={styles.reqText}>{n.body}</span>}
+                  </span>
+                  <span className={styles.reqMeta}>
+                    <span>{n.sender_name ?? 'System'}{n.sender_role ? ` · ${n.sender_role}` : ''}</span>
+                    <span>{timeAgo(n.created_at)}</span>
+                  </span>
+                  <Icon name="chevronRight" size={14} style={{ color: '#8B85A8' }} />
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* ── Resources & Support ── */}
+      <section className={styles.section}>
+        <div className={styles.sectionHeader}>
+          <span className={styles.sectionTitle}>RESOURCES &amp; SUPPORT</span>
+        </div>
+        <div className={styles.resourceGrid}>
+          {[
+            { icon: 'book',     title: 'E-Book Library',   sub: 'Acts, rules and compliance guides',          cta: 'Browse e-books',  onClick: () => navigate('/dashboard/library') },
+            { icon: 'fileText', title: 'Documentation',    sub: 'Platform how-tos, templates and checklists', cta: 'Open docs',       onClick: () => navigate('/dashboard/documents') },
+            { icon: 'messages', title: 'Chat Support',     sub: 'Talk to the Regnix compliance team',         cta: 'Start a chat',    onClick: () => window.open('mailto:support@lexvon.com?subject=Regnix%20support', '_blank') },
+            { icon: 'sparkles', title: 'AI Compliance Agent', sub: 'Instant answers on acts, registers, filings', cta: 'Ask the agent', onClick: () => window.dispatchEvent(new CustomEvent('regnix:open-ai')) },
+          ].map(r => (
+            <button key={r.title} className={styles.resourceCard} onClick={r.onClick}>
+              <span className={styles.resourceIcon}><Icon name={r.icon} size={18} /></span>
+              <span className={styles.resourceTitle}>{r.title}</span>
+              <span className={styles.resourceSub}>{r.sub}</span>
+              <span className={styles.resourceCta}>{r.cta} <Icon name="chevronRight" size={12} /></span>
+            </button>
+          ))}
+        </div>
+      </section>
 
       {/* ── ROW 1: Compliance Chief Cockpit ── */}
       <section className={styles.section}>
@@ -178,7 +250,9 @@ export default function DashboardHome() {
               <GaugeChart value={94} color="#059669" />
               <MiniSparkline />
             </div>
-            <button className={styles.explainBtn}>Explain this score</button>
+            <button className={styles.explainBtn} onClick={() => window.dispatchEvent(new CustomEvent('regnix:open-ai'))}>
+              <Icon name="sparkles" size={11} style={{ marginRight: 5, verticalAlign: '-1px' }} />Explain this score
+            </button>
           </div>
 
           <div className={styles.card}>
@@ -225,8 +299,8 @@ export default function DashboardHome() {
             <table className={styles.contractorTable}>
               <tbody>
                 <tr><td>Total Contractors:</td><td className={styles.tNum}>540</td></tr>
-                <tr><td>Fully Compliant:</td>  <td className={styles.tNumGreen}>512</td></tr>
-                <tr><td>Missing Docs:</td>      <td className={styles.tNumRed}>28</td></tr>
+                <tr><td>Fully Compliant:</td><td className={styles.tNumGreen}>512</td></tr>
+                <tr><td>Missing Docs:</td><td className={styles.tNumRed}>28</td></tr>
               </tbody>
             </table>
             <button className={styles.detailsBtn}>Details</button>
