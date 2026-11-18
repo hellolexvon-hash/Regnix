@@ -152,10 +152,31 @@ interface Store {
 
 // ── Server access (Supabase session → Bearer token) ──────────────────────────
 
+// Public path → email-handler action. Calling the action URL directly works even when the
+// deployed vercel.json is missing the rewrite (otherwise the SPA catch-all returns index.html).
+const AUDITOR_ACTIONS: Record<string, string> = {
+  '/api/auditor/portal/bootstrap': 'aud-bootstrap',
+  '/api/auditor/reviews/claim':    'aud-claim',
+  '/api/auditor/file':             'aud-file',
+  '/api/auditor/reviews/decision': 'aud-decision',
+  '/api/auditor/certificate':      'aud-cert',
+};
+
 export async function authFetch(url: string, init: RequestInit = {}): Promise<Response> {
   const { data } = await supabase.auth.getSession();
   const headers = new Headers(init.headers);
   if (data.session?.access_token) headers.set('Authorization', `Bearer ${data.session.access_token}`);
+
+  const [path, query = ''] = url.split('?');
+  const action = AUDITOR_ACTIONS[path];
+  if (!action) return fetch(url, { ...init, headers });
+
+  const direct = `/api/email-handler?action=${action}${query ? `&${query}` : ''}`;
+  try {
+    const res = await fetch(direct, { ...init, headers });
+    const html = (res.headers.get('content-type') || '').includes('text/html');
+    if (!html && res.status !== 404 && res.status !== 405) return res;
+  } catch { /* fall through to the public path */ }
   return fetch(url, { ...init, headers });
 }
 

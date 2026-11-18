@@ -388,7 +388,8 @@ async function bootstrapHandler(req: Request, res: Response) {
       const cp: any = cpByUser.get(org.owner_profile_id) ?? {};
       const owner: any = profById.get(org.owner_profile_id) ?? {};
       const snap: any = c.l2_snapshot ?? {};
-      const unlocked = c.assigned_auditor_id === me.id && !!c.terms_accepted_at && c.access_status === 'approved';
+      // Unlocked = assigned to me + access approved. Admin assignment grants access directly; self-claims are gated by access_status.
+      const unlocked = c.assigned_auditor_id === me.id && c.access_status === 'approved';
       const cf = filesByCycle.get(c.id as string) ?? [];
       const fileUrl = (id: string) => (unlocked ? `/api/auditor/file?id=${id}` : null);
       const usedFiles = new Set<string>();
@@ -487,7 +488,7 @@ async function fileHandler(req: Request, res: Response) {
     const { data: f } = await supa.from('validation_zoho_files').select('review_cycle_id, storage_key, file_name, mime_type').eq('id', id).maybeSingle();
     if (!f?.review_cycle_id || !f.storage_key) return res.status(404).json({ ok: false, message: 'File not found.' });
     const { data: c } = await supa.from('review_cycles').select('assigned_auditor_id, terms_accepted_at, access_status').eq('id', f.review_cycle_id).maybeSingle();
-    if (!c || c.assigned_auditor_id !== me.id || !c.terms_accepted_at || c.access_status !== 'approved') return res.status(403).json({ ok: false, message: 'Access to this review is not approved yet.' });
+    if (!c || c.assigned_auditor_id !== me.id || c.access_status !== 'approved') return res.status(403).json({ ok: false, message: 'Access to this review is not approved yet.' });
     const { data, error } = await supa.storage.from(BUCKET).download(f.storage_key as string);
     if (error || !data) return res.status(404).json({ ok: false, message: 'File not found.' });
     res.setHeader('Content-Type', (f.mime_type as string) || 'application/octet-stream');
@@ -511,7 +512,7 @@ async function decisionHandler(req: Request, res: Response) {
     if (decision !== 'approved' && !remarks) return res.status(400).json({ ok: false, message: 'Remarks are required.' });
     const supa = db();
     const { data: c } = await supa.from('review_cycles').select('id, status, assigned_auditor_id, terms_accepted_at, access_status').eq('id', id).maybeSingle();
-    if (!c || c.assigned_auditor_id !== me.id || !c.terms_accepted_at || c.access_status !== 'approved') return res.status(403).json({ ok: false, message: 'Not assigned to you.' });
+    if (!c || c.assigned_auditor_id !== me.id || c.access_status !== 'approved') return res.status(403).json({ ok: false, message: 'Not assigned to you.' });
     if (c.status !== 'in_review') return res.status(409).json({ ok: false, message: 'Already decided.' });
     const decidedAt = new Date().toISOString();
     const u = await supa.from('review_cycles').update({ status: decision, decision_remarks: remarks, decided_at: decidedAt }).eq('id', id);
