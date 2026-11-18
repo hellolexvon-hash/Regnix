@@ -76,7 +76,7 @@ export default function AuditorTermsModal({ companyName, busy, error, onAccept, 
         <div className={s.atActions}>
           <button className={s.arCancelBtn} onClick={onClose} disabled={busy}>Cancel</button>
           <button className={s.arClaimBtn} onClick={onAccept} disabled={!ready}>
-            {busy ? 'Claiming…' : 'Accept & claim this review'}
+            {busy ? 'Requesting…' : 'Accept & request access'}
           </button>
         </div>
       </div>

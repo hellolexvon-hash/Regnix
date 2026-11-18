@@ -13,7 +13,7 @@
 
 import { useState } from 'react';
 import s from './Auditor.module.css';
-import { useAuditorStore, type Specialization } from './auditorStore';
+import { useAuditorStore } from './auditorStore';
 import { IconScale, IconAlertTriangle } from './icons';
 
 interface AuditorAuthProps {
@@ -21,10 +21,6 @@ interface AuditorAuthProps {
 }
 
 type Tab = 'signin' | 'signup';
-
-const SPECIALIZATIONS: Specialization[] = [
-  'PF & ESIC', 'Labour Law', 'Tax & Wages', 'General Compliance',
-];
 
 export default function AuditorAuth({ onAuthenticated }: AuditorAuthProps) {
   const store = useAuditorStore();
@@ -36,15 +32,7 @@ export default function AuditorAuth({ onAuthenticated }: AuditorAuthProps) {
   const [siEmail, setSiEmail]       = useState('');
   const [siPassword, setSiPassword] = useState('');
 
-  // Sign up fields
-  const [suName, setSuName]           = useState('');
-  const [suEmail, setSuEmail]         = useState('');
-  const [suPassword, setSuPassword]   = useState('');
-  const [suConfirm, setSuConfirm]     = useState('');
-  const [suLicense, setSuLicense]     = useState('');
-  const [suSpec, setSuSpec]           = useState<Specialization>('PF & ESIC');
-
-  function handleSignIn(e: React.FormEvent) {
+  async function handleSignIn(e: React.FormEvent) {
     e.preventDefault();
     setError('');
     if (!siEmail.trim() || !siPassword) {
@@ -52,50 +40,10 @@ export default function AuditorAuth({ onAuthenticated }: AuditorAuthProps) {
       return;
     }
     setSubmitting(true);
-    setTimeout(() => {
-      const result = store.signIn(siEmail, siPassword);
-      setSubmitting(false);
-      if (result.ok) onAuthenticated();
-      else setError(result.error);
-    }, 500);
-  }
-
-  function handleSignUp(e: React.FormEvent) {
-    e.preventDefault();
-    setError('');
-    if (!suName.trim() || !suEmail.trim() || !suPassword || !suLicense.trim()) {
-      setError('Please fill in all required fields.');
-      return;
-    }
-    if (!/^\S+@\S+\.\S+$/.test(suEmail.trim())) {
-      setError('Please enter a valid email address.');
-      return;
-    }
-    if (suPassword.length < 8) {
-      setError('Password must be at least 8 characters.');
-      return;
-    }
-    if (suPassword !== suConfirm) {
-      setError('Passwords do not match.');
-      return;
-    }
-    setSubmitting(true);
-    setTimeout(() => {
-      const result = store.signUp({
-        fullName: suName, email: suEmail, password: suPassword,
-        licenseId: suLicense, specialization: suSpec,
-      });
-      setSubmitting(false);
-      if (result.ok) onAuthenticated();
-      else setError(result.error);
-    }, 500);
-  }
-
-  function fillDemo() {
-    setTab('signin');
-    setSiEmail('ananya.rao@regnix-audit.in');
-    setSiPassword('demo1234');
-    setError('');
+    const result = await store.signIn(siEmail, siPassword);
+    setSubmitting(false);
+    if (result.ok) onAuthenticated();
+    else setError(result.error);
   }
 
   return (
@@ -201,100 +149,18 @@ export default function AuditorAuth({ onAuthenticated }: AuditorAuthProps) {
                   {submitting ? 'Signing in…' : 'Sign In →'}
                 </button>
 
-                <button type="button" className={s.aaDemoLink} onClick={fillDemo}>
-                  Use demo auditor credentials
-                </button>
               </form>
             )}
 
             {/* ─ Sign Up ─ */}
             {tab === 'signup' && (
-              <form className={s.aaFormBody} onSubmit={handleSignUp}>
-                <p className={s.aaFormLead}>Register as an independent compliance auditor.</p>
-
-                <div className={s.aaField}>
-                  <label className={s.aaLabel}>Full name</label>
-                  <input
-                    className={s.aaInput}
-                    placeholder="e.g. Ananya Rao"
-                    value={suName}
-                    onChange={e => setSuName(e.target.value)}
-                  />
-                </div>
-
-                <div className={s.aaFieldRow}>
-                  <div className={s.aaField}>
-                    <label className={s.aaLabel}>Email address</label>
-                    <input
-                      className={s.aaInput}
-                      type="email"
-                      placeholder="you@auditfirm.com"
-                      value={suEmail}
-                      onChange={e => setSuEmail(e.target.value)}
-                      autoComplete="username"
-                    />
-                  </div>
-                  <div className={s.aaField}>
-                    <label className={s.aaLabel}>Auditor licence / registration ID</label>
-                    <input
-                      className={s.aaInput}
-                      placeholder="e.g. RGX-AUD-1042"
-                      value={suLicense}
-                      onChange={e => setSuLicense(e.target.value)}
-                    />
-                  </div>
-                </div>
-
-                <div className={s.aaFieldRow}>
-                  <div className={s.aaField}>
-                    <label className={s.aaLabel}>Password</label>
-                    <input
-                      className={s.aaInput}
-                      type="password"
-                      placeholder="Min. 8 characters"
-                      value={suPassword}
-                      onChange={e => setSuPassword(e.target.value)}
-                      autoComplete="new-password"
-                    />
-                  </div>
-                  <div className={s.aaField}>
-                    <label className={s.aaLabel}>Confirm password</label>
-                    <input
-                      className={s.aaInput}
-                      type="password"
-                      placeholder="Re-enter password"
-                      value={suConfirm}
-                      onChange={e => setSuConfirm(e.target.value)}
-                      autoComplete="new-password"
-                    />
-                  </div>
-                </div>
-
-                <div className={s.aaField}>
-                  <label className={s.aaLabel}>Area of specialization</label>
-                  <select
-                    className={s.aaSelect}
-                    value={suSpec}
-                    onChange={e => setSuSpec(e.target.value as Specialization)}
-                  >
-                    {SPECIALIZATIONS.map(spec => (
-                      <option key={spec} value={spec}>{spec}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <label className={s.aaCheckRow}>
-                  <input type="checkbox" required className={s.aaCheckInput} />
-                  <span>
-                    I confirm I hold a valid compliance-audit licence and agree to the
-                    Regnix Auditor Code of Conduct and independence requirements.
-                  </span>
-                </label>
-
-                <button className={s.aaSubmit} type="submit" disabled={submitting}>
-                  {submitting ? 'Creating account…' : 'Create Auditor Account →'}
-                </button>
-              </form>
+              <div className={s.aaFormBody}>
+                <p className={s.aaFormLead}>Auditor accounts are issued by Regnix.</p>
+                <p className={s.aaFormLead}>
+                  To become an auditor, ask a Regnix administrator to enable auditor access on your account.
+                  Once enabled, sign in with the same email and password.
+                </p>
+              </div>
             )}
 
           </div>

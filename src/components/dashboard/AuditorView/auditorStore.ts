@@ -96,6 +96,15 @@ export interface ReviewDoc {
   tallyRows?: TallyRow[] | null;
 }
 
+export interface CompanyDetails {
+  company: {
+    name: string; cin: string; pan: string; gstin: string; address: string; state: string; industry: string;
+    headcount: string; incorporationDate: string | null; authorizedPerson: string; designation: string; email: string; phone: string;
+  };
+  kycFiles: { label: string; fileName: string; url: string | null; at: string }[];
+  files: { id: string; docName: string | null; role: string; fileName: string; mimeType: string | null; size: number; at: string; url: string }[];
+}
+
 export interface CompanyReview {
   id:              string;
   name:            string;
@@ -122,6 +131,8 @@ export interface CompanyReview {
   submittedByUserId?: string | null;
 
   // Real audit flow
+  accessStatus?:      'none' | 'requested' | 'approved' | 'denied';
+  details?:           CompanyDetails | null;   // everything the company filed; only after access is approved
   locked?:            boolean;          // true until THIS auditor claims it and accepts the terms
   termsAcceptedAt?:   Date | null;
   missingFiles?:      string[];         // files that could not be stored (e.g. over 3 MB)
@@ -172,7 +183,7 @@ function mapCompany(r: any): CompanyReview {
     issues: r.issues ?? [], l2Score: Number(r.l2Score) || 0, l2CompletedAt: d(r.l2CompletedAt) ?? new Date(),
     status: r.status, assignedTo: r.assignedTo ?? null, decisionRemarks: r.decisionRemarks ?? '', decidedAt: d(r.decidedAt),
     liveRegisterUrl: r.liveRegisterUrl ?? null, liveRegisterFile: null, liveRegisterFileName: r.liveRegisterFileName ?? null,
-    locked: !!r.locked, termsAcceptedAt: d(r.termsAcceptedAt), missingFiles: r.missingFiles ?? [],
+    locked: !!r.locked, accessStatus: r.accessStatus ?? 'none', details: r.details ?? null, termsAcceptedAt: d(r.termsAcceptedAt), missingFiles: r.missingFiles ?? [],
     certificate: r.certificate ? { ...r.certificate, issuedAt: d(r.certificate.issuedAt) ?? new Date() } : null,
   };
 }

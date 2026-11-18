@@ -7,14 +7,14 @@
  * The UI stays the same; only the state source is persistent now.
  */
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useValidationStore } from './validationStore';
 import ValidationLanding from './ValidationLanding';
 import ValidationLevel1  from './ValidationLevel1';
 import ValidationLevel2  from './ValidationLevel2';
 import ValidationLevel3  from './ValidationLevel3';
-import { uploadValidationDocs } from './validationDocsUpload';
+import { uploadValidationDocs, submitLevel2, fetchL3Status, downloadCertificate, type Level2Payload, type L3Status } from './validationDocsUpload';
 
 interface ValidationPageProps {
   companyName?:      string;
@@ -136,19 +136,35 @@ export default function ValidationPage({
     goTo('landing');
   }
 
-  function handleLevel2Complete() {
+  async function handleLevel2Complete(summary: Level2Payload) {
+    const r = await submitLevel2(summary);
+    if (!r.ok) throw new Error(r.message || 'Could not submit for audit.');
     setLevelState(1, 'done');
     setLevelState(2, 'pending');
     setSubmittedAt(new Date());
     goTo('landing');
   }
 
-  function handleDownloadReport() {
-    // Production: fetch signed PDF from backend
-    const link     = document.createElement('a');
-    link.href      = '#';
-    link.download  = `Audit_Report_${resolvedCompanyName.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.pdf`;
-    link.click();
+  // Level 3: poll the real audit status (claimed → decided) while the page is open
+  const [l3, setL3] = useState<L3Status | null>(null);
+  useEffect(() => {
+    if (screen !== 'level3' && screen !== 'landing') return;
+    let alive = true;
+    const tick = async () => {
+      const st = await fetchL3Status();
+      if (!alive || !st) return;
+      setL3(st);
+      if (st.status === 'approved') setApproved(true);
+    };
+    void tick();
+    const id = setInterval(tick, 20000);
+    return () => { alive = false; clearInterval(id); };
+  }, [screen, setApproved]);
+
+  async function handleDownloadReport() {
+    const name = `${l3?.certificate?.certificateNo ?? 'Compliance_Certificate'}.pdf`;
+    const ok = await downloadCertificate(name);
+    if (!ok) window.alert('The certificate PDF is not ready yet. The auditor saves it when issuing the certificate — please try again shortly.');
   }
 
   if (!hydrated) return null;
@@ -189,7 +205,10 @@ export default function ValidationPage({
         companyName={resolvedCompanyName}
         submittedAt={submittedAt ?? undefined}
         isApproved={isApproved}
-        onApprove={() => setApproved(true)}
+        auditNote={l3 && ['changes_requested', 'rejected'].includes(l3.status) ? { status: l3.status as 'changes_requested' | 'rejected', remarks: l3.remarks ?? '' } : undefined}
+        auditorAssigned={!!l3?.assigned}
+        certificateNo={l3?.certificate?.certificateNo}
+        onApprove={import.meta.env.DEV ? () => setApproved(true) : undefined}
         onDownloadReport={handleDownloadReport}
         onBack={() => {
           setCurrentRoute('landing');

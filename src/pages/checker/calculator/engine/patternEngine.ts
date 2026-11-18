@@ -4,7 +4,7 @@ import { ptFor, lwfFor, r2 } from './salaryEngine';
 
 export type Role =
   | 'empId' | 'name' | 'designation' | 'basic' | 'da' | 'hra' | 'allowance' | 'gross'
-  | 'pfEe' | 'pfEr' | 'esicEe' | 'esicEr' | 'pt' | 'lwf' | 'otherDed' | 'totalDed' | 'net' | 'serial' | 'ot';
+  | 'pfEe' | 'pfEr' | 'epsEr' | 'epfEr' | 'edli' | 'pfAdmin' | 'esicEe' | 'esicEr' | 'pt' | 'lwf' | 'otherDed' | 'totalDed' | 'net' | 'serial' | 'ot';
 
 export type Basis = 'arithmetic' | 'statutory' | 'pattern' | 'data';
 export interface Finding {
@@ -41,6 +41,11 @@ const ROLE_RULES: Array<[Role, RegExp, RegExp?]> = [
   ['empId', /(emp(loyee)?\.?\s*(code|id|no)|ecode|token\s*no)/i],
   ['name', /(^|\s)name(\s|$)/i, /(father|husband|company|establishment|bank|nominee)/i],
   ['designation', /(designation|grade|category|skill)/i],
+  // Employer-side split (EPFO Q13 table): EPS 8.33%, EPF 3.67%, EDLI 0.5%, Admin 0.5%
+  ['edli', /(edli|\bedl\b)/i],
+  ['pfAdmin', /(admin).*(charge|pf|epf)|(pf|epf).*admin/i],
+  ['epsEr', /(\beps\b|pension|8\.33)/i],
+  ['epfEr', /(3\.67|(employer|\ber\b).*(epf|pf).*(share|diff|a\/c\s*0?1)|a\/c\s*0?1)/i],
   ['pfEr', /(employer).*(pf|provident|epf)|(pf|provident|epf).*(employer|er\b)/i],
   ['pfEe', /(^|\s)(pf|epf|provident)/i, /(employer|uan|member|number|no\.|wages|wage)/i],
   ['esicEr', /(employer).*(esi|esic)|(esi|esic).*(employer|er\b)/i],
@@ -203,6 +208,59 @@ export function analyze(table: RegisterTable, opt: AnalysisOptions): Analysis {
   } else skipped.push('PF check (needs Employee PF and Basic columns)');
 
   if (pfErC != null && basicC != null) pfCheck(pfErC, P.pfEmployerRate, 'Employer PF', 'Employer PF 12% (Basic+DA, cap)');
+
+  // Employer side VARIES BY SLAB (EPFO illustration table). Contribution wage = Basic+DA capped at the ceiling.
+  //   Total employer share = 12% of wage; of that EPS = 8.33% (rounded) and EPF = total − EPS (≈3.67%).
+  //   ₹10,000 → 833 + 367 · ₹15,000 → 1,250 + 550 · ₹20,000 → 1,666 + 734 · ₹25,000 → 2,083 + 917
+  //   Above the ceiling, EPS is 0 for members who joined after the cap (whole 12% = ₹3,000 goes to EPF);
+  //   EPS membership depends on wages at joining, so either split is accepted there.
+  //   EDLI 0.5% and EPF admin 0.5% of the same wage.
+  const EPS_RATE = 0.0833, EDLI_RATE = 0.005, ADMIN_RATE = 0.005;
+  const cw = (i: number) => Math.min(wageOf(i), P.pfWageCeiling);
+  const epsOf = (i: number) => Math.round(cw(i) * EPS_RATE + 1e-9);
+  const erTotal = (i: number) => Math.round(cw(i) * P.pfEmployerRate);
+  const epsC = first('epsEr'), epfC = first('epfEr'), edliC = first('edli'), admC = first('pfAdmin');
+
+  if (epsC != null && basicC != null) {
+    patterns.push(`Employer EPS = 8.33% of Basic+DA (max ${ceilingTxt}); nil above the ceiling for post-cap joiners`);
+    rows.forEach((_, i) => {
+      const v = val(i, epsC); if (v == null) return;
+      mark(i, epsC);
+      const exp = epsOf(i);
+      const above = wageOf(i) > P.pfWageCeiling;
+      if (above && !differs(v, 0)) return;            // EPS not available above the ceiling
+      if (differs(v, exp)) flag(i, epsC, 'Employer EPS 8.33%', 'statutory',
+        `EPS is ${v}; expected ${exp} (8.33% of Basic+DA ₹${inr(cw(i))})${above ? ' or 0 if the member joined above the ceiling' : ''}.`, above ? null : exp);
+    });
+  }
+  if (epfC != null && basicC != null) {
+    patterns.push('Employer EPF = employer 12% − EPS (about 3.67%; 12% in full above the ceiling when EPS is nil)');
+    rows.forEach((_, i) => {
+      const v = val(i, epfC); if (v == null) return;
+      mark(i, epfC);
+      const eps = epsC != null ? (val(i, epsC) ?? epsOf(i)) : epsOf(i);
+      const exp = erTotal(i) - eps;
+      if (differs(v, exp)) flag(i, epfC, 'Employer EPF share (3.67%)', 'statutory',
+        `Employer EPF share is ${v}; expected ${exp} (12% = ${erTotal(i)} less EPS ${eps}).`, exp);
+    });
+  }
+  if (pfErC != null && epsC != null && epfC != null) {
+    rows.forEach((_, i) => {
+      const t = val(i, pfErC), a = val(i, epsC), b = val(i, epfC); if (t == null || a == null || b == null) return;
+      if (differs(t, a + b)) flag(i, pfErC, 'Employer total = EPS + EPF', 'arithmetic', `Employer PF ${t} ≠ EPS ${a} + EPF ${b} = ${r2(a + b)}.`, a + b);
+    });
+  }
+  const pctCheck = (c: number | undefined, rate: number, name: string, rule: string) => {
+    if (c == null || basicC == null) return;
+    rows.forEach((_, i) => {
+      const v = val(i, c); if (v == null) return;
+      mark(i, c);
+      const exp = Math.round(cw(i) * rate);
+      if (differs(v, exp)) flag(i, c, rule, 'statutory', `${name} is ${v}; expected ${exp} (${(rate * 100).toFixed(1)}% of Basic+DA ₹${inr(cw(i))}, capped at ${ceilingTxt}).`, exp);
+    });
+  };
+  pctCheck(edliC, EDLI_RATE, 'EDLI', 'EDLI 0.5%');
+  pctCheck(admC, ADMIN_RATE, 'EPF admin charge', 'EPF admin 0.5%');
 
   if (esEeC != null && grossC != null) {
     rows.forEach((_, i) => {

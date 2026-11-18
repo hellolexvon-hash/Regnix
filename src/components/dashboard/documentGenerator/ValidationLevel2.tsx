@@ -37,7 +37,7 @@ import TermsModal from './TermsModal';
 import type { UploadedDoc, SheetPreview } from './validationStore';
 import LiveRegister from './LiveRegister';
 import PdfViewer from './PdfViewer';
-import { uploadValidationDocs, type Level2Payload } from './validationDocsUpload';
+import { uploadValidationDocs, type Level2Payload, type UploadProgress } from './validationDocsUpload';
 
 /* ════════════════════════════════════════════════════════════════════════
    TYPES
@@ -618,6 +618,9 @@ export default function ValidationLevel2({
   const [submitting,   setSubmitting]   = useState(false);
   const [submitError,  setSubmitError]  = useState('');
   const [syncNote,     setSyncNote]     = useState('');
+  const [bgUploading,  setBgUploading]  = useState(false);
+  const [progress,     setProgress]     = useState<UploadProgress | null>(null);
+  const [stage,        setStage]        = useState<'idle' | 'uploading' | 'sending' | 'error'>('idle');
   const [aiRunning,    setAiRunning]    = useState<string | null>(null);
   const [filterStatus, setFilterStatus] = useState<string>('All');
   const [filterAct,    setFilterAct]    = useState<string>('All');
@@ -665,10 +668,11 @@ export default function ValidationLevel2({
 
   /* Final step: make sure every file is stored, then hand the result to the auditor queue. */
   async function finishLevel2() {
-    setSubmitting(true); setSubmitError('');
+    setSubmitting(true); setSubmitError(''); setStage('uploading'); setProgress(null);
     const items = docCards.filter(d => d.file).map(d => ({ file: d.file as File, name: d.file!.name, docName: d.name }));
     if (liveRegisterFile) items.push({ file: liveRegisterFile, name: liveRegisterFile.name, docName: 'Live Register', role: 'live_register' } as never);
-    const up = await uploadValidationDocs(items as never, companyName);
+    const up = await uploadValidationDocs(items as never, companyName, setProgress);
+    setStage('sending');
     const missing = up.skipped.map(x => x.name);
     const scored = docCards.filter(d => d.uploadStatus === 'Uploaded');
     try {
@@ -683,6 +687,7 @@ export default function ValidationLevel2({
       });
     } catch (e) {
       setSubmitError(e instanceof Error ? e.message : 'Could not submit for audit.');
+      setStage('error');
     } finally { setSubmitting(false); }
   }
 
@@ -693,7 +698,10 @@ export default function ValidationLevel2({
     const sheets = /\.xlsx?$/i.test(file.name) ? await parseXlsx(file).catch(() => undefined) : undefined;
     // Store a copy in the company's Zoho WorkDrive folder (background, never blocks the UI)
     const target = docCards.find(d => d.id === docId);
-    void uploadValidationDocs([{ file, name: file.name, docName: target?.name }], companyName).then(r => setSyncNote(noteFor(r)));
+    setBgUploading(true); setSyncNote(`Uploading ${file.name}…`);
+    void uploadValidationDocs([{ file, name: file.name, docName: target?.name }], companyName)
+      .then(r => setSyncNote(noteFor(r)))
+      .finally(() => setBgUploading(false));
 
     setDocCards(prev => prev.map(d => d.id === docId ? { ...d, uploadStatus: 'Uploaded', file, sheets } : d));
     setAiRunning(docId);
@@ -1307,10 +1315,44 @@ export default function ValidationLevel2({
         />
       )}
 
-      {(submitting || submitError || syncNote) && (
+      {(submitting || stage === 'error') && (
+        <div className={s.v2UpOverlay} role="dialog" aria-modal="true" aria-live="polite">
+          <div className={s.v2UpCard}>
+            {stage === 'error' ? (
+              <>
+                <p className={s.v2UpTitle}>Could not submit for audit</p>
+                <p className={s.v2UpSub}>{submitError}</p>
+                <button className={s.btnSecondary} onClick={() => { setStage('idle'); setSubmitError(''); }}>Close</button>
+              </>
+            ) : (
+              <>
+                <p className={s.v2UpTitle}>
+                  {stage === 'uploading' ? 'Uploading your documents' : 'Sending to the auditor'}
+                </p>
+                <div className={s.v2UpBar}>
+                  <div
+                    className={s.v2UpFill}
+                    style={{ width: `${stage === 'sending' ? 100 : progress && progress.total ? Math.round((progress.done / progress.total) * 100) : 4}%` }}
+                  />
+                </div>
+                <p className={s.v2UpSub}>
+                  {stage === 'uploading'
+                    ? (progress && progress.total
+                        ? `${progress.done} of ${progress.total} uploaded${progress.current ? ` — ${progress.current}` : ''}`
+                        : 'Preparing…')
+                    : `✓ All ${progress?.total ?? ''} documents uploaded. Submitting for audit…`}
+                </p>
+                <p className={s.v2UpHint}>Please keep this page open until it finishes.</p>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {!submitting && syncNote && (
         <div className={s.v2SyncNote} role="status">
-          {submitting ? 'Securing documents and sending to the auditor…' : submitError || syncNote}
-          {submitError && <button className={s.btnSecondary} onClick={() => setSubmitError('')}>Dismiss</button>}
+          {bgUploading && <span className={s.v2Spin} aria-hidden="true" />}
+          {syncNote}
         </div>
       )}
 

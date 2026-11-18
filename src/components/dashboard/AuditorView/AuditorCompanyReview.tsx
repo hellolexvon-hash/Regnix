@@ -26,7 +26,7 @@ import AuditCertificate from './AuditCertificate';
 import {
   IconArrowLeft, IconFileText, IconFlag, IconPenLine, IconCheckCircle, IconUndo,
   IconXCircle, IconAlertTriangle, IconTable, IconChevronDown, IconChevronRight,
-  IconClock, IconEye, IconShieldCheck, IconListChecks,
+  IconClock, IconEye, IconShieldCheck, IconListChecks, IconFolder,
 } from './icons';
 
 interface AuditorCompanyReviewProps {
@@ -37,7 +37,7 @@ interface AuditorCompanyReviewProps {
   onDecide: (id: string, decision: 'approved' | 'changes_requested' | 'rejected', remarks: string) => Promise<{ ok: true; certificateNo?: string } | { ok: false; error: string }>;
 }
 
-type Tab = 'documents' | 'issues' | 'decision';
+type Tab = 'documents' | 'company' | 'issues' | 'decision';
 
 const SEVERITY_META: Record<IssueSeverity, { label: string; cls: string }> = {
   critical: { label: 'Critical', cls: 'arSevCritical' },
@@ -60,6 +60,14 @@ const STATUS_TEXT: Record<CompanyReview['status'], string> = {
   changes_requested:  'Changes Requested',
   rejected:           'Rejected',
 };
+
+function lockedText(c: CompanyReview): string {
+  if (c.status === 'pending') return 'Request access to this review (and accept the auditor terms) to see every document and all the data this company submitted.';
+  if (c.status === 'in_review' && !c.termsAcceptedAt) return 'Regnix assigned this review to you. Accept the auditor terms to unlock the documents and company data.';
+  if (c.accessStatus === 'requested') return 'Access requested — waiting for Regnix to approve. Documents and company data unlock as soon as it is approved.';
+  if (c.accessStatus === 'denied') return 'Access to this review was not approved.';
+  return 'This review belongs to another auditor — documents and data are only visible to the assigned auditor.';
+}
 
 function fmtDate(d: Date): string {
   return d.toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
@@ -145,6 +153,15 @@ export default function AuditorCompanyReview({
     else setSheetFile(new File([blob], doc.fileName || doc.name, { type: blob.type }));
   }
 
+  async function openStoredFile(url: string, name: string, mime: string | null) {
+    setFileError('');
+    const blob = await fetchBlob(url);
+    if (!blob) { setFileError(`Could not load "${name}".`); return; }
+    const isPdf = (mime ?? blob.type) === 'application/pdf' || /\.pdf$/i.test(name);
+    if (isPdf) setOpenDoc({ doc: { id: url, name, act: '', status: 'validated', score: 0, fileName: name }, blob });
+    else setSheetFile(new File([blob], name, { type: blob.type }));
+  }
+
   function toggleExpand(docId: string) {
     setExpandedDocId(cur => (cur === docId ? null : docId));
     setChecklistDocId(null);
@@ -174,8 +191,10 @@ export default function AuditorCompanyReview({
           <span className={s.arHeaderStatus} data-status={company.status}>
             {STATUS_ICON[company.status]} {STATUS_TEXT[company.status]}
           </span>
-          {company.status === 'pending' && (
-            <button className={s.arClaimBtn} onClick={() => { setClaimError(''); setShowTerms(true); }}>Claim for review</button>
+          {(company.status === 'pending' || (company.status === 'in_review' && company.assignedTo === auditor.id && !company.termsAcceptedAt)) && (
+            <button className={s.arClaimBtn} onClick={() => { setClaimError(''); setShowTerms(true); }}>
+              {company.status === 'pending' ? 'Request access & review' : 'Accept terms & start review'}
+            </button>
           )}
           {company.status === 'approved' && company.certificate && (
             <button className={s.arClaimBtn} onClick={() => setShowCertificate(true)}>
@@ -216,6 +235,9 @@ export default function AuditorCompanyReview({
         <button className={tab === 'documents' ? `${s.arTab} ${s.arTabActive}` : s.arTab} onClick={() => setTab('documents')}>
           <IconFileText size={14} /> Documents <span className={s.arTabCount}>{company.docs.length}</span>
         </button>
+        <button className={tab === 'company' ? `${s.arTab} ${s.arTabActive}` : s.arTab} onClick={() => setTab('company')}>
+          <IconFolder size={14} /> Company data
+        </button>
         <button className={tab === 'issues' ? `${s.arTab} ${s.arTabActive}` : s.arTab} onClick={() => setTab('issues')}>
           <IconFlag size={14} /> Issues <span className={s.arTabCount}>{openIssues.length}</span>
         </button>
@@ -244,9 +266,7 @@ export default function AuditorCompanyReview({
           {company.locked && (
             <div className={s.arLockedNote}>
               <IconShieldCheck size={13} />
-              {company.status === 'pending'
-                ? 'Claim this review and accept the auditor terms to open the submitted documents and the live register.'
-                : 'This review belongs to another auditor — documents are only visible to the assigned auditor.'}
+              {lockedText(company)}
             </div>
           )}
           {(company.missingFiles?.length ?? 0) > 0 && (
@@ -384,6 +404,72 @@ export default function AuditorCompanyReview({
         </div>
       )}
 
+      {/* ── Company data tab (everything the company filed) ─────────────── */}
+      {tab === 'company' && (
+        <div className={s.arCard}>
+          {!company.details ? (
+            <div className={s.arLockedNote}><IconShieldCheck size={13} /> {lockedText(company)}</div>
+          ) : (
+            <>
+              <div className={s.arCardHead}>
+                <p className={s.arCardTitle}>Company details</p>
+                <p className={s.arCardSub}>As entered by the company. Read-only.</p>
+              </div>
+              <dl className={s.arDetailGrid}>
+                {([
+                  ['Legal name', company.details.company.name], ['CIN', company.details.company.cin], ['PAN', company.details.company.pan],
+                  ['GSTIN', company.details.company.gstin], ['Industry', company.details.company.industry], ['Headcount', company.details.company.headcount],
+                  ['State', company.details.company.state], ['Address', company.details.company.address],
+                  ['Incorporated', company.details.company.incorporationDate ?? ''],
+                  ['Authorised person', company.details.company.authorizedPerson], ['Designation', company.details.company.designation],
+                  ['Email', company.details.company.email], ['Phone', company.details.company.phone],
+                  ['Acts covered', company.actsCovered.join(', ')],
+                ] as [string, string][]).map(([k, v]) => (
+                  <div key={k} className={s.arDetailItem}><dt>{k}</dt><dd>{v || '—'}</dd></div>
+                ))}
+              </dl>
+
+              <div className={s.arCardHead}>
+                <p className={s.arCardTitle}>All submitted files ({company.details.files.length})</p>
+                <p className={s.arCardSub}>Every document and the live register uploaded for this review.</p>
+              </div>
+              {fileError && <p className={s.arActionError}>{fileError}</p>}
+              {company.details.files.length === 0 ? <p className={s.arCardSub}>No files were stored.</p> : (
+                <div className={s.arFileList}>
+                  {company.details.files.map(f => (
+                    <div key={f.id} className={s.arFileRow}>
+                      <span className={s.arFileName}>{f.docName || f.fileName}{f.role === 'live_register' ? ' (live register)' : ''}</span>
+                      <span className={s.arFileMeta}>{f.fileName} · {(f.size / 1024).toFixed(0)} KB · {fmtDate(new Date(f.at))}</span>
+                      <button className={s.arOpenDocBtn} onClick={() => { void openStoredFile(f.url, f.fileName, f.mimeType); }}>
+                        <IconFileText size={13} /> Open
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {company.details.kycFiles.length > 0 && (
+                <>
+                  <div className={s.arCardHead}>
+                    <p className={s.arCardTitle}>KYC documents ({company.details.kycFiles.length})</p>
+                    <p className={s.arCardSub}>Filed at onboarding (held in Zoho WorkDrive).</p>
+                  </div>
+                  <div className={s.arFileList}>
+                    {company.details.kycFiles.map((k, i) => (
+                      <div key={i} className={s.arFileRow}>
+                        <span className={s.arFileName}>{k.label}</span>
+                        <span className={s.arFileMeta}>{k.fileName} · {fmtDate(new Date(k.at))}</span>
+                        {k.url && <a className={s.arOpenDocBtn} href={k.url} target="_blank" rel="noreferrer">Open in Zoho</a>}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
       {/* ── Issues tab ───────────────────────────────────────────────────── */}
       {tab === 'issues' && (
         <div className={s.arCard}>
@@ -448,7 +534,8 @@ export default function AuditorCompanyReview({
             <div className={s.arLockedNote}>
               <IconShieldCheck size={13} />
               {company.status === 'pending'
-                ? 'Claim this review (and accept the terms) to record a decision.'
+                ? 'Request access (and accept the terms) to record a decision.'
+                : company.accessStatus === 'requested' ? 'Waiting for access approval before you can record a decision.'
                 : 'Only the assigned auditor can record a decision for this company.'}
             </div>
           ) : (

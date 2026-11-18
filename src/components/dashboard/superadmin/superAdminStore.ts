@@ -639,3 +639,107 @@ export function useSystemOverview(): SystemOverview {
     recentActivity: auditLog.slice(0, 30),
   };
 }
+// ═════════════════════════════════════════════════════════════════════════════
+// Admin portal (live): every client, auditor, review and document, via /api/admin/portal/*
+// Authorised server-side with this console session's token + an active super_admin_profiles row.
+// ═════════════════════════════════════════════════════════════════════════════
+export interface PortalReview {
+  id: string; profileId: string | null; company: string; industry: string; employees: number;
+  status: string; accessStatus: string; l2Score: number; l2CompletedAt: string | null; decidedAt: string | null; createdAt: string;
+  auditorId: string | null; auditorName: string; termsAcceptedAt: string | null; files: number; docs: number;
+  openIssues: number; criticalIssues: number;
+  certificate: { certificateNo: string; issuedAt: string; revoked: boolean; revokedReason: string } | null;
+}
+export interface PortalClient {
+  id: string; fullName: string; email: string; accountType: string; company: string; industry: string; plan: string | null;
+  approval: string; kycVerified: boolean; zohoFolderUrl: string | null; createdAt: string; files: number;
+  reviewId: string | null; reviewStatus: string | null; l2Score: number | null; openIssues: number;
+  certificate: PortalReview['certificate'];
+}
+export interface PortalAuditor {
+  id: string; fullName: string; email: string; licenseId: string; specialization: string; joinedAt: string; active: boolean;
+  inReview: number; approved: number; changesRequested: number; rejected: number; awaitingAccess: number; avgTurnaroundDays: number | null;
+}
+export interface PortalActivity {
+  id: string; actor: string; actorRole: string; action: string; detail: string; entityType: string | null; entityId: string | null; createdAt: string;
+}
+export interface PortalOverview {
+  accessMode: 'auto' | 'admin'; auditors: PortalAuditor[]; clients: PortalClient[]; reviews: PortalReview[];
+  accessRequests: PortalReview[]; activity: PortalActivity[];
+}
+export interface PortalDetail {
+  profile: Record<string, any>; company: Record<string, any> | null; organization: Record<string, any> | null;
+  kyc: Array<Record<string, any> & { files: Array<Record<string, any>> }>;
+  files: Array<{ id: string; reviewId: string | null; docName: string; role: string; fileName: string; mimeType: string; size: number; zohoUrl: string | null; at: string; stored: boolean }>;
+  reviews: Array<{ id: string; status: string; accessStatus: string; l2Score: number; createdAt: string; decidedAt: string | null }>;
+  review: null | {
+    id: string; status: string; accessStatus: string; l2Score: number; l2CompletedAt: string | null; decidedAt: string | null; remarks: string;
+    termsAcceptedAt: string | null; termsVersion: string | null; auditor: { id: string; fullName?: string; email?: string } | null;
+    docs: any[]; issues: any[]; selectedActs: string[]; missingFiles: string[];
+    certificate: null | { certificateNo: string; issuedAt: string; revoked: boolean; revokedReason: string; issuedBy: string; sha256: string | null };
+  };
+  activity: Array<{ id: string; action: string; detail: string; actorRole: string; createdAt: string }>;
+}
+
+async function adminAuthFetch(path: string, init?: RequestInit): Promise<Response> {
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token ?? '';
+  return fetch(`${API_BASE}${path}`, {
+    ...init,
+    headers: { ...(init?.body ? { 'Content-Type': 'application/json' } : {}), Authorization: `Bearer ${token}`, ...(init?.headers ?? {}) },
+  });
+}
+
+/** Open a stored document in a new tab (needs the Authorization header, so fetch → blob URL). */
+export async function openPortalFile(fileId: string): Promise<string | null> {
+  try {
+    const r = await adminAuthFetch(`/api/admin/portal/file?id=${encodeURIComponent(fileId)}`);
+    if (!r.ok) return ((await r.json().catch(() => ({}))) as { message?: string }).message ?? 'Could not open the file.';
+    const url = URL.createObjectURL(await r.blob());
+    window.open(url, '_blank', 'noopener');
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    return null;
+  } catch { return 'Could not reach the server.'; }
+}
+
+export async function loadPortalDetail(q: { cycle?: string; profile?: string }): Promise<{ ok: true; detail: PortalDetail } | { ok: false; error: string }> {
+  try {
+    const qs = new URLSearchParams(Object.entries(q).filter(([, v]) => !!v) as [string, string][]).toString();
+    const r = await adminAuthFetch(`/api/admin/portal/review?${qs}`);
+    const j = await r.json().catch(() => ({}));
+    return r.ok && j.ok ? { ok: true, detail: j as PortalDetail } : { ok: false, error: j.message ?? `Failed (${r.status}).` };
+  } catch { return { ok: false, error: 'Could not reach the server.' }; }
+}
+
+export function useAdminPortal(enabled: boolean) {
+  const [data, setData] = useState<PortalOverview | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+
+  const refresh = useCallback(async () => {
+    if (!enabled) return;
+    setLoading(true);
+    try {
+      const r = await adminAuthFetch('/api/admin/portal/overview');
+      const j = await r.json().catch(() => ({}));
+      if (r.ok && j.ok) { setData(j as PortalOverview); setError(''); }
+      else setError(j.message ?? `Could not load admin data (${r.status}).`);
+    } catch { setError('Could not reach the server.'); }
+    setLoading(false);
+  }, [enabled]);
+
+  useEffect(() => { void refresh(); }, [refresh]);
+
+  /** Run a mutation; refreshes the overview on success. */
+  const act = useCallback(async (op: string, body: Record<string, unknown> = {}): Promise<{ ok: boolean; message?: string; tempPassword?: string | null }> => {
+    try {
+      const r = await adminAuthFetch('/api/admin/portal/action', { method: 'POST', body: JSON.stringify({ op, ...body }) });
+      const j = await r.json().catch(() => ({}));
+      if (r.ok && j.ok) { setNotice(''); await refresh(); return { ok: true, tempPassword: j.tempPassword ?? null }; }
+      return { ok: false, message: j.message ?? `Failed (${r.status}).` };
+    } catch { return { ok: false, message: 'Could not reach the server.' }; }
+  }, [refresh]);
+
+  return { data, loading, error, notice, refresh, act };
+}

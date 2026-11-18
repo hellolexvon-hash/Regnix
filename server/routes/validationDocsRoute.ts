@@ -13,6 +13,7 @@
  * Auditor endpoints   : same, and the user must have an active auditor_profiles row
  * Certificate verify  : public
  */
+import { getAccessMode } from './adminPortalRoute.js';
 import { Router, json, type Request, type Response } from 'express';
 import { createClient } from '@supabase/supabase-js';
 import { createHash, randomBytes } from 'node:crypto';
@@ -23,6 +24,8 @@ const BUCKET = 'validation-docs';
 const SUBFOLDER = 'Company Details';
 const MAX_BYTES = 3 * 1024 * 1024;
 const TERMS_VERSION = 'auditor-terms-2026-11';
+// 'auto' = the auditor's own claim grants access (today). 'admin' = claim only REQUESTS access;
+// an admin sets review_cycles.access_status='approved' before documents/data are visible.
 
 const db = () =>
   createClient(
@@ -263,7 +266,7 @@ async function submitHandler(req: Request, res: Response) {
     }
     const common = {
       l2_score: l2Score, l2_completed_at: now.toISOString(), l2_snapshot: snapshot, current_level: 'level_3',
-      status: 'pending', assigned_auditor_id: null, terms_accepted_at: null, terms_version: null,
+      status: 'pending', assigned_auditor_id: null, terms_accepted_at: null, terms_version: null, access_status: 'none',
       decision_remarks: null, decided_at: null,
     };
     if (cycleId) {
@@ -364,9 +367,10 @@ async function bootstrapHandler(req: Request, res: Response) {
     const profIds = [...new Set([...ownerIds, ...apIds])];
     const [{ data: profs }, { data: cps }, { data: files }] = await Promise.all([
       profIds.length ? supa.from('profiles').select('id, full_name, email').in('id', profIds) : Promise.resolve({ data: [] as any[] }),
-      ownerIds.length ? supa.from('company_profiles').select('user_id, authorized_person, email').in('user_id', ownerIds) : Promise.resolve({ data: [] as any[] }),
+      ownerIds.length ? supa.from('company_profiles').select('*').in('user_id', ownerIds) : Promise.resolve({ data: [] as any[] }),
       supa.from('validation_zoho_files').select('id, profile_id, review_cycle_id, doc_name, doc_role, file_name, mime_type, size_bytes, uploaded_at, storage_key'),
     ]);
+    const { data: kycs } = ownerIds.length ? await supa.from('kyc_files').select('profile_id, doc_label, file_name, zoho_url, created_at').in('profile_id', ownerIds) : { data: [] as any[] };
 
     const orgById = new Map((orgs ?? []).map((o: any) => [o.id, o]));
     const profById = new Map((profs ?? []).map((p: any) => [p.id, p]));
@@ -384,7 +388,7 @@ async function bootstrapHandler(req: Request, res: Response) {
       const cp: any = cpByUser.get(org.owner_profile_id) ?? {};
       const owner: any = profById.get(org.owner_profile_id) ?? {};
       const snap: any = c.l2_snapshot ?? {};
-      const unlocked = c.assigned_auditor_id === me.id && !!c.terms_accepted_at;
+      const unlocked = c.assigned_auditor_id === me.id && !!c.terms_accepted_at && c.access_status === 'approved';
       const cf = filesByCycle.get(c.id as string) ?? [];
       const fileUrl = (id: string) => (unlocked ? `/api/auditor/file?id=${id}` : null);
       const usedFiles = new Set<string>();
@@ -398,6 +402,19 @@ async function bootstrapHandler(req: Request, res: Response) {
         };
       });
       const live = cf.find((x) => x.doc_role === 'live_register');
+      // Everything the company filed — visible only once access is approved
+      const details = unlocked ? {
+        company: {
+          name: cp.name || org.name || '', cin: cp.cin || org.cin || '', pan: cp.pan || '', gstin: cp.gstin || org.gstin || '',
+          address: cp.address || org.address || '', state: cp.state || org.state || '', industry: cp.industry || org.industry || '',
+          headcount: cp.headcount || String(org.employee_count ?? ''), incorporationDate: cp.incorporation_date ?? null,
+          authorizedPerson: cp.authorized_person || owner.full_name || '', designation: cp.designation || '',
+          email: cp.email || owner.email || '', phone: cp.phone || '',
+        },
+        kycFiles: (kycs ?? []).filter((k: any) => k.profile_id === org.owner_profile_id)
+          .map((k: any) => ({ label: k.doc_label, fileName: k.file_name, url: k.zoho_url ?? null, at: k.created_at })),
+        files: cf.map((x: any) => ({ id: x.id, docName: x.doc_name, role: x.doc_role, fileName: x.file_name, mimeType: x.mime_type, size: x.size_bytes, at: x.uploaded_at, url: `/api/auditor/file?id=${x.id}` })),
+      } : null;
       const cert: any = certByCycle.get(c.id as string);
       return {
         id: c.id, name: org.name ?? 'Unnamed company', industry: org.industry || 'Unspecified', cin: org.cin ?? '',
@@ -413,7 +430,7 @@ async function bootstrapHandler(req: Request, res: Response) {
         status: c.status, assignedTo: c.assigned_auditor_id ?? null, termsAcceptedAt: c.terms_accepted_at ?? null,
         decisionRemarks: c.decision_remarks ?? '', decidedAt: c.decided_at ?? null,
         liveRegisterUrl: live ? fileUrl(live.id) : null, liveRegisterFileName: live?.file_name ?? snap.liveRegisterFileName ?? null,
-        locked: !unlocked,
+        locked: !unlocked, accessStatus: c.access_status ?? 'none', details,
         certificate: cert ? { certificateNo: cert.certificate_no, issuedAt: cert.issued_at, sha256: cert.pdf_sha256 || null, revoked: !!cert.revoked_at } : null,
       };
     });
@@ -437,13 +454,23 @@ async function claimHandler(req: Request, res: Response) {
     const id = str(req.body?.companyId, 60);
     if (!id) return res.status(400).json({ ok: false, message: 'companyId required.' });
     if (req.body?.acceptedTerms !== true) return res.status(400).json({ ok: false, message: 'You must accept the auditor terms.' });
-    const { data, error } = await db().from('review_cycles').update({
-      status: 'in_review', assigned_auditor_id: me.id, terms_accepted_at: new Date().toISOString(), terms_version: TERMS_VERSION,
-    }).eq('id', id).eq('status', 'pending').is('assigned_auditor_id', null).select('id');
-    if (error) throw error;
+    const mode = await getAccessMode();
+    const accessStatus = mode === 'admin' ? 'requested' : 'approved';
+    const stamp = { terms_accepted_at: new Date().toISOString(), terms_version: TERMS_VERSION };
+    // Admin-assigned review: the auditor is already set, they only still have to accept the terms.
+    const { data: pre } = await db().from('review_cycles').update({ ...stamp })
+      .eq('id', id).eq('status', 'in_review').eq('assigned_auditor_id', me.id).is('terms_accepted_at', null).select('id');
+    let data = pre;
+    if (!pre?.length) {
+      const r = await db().from('review_cycles').update({
+        status: 'in_review', assigned_auditor_id: me.id, ...stamp, access_status: accessStatus,
+      }).eq('id', id).eq('status', 'pending').is('assigned_auditor_id', null).select('id');
+      if (r.error) throw r.error;
+      data = r.data;
+    }
     if (!data?.length) return res.status(409).json({ ok: false, message: 'This company was already claimed.' });
     await db().from('audit_log').insert({ actor_user_id: me.id, action: 'review.claim', entity_type: 'review_cycle', entity_id: id, metadata: { terms: TERMS_VERSION } });
-    res.json({ ok: true, termsAcceptedAt: new Date().toISOString() });
+    res.json({ ok: true, termsAcceptedAt: new Date().toISOString(), accessStatus });
   } catch (e) {
     console.error('[auditor claim]', e);
     res.status(500).json({ ok: false, message: 'Could not claim.' });
@@ -459,8 +486,8 @@ async function fileHandler(req: Request, res: Response) {
     const supa = db();
     const { data: f } = await supa.from('validation_zoho_files').select('review_cycle_id, storage_key, file_name, mime_type').eq('id', id).maybeSingle();
     if (!f?.review_cycle_id || !f.storage_key) return res.status(404).json({ ok: false, message: 'File not found.' });
-    const { data: c } = await supa.from('review_cycles').select('assigned_auditor_id, terms_accepted_at').eq('id', f.review_cycle_id).maybeSingle();
-    if (!c || c.assigned_auditor_id !== me.id || !c.terms_accepted_at) return res.status(403).json({ ok: false, message: 'Claim this review and accept the terms first.' });
+    const { data: c } = await supa.from('review_cycles').select('assigned_auditor_id, terms_accepted_at, access_status').eq('id', f.review_cycle_id).maybeSingle();
+    if (!c || c.assigned_auditor_id !== me.id || !c.terms_accepted_at || c.access_status !== 'approved') return res.status(403).json({ ok: false, message: 'Access to this review is not approved yet.' });
     const { data, error } = await supa.storage.from(BUCKET).download(f.storage_key as string);
     if (error || !data) return res.status(404).json({ ok: false, message: 'File not found.' });
     res.setHeader('Content-Type', (f.mime_type as string) || 'application/octet-stream');
@@ -483,8 +510,8 @@ async function decisionHandler(req: Request, res: Response) {
     if (!['approved', 'changes_requested', 'rejected'].includes(decision)) return res.status(400).json({ ok: false, message: 'Invalid decision.' });
     if (decision !== 'approved' && !remarks) return res.status(400).json({ ok: false, message: 'Remarks are required.' });
     const supa = db();
-    const { data: c } = await supa.from('review_cycles').select('id, status, assigned_auditor_id, terms_accepted_at').eq('id', id).maybeSingle();
-    if (!c || c.assigned_auditor_id !== me.id || !c.terms_accepted_at) return res.status(403).json({ ok: false, message: 'Not assigned to you.' });
+    const { data: c } = await supa.from('review_cycles').select('id, status, assigned_auditor_id, terms_accepted_at, access_status').eq('id', id).maybeSingle();
+    if (!c || c.assigned_auditor_id !== me.id || !c.terms_accepted_at || c.access_status !== 'approved') return res.status(403).json({ ok: false, message: 'Not assigned to you.' });
     if (c.status !== 'in_review') return res.status(409).json({ ok: false, message: 'Already decided.' });
     const decidedAt = new Date().toISOString();
     const u = await supa.from('review_cycles').update({ status: decision, decision_remarks: remarks, decided_at: decidedAt }).eq('id', id);

@@ -1,3 +1,13 @@
 
 /* append to Validation.module.css — status line shown while Level 2 documents are saved / submitted */
 .v2SyncNote { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 8000; max-width: 560px; display: flex; align-items: center; gap: 12px; background: #111827; color: #FFFFFF; font-size: 12px; line-height: 1.5; padding: 10px 16px; border-radius: 10px; box-shadow: 0 12px 32px rgba(17,24,39,0.35); }
+
+.v2Spin { width: 12px; height: 12px; border: 2px solid rgba(255,255,255,0.35); border-top-color: #FFFFFF; border-radius: 50%; animation: v2spin 0.8s linear infinite; flex-shrink: 0; }
+@keyframes v2spin { to { transform: rotate(360deg); } }
+.v2UpOverlay { position: fixed; inset: 0; z-index: 9500; background: rgba(17,24,39,0.55); display: flex; align-items: center; justify-content: center; padding: 20px; }
+.v2UpCard { width: 100%; max-width: 420px; background: #FFFFFF; border-radius: 14px; padding: 24px; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 24px 64px rgba(17,24,39,0.3); }
+.v2UpTitle { margin: 0; font-size: 15px; font-weight: 800; color: #111827; }
+.v2UpBar { height: 8px; border-radius: 99px; background: #EEECF8; overflow: hidden; }
+.v2UpFill { height: 100%; background: linear-gradient(90deg, #6C3BD5, #8B5CF6); border-radius: 99px; transition: width 250ms ease; }
+.v2UpSub { margin: 0; font-size: 12px; color: #374151; line-height: 1.5; word-break: break-word; }
+.v2UpHint { margin: 0; font-size: 11px; color: #9CA3AF; }

@@ -73,10 +73,6 @@ export default function AuditorPage() {
 
   const auditor = store.currentAuditor;
 
-  if (store.loading && auditor) {
-    return null;
-  }
-
   const navCounts = useMemo(() => {
     const c = store.companies;
     return {
@@ -90,6 +86,8 @@ export default function AuditorPage() {
       all:                c.length,
     } as Record<NavKey, number>;
   }, [store.companies, auditor?.id]);
+
+  if (store.loading && !store.hydrated) return null;
 
   if (!auditor) {
     return <AuditorAuth onAuthenticated={() => setNav('overview')} />;
@@ -105,7 +103,7 @@ export default function AuditorPage() {
   }
 
   function handleSignOut() {
-    store.signOut();
+    void store.signOut();
     setOpenCompanyId(null);
     setNav('overview');
   }
@@ -192,7 +190,7 @@ export default function AuditorPage() {
               company={openCompany}
               auditor={auditor}
               onBack={() => setOpenCompanyId(null)}
-              onClaim={id => store.claimCompany(id)}
+              onClaim={(id, accepted) => store.claimCompany(id, accepted)}
               onDecide={(id, decision, remarks) => store.decide(id, decision, remarks)}
             />
           ) : nav === 'command_center' ? (

@@ -15,29 +15,29 @@
  * Zero inline styles — all from Auditor.module.css (.ar* classes).
  */
 
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import s from './Auditor.module.css';
-import type { Auditor, CompanyReview, IssueSeverity, ReviewDoc } from './auditorStore';
+import { authFetch, type Auditor, type CompanyReview, type IssueSeverity, type ReviewDoc } from './auditorStore';
 import PdfViewer from '../documentGenerator/PdfViewer';
 import LiveRegister from '../documentGenerator/LiveRegister';
-import { buildMockDocumentPdf, buildMockLiveRegisterFile, getTallyFields } from './mockFiles';
+import AuditorTermsModal from './AuditorTermsModal';
 import { resolveRuleSet } from './ruleLibrary';
 import AuditCertificate from './AuditCertificate';
 import {
   IconArrowLeft, IconFileText, IconFlag, IconPenLine, IconCheckCircle, IconUndo,
   IconXCircle, IconAlertTriangle, IconTable, IconChevronDown, IconChevronRight,
-  IconClock, IconEye, IconShieldCheck, IconListChecks, 
+  IconClock, IconEye, IconShieldCheck, IconListChecks, IconFolder,
 } from './icons';
 
 interface AuditorCompanyReviewProps {
   company:  CompanyReview;
   auditor:  Auditor;
   onBack:   () => void;
-  onClaim:  (id: string) => void;
-  onDecide: (id: string, decision: 'approved' | 'changes_requested' | 'rejected', remarks: string) => void;
+  onClaim:  (id: string, acceptedTerms: boolean) => Promise<{ ok: true } | { ok: false; error: string }>;
+  onDecide: (id: string, decision: 'approved' | 'changes_requested' | 'rejected', remarks: string) => Promise<{ ok: true; certificateNo?: string } | { ok: false; error: string }>;
 }
 
-type Tab = 'documents' | 'issues' | 'decision';
+type Tab = 'documents' | 'company' | 'issues' | 'decision';
 
 const SEVERITY_META: Record<IssueSeverity, { label: string; cls: string }> = {
   critical: { label: 'Critical', cls: 'arSevCritical' },
@@ -61,6 +61,13 @@ const STATUS_TEXT: Record<CompanyReview['status'], string> = {
   rejected:           'Rejected',
 };
 
+function lockedText(c: CompanyReview): string {
+  if (c.status === 'pending') return 'Request access to this review (and accept the auditor terms) to see every document and all the data this company submitted.';
+  if (c.accessStatus === 'requested') return 'Access requested — waiting for Regnix to approve. Documents and company data unlock as soon as it is approved.';
+  if (c.accessStatus === 'denied') return 'Access to this review was not approved.';
+  return 'This review belongs to another auditor — documents and data are only visible to the assigned auditor.';
+}
+
 function fmtDate(d: Date): string {
   return d.toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
 }
@@ -71,7 +78,7 @@ function toFileFromBlob(blob: Blob, fileName: string): File {
 
 async function fetchBlob(url: string): Promise<Blob | null> {
   try {
-    const res = await fetch(url, { credentials: 'include' });
+    const res = await authFetch(url);
     if (!res.ok) return null;
     return await res.blob();
   } catch {
@@ -91,55 +98,67 @@ export default function AuditorCompanyReview({
   const [expandedDocId, setExpandedDocId] = useState<string | null>(null);
   const [checklistDocId, setChecklistDocId] = useState<string | null>(null);
   const [openDoc, setOpenDoc] = useState<{ doc: ReviewDoc; blob: Blob } | null>(null);
+  const [sheetFile, setSheetFile] = useState<File | null>(null);
   const [liveRegisterOpen, setLiveRegisterOpen] = useState(false);
+  const [liveFile, setLiveFile] = useState<File | null>(null);
+  const [showTerms, setShowTerms] = useState(false);
+  const [claiming, setClaiming] = useState(false);
+  const [claimError, setClaimError] = useState('');
+  const [actionError, setActionError] = useState('');
+  const [fileError, setFileError] = useState('');
   const [showCertificate, setShowCertificate] = useState(false);
 
-  // The live register is pulled from the database-backed snapshot when
-  // available; the demo generator remains only as a fallback for local dev.
-  const liveRegisterFile = useMemo(() => {
-    if (company.liveRegisterFile) return company.liveRegisterFile;
-    if (company.liveRegisterUrl) return null;
-    return buildMockLiveRegisterFile(company);
-  }, [company.id, company.liveRegisterFile, company.liveRegisterUrl]);
+  const canWork = company.status === 'in_review' && company.assignedTo === auditor.id && !company.locked;
 
-
+  async function openLiveRegister() {
+    setFileError('');
+    if (!company.liveRegisterUrl) { setFileError('The company\'s live register was not stored (missing or over 3 MB).'); return; }
+    if (!liveFile) {
+      const blob = await fetchBlob(company.liveRegisterUrl);
+      if (!blob) { setFileError('Could not load the live register.'); return; }
+      setLiveFile(new File([blob], company.liveRegisterFileName || 'Live Register.xlsx', { type: blob.type }));
+    }
+    setLiveRegisterOpen(true);
+  }
 
   const isDecided   = company.status === 'approved' || company.status === 'changes_requested' || company.status === 'rejected';
   const openIssues  = company.issues.filter(i => !i.resolvedL2);
   const flaggedDocs = company.docs.filter(d => d.status === 'flagged').length;
 
-  function startClaim() {
-    if (company.status === 'pending') onClaim(company.id);
+  async function acceptAndClaim() {
+    setClaiming(true); setClaimError('');
+    const r = await onClaim(company.id, true);
+    setClaiming(false);
+    if (r.ok) setShowTerms(false); else setClaimError(r.error);
   }
 
-  function confirmDecision() {
+  async function confirmDecision() {
     if (!pendingDecision) return;
     if (pendingDecision !== 'approved' && !remarks.trim()) return;
-    setSubmitting(true);
-    setTimeout(() => {
-      onDecide(company.id, pendingDecision, remarks.trim());
-      setSubmitting(false);
-      setPendingDecision(null);
-    }, 700);
+    setSubmitting(true); setActionError('');
+    const r = await onDecide(company.id, pendingDecision, remarks.trim());
+    setSubmitting(false);
+    if (r.ok) { setPendingDecision(null); if (pendingDecision === 'approved') setShowCertificate(true); }
+    else setActionError(r.error);
   }
 
   async function handleOpenDocument(doc: ReviewDoc) {
-    if (doc.blob) {
-      setOpenDoc({ doc, blob: doc.blob });
-      return;
-    }
+    setFileError('');
+    if (!doc.fileUrl) { setFileError(`"${doc.name}" has no stored file — ask the company to re-upload it.`); return; }
+    const blob = await fetchBlob(doc.fileUrl);
+    if (!blob) { setFileError(`Could not load "${doc.name}".`); return; }
+    const isPdf = blob.type === 'application/pdf' || /\.pdf$/i.test(doc.fileName ?? '');
+    if (isPdf) setOpenDoc({ doc, blob });
+    else setSheetFile(new File([blob], doc.fileName || doc.name, { type: blob.type }));
+  }
 
-    if (doc.fileUrl) {
-      const blob = await fetchBlob(doc.fileUrl);
-      if (blob) {
-        setOpenDoc({ doc, blob });
-        return;
-      }
-    }
-
-    // Fallback only for local demo data when no uploaded file exists.
-    const blob = buildMockDocumentPdf(doc, company);
-    setOpenDoc({ doc, blob });
+  async function openStoredFile(url: string, name: string, mime: string | null) {
+    setFileError('');
+    const blob = await fetchBlob(url);
+    if (!blob) { setFileError(`Could not load "${name}".`); return; }
+    const isPdf = (mime ?? blob.type) === 'application/pdf' || /\.pdf$/i.test(name);
+    if (isPdf) setOpenDoc({ doc: { id: url, name, act: '', status: 'validated', score: 0, fileName: name }, blob });
+    else setSheetFile(new File([blob], name, { type: blob.type }));
   }
 
   function toggleExpand(docId: string) {
@@ -172,9 +191,9 @@ export default function AuditorCompanyReview({
             {STATUS_ICON[company.status]} {STATUS_TEXT[company.status]}
           </span>
           {company.status === 'pending' && (
-            <button className={s.arClaimBtn} onClick={startClaim}>Claim for review</button>
+            <button className={s.arClaimBtn} onClick={() => { setClaimError(''); setShowTerms(true); }}>Request access &amp; review</button>
           )}
-          {company.status === 'approved' && (
+          {company.status === 'approved' && company.certificate && (
             <button className={s.arClaimBtn} onClick={() => setShowCertificate(true)}>
               <IconFileText size={13} /> View certificate
             </button>
@@ -213,6 +232,9 @@ export default function AuditorCompanyReview({
         <button className={tab === 'documents' ? `${s.arTab} ${s.arTabActive}` : s.arTab} onClick={() => setTab('documents')}>
           <IconFileText size={14} /> Documents <span className={s.arTabCount}>{company.docs.length}</span>
         </button>
+        <button className={tab === 'company' ? `${s.arTab} ${s.arTabActive}` : s.arTab} onClick={() => setTab('company')}>
+          <IconFolder size={14} /> Company data
+        </button>
         <button className={tab === 'issues' ? `${s.arTab} ${s.arTabActive}` : s.arTab} onClick={() => setTab('issues')}>
           <IconFlag size={14} /> Issues <span className={s.arTabCount}>{openIssues.length}</span>
         </button>
@@ -233,20 +255,29 @@ export default function AuditorCompanyReview({
                   : 'All documents passed Level 2 checks with no flags.'}
               </p>
             </div>
-            <button className={s.arRegisterBtn} onClick={() => setLiveRegisterOpen(true)}>
+            <button className={s.arRegisterBtn} onClick={() => { void openLiveRegister(); }} disabled={company.locked}>
               <IconTable size={14} /> Open live register
             </button>
           </div>
 
-          <div className={s.arDemoNote}>
-            <IconAlertTriangle size={12} />
-            Database-backed review — the submitted registers below are loaded from the company's uploaded files, and the tally panel uses stored comparison data when available.
-          </div>
+          {company.locked && (
+            <div className={s.arLockedNote}>
+              <IconShieldCheck size={13} />
+              {lockedText(company)}
+            </div>
+          )}
+          {(company.missingFiles?.length ?? 0) > 0 && (
+            <div className={s.arMissingNote}>
+              Files the company could not store (over 3 MB or upload error): {company.missingFiles!.join(', ')}.
+            </div>
+          )}
+          {fileError && <p className={s.arActionError}>{fileError}</p>}
 
           <div className={s.arDocList}>
             {company.docs.map(doc => {
               const expanded = expandedDocId === doc.id;
-              const fields = expanded ? (doc.tallyRows ?? getTallyFields(doc, company)) : [];
+              const fields = expanded ? (doc.tallyRows ?? []) : [];
+              const docIssues = expanded ? company.issues.filter(i => i.docName === doc.name) : [];
               const mismatchCount = fields.filter(f => !f.match).length;
               const ruleSet = expanded ? resolveRuleSet(doc.name) : null;
               const flaggedRules = expanded
@@ -261,7 +292,7 @@ export default function AuditorCompanyReview({
                     </span>
                     <div className={s.arDocInfo}>
                       <span className={s.arDocName}>{doc.name}</span>
-                      <span className={s.arDocAct}>{doc.act}</span>
+                      <span className={s.arDocAct}>{doc.act}{doc.hasFile === false && <> &middot; <span className={s.arNoFile}>no file stored</span></>}</span>
                     </div>
                     <span className={doc.status === 'flagged' ? `${s.arDocScore} ${s.arDocScoreLow}` : s.arDocScore}>
                       {doc.score}
@@ -274,8 +305,12 @@ export default function AuditorCompanyReview({
                   {expanded && (
                     <div className={s.arTallyPanel}>
                       <div className={s.arTallyPanelHead}>
-                        <span className={s.arTallyPanelTitle}>Field-level tally</span>
-                        {mismatchCount > 0 ? (
+                        <span className={s.arTallyPanelTitle}>{fields.length ? 'Field-level tally' : 'Level 2 result'}</span>
+                        {fields.length === 0 ? (
+                          <span className={docIssues.length ? s.arTallyMismatchBadge : s.arTallyMatchBadge}>
+                            {docIssues.length ? <><IconAlertTriangle size={11} /> {docIssues.length} issue{docIssues.length !== 1 ? 's' : ''}</> : <><IconCheckCircle size={11} /> No issues</>}
+                          </span>
+                        ) : mismatchCount > 0 ? (
                           <span className={s.arTallyMismatchBadge}>
                             <IconAlertTriangle size={11} /> {mismatchCount} mismatch{mismatchCount !== 1 ? 'es' : ''}
                           </span>
@@ -284,12 +319,24 @@ export default function AuditorCompanyReview({
                             <IconCheckCircle size={11} /> All fields tally
                           </span>
                         )}
-                        <button className={s.arOpenDocBtn} onClick={() => { void handleOpenDocument(doc); }}>
+                        <button className={s.arOpenDocBtn} disabled={company.locked || !doc.fileUrl} onClick={() => { void handleOpenDocument(doc); }}>
                           <IconFileText size={13} /> Open filed document
                         </button>
                       </div>
 
-                      <table className={s.arTallyTable}>
+                      {fields.length === 0 && docIssues.length > 0 && (
+                        <div className={s.arDocIssues}>
+                          {docIssues.map(i => (
+                            <div key={i.id} className={s.arIssueRow}>
+                              <span className={`${s.arSevBadge} ${s[SEVERITY_META[i.severity].cls]}`}>{SEVERITY_META[i.severity].label}</span>
+                              <div className={s.arIssueBody}><p className={s.arIssueDoc}>{i.rule}</p><p className={s.arIssueCause}>{i.rootCause}</p></div>
+                              <span className={i.resolvedL2 ? `${s.arIssueState} ${s.arIssueResolved}` : `${s.arIssueState} ${s.arIssueOpen}`}>{i.resolvedL2 ? 'Resolved in L2' : 'Still open'}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {fields.length > 0 && <table className={s.arTallyTable}>
                         <thead>
                           <tr>
                             <th>Field</th>
@@ -312,7 +359,7 @@ export default function AuditorCompanyReview({
                             </tr>
                           ))}
                         </tbody>
-                      </table>
+                      </table>}
 
                       {ruleSet && (
                         <div className={s.arChecklistSection}>
@@ -351,6 +398,72 @@ export default function AuditorCompanyReview({
               );
             })}
           </div>
+        </div>
+      )}
+
+      {/* ── Company data tab (everything the company filed) ─────────────── */}
+      {tab === 'company' && (
+        <div className={s.arCard}>
+          {!company.details ? (
+            <div className={s.arLockedNote}><IconShieldCheck size={13} /> {lockedText(company)}</div>
+          ) : (
+            <>
+              <div className={s.arCardHead}>
+                <p className={s.arCardTitle}>Company details</p>
+                <p className={s.arCardSub}>As entered by the company. Read-only.</p>
+              </div>
+              <dl className={s.arDetailGrid}>
+                {([
+                  ['Legal name', company.details.company.name], ['CIN', company.details.company.cin], ['PAN', company.details.company.pan],
+                  ['GSTIN', company.details.company.gstin], ['Industry', company.details.company.industry], ['Headcount', company.details.company.headcount],
+                  ['State', company.details.company.state], ['Address', company.details.company.address],
+                  ['Incorporated', company.details.company.incorporationDate ?? ''],
+                  ['Authorised person', company.details.company.authorizedPerson], ['Designation', company.details.company.designation],
+                  ['Email', company.details.company.email], ['Phone', company.details.company.phone],
+                  ['Acts covered', company.actsCovered.join(', ')],
+                ] as [string, string][]).map(([k, v]) => (
+                  <div key={k} className={s.arDetailItem}><dt>{k}</dt><dd>{v || '—'}</dd></div>
+                ))}
+              </dl>
+
+              <div className={s.arCardHead}>
+                <p className={s.arCardTitle}>All submitted files ({company.details.files.length})</p>
+                <p className={s.arCardSub}>Every document and the live register uploaded for this review.</p>
+              </div>
+              {fileError && <p className={s.arActionError}>{fileError}</p>}
+              {company.details.files.length === 0 ? <p className={s.arCardSub}>No files were stored.</p> : (
+                <div className={s.arFileList}>
+                  {company.details.files.map(f => (
+                    <div key={f.id} className={s.arFileRow}>
+                      <span className={s.arFileName}>{f.docName || f.fileName}{f.role === 'live_register' ? ' (live register)' : ''}</span>
+                      <span className={s.arFileMeta}>{f.fileName} · {(f.size / 1024).toFixed(0)} KB · {fmtDate(new Date(f.at))}</span>
+                      <button className={s.arOpenDocBtn} onClick={() => { void openStoredFile(f.url, f.fileName, f.mimeType); }}>
+                        <IconFileText size={13} /> Open
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {company.details.kycFiles.length > 0 && (
+                <>
+                  <div className={s.arCardHead}>
+                    <p className={s.arCardTitle}>KYC documents ({company.details.kycFiles.length})</p>
+                    <p className={s.arCardSub}>Filed at onboarding (held in Zoho WorkDrive).</p>
+                  </div>
+                  <div className={s.arFileList}>
+                    {company.details.kycFiles.map((k, i) => (
+                      <div key={i} className={s.arFileRow}>
+                        <span className={s.arFileName}>{k.label}</span>
+                        <span className={s.arFileMeta}>{k.fileName} · {fmtDate(new Date(k.at))}</span>
+                        {k.url && <a className={s.arOpenDocBtn} href={k.url} target="_blank" rel="noreferrer">Open in Zoho</a>}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </>
+          )}
         </div>
       )}
 
@@ -406,15 +519,21 @@ export default function AuditorCompanyReview({
               <div className={s.arDecisionRecordRemarks}>
                 “{company.decisionRemarks}”
               </div>
-              {company.status === 'approved' && (
-                <button
-                  className={s.arClaimBtn}
-                  onClick={() => setShowCertificate(true)}
-                  style={{ marginTop: 16 }}
-                >
-                  <IconFileText size={13} /> View compliance certificate
-                </button>
+              {company.status === 'approved' && company.certificate && (
+                <div className={s.arCertRow}>
+                  <button className={s.arClaimBtn} onClick={() => setShowCertificate(true)}>
+                    <IconFileText size={13} /> View compliance certificate
+                  </button>
+                </div>
               )}
+            </div>
+          ) : !canWork ? (
+            <div className={s.arLockedNote}>
+              <IconShieldCheck size={13} />
+              {company.status === 'pending'
+                ? 'Request access (and accept the terms) to record a decision.'
+                : company.accessStatus === 'requested' ? 'Waiting for access approval before you can record a decision.'
+                : 'Only the assigned auditor can record a decision for this company.'}
             </div>
           ) : (
             <>
@@ -471,12 +590,13 @@ export default function AuditorCompanyReview({
                   {pendingDecision !== 'approved' && !remarks.trim() && (
                     <p className={s.arConfirmWarn}><IconAlertTriangle size={12} /> Please add remarks above before confirming.</p>
                   )}
+                  {actionError && <p className={s.arActionError}>{actionError}</p>}
                   <div className={s.arConfirmActions}>
                     <button className={s.arCancelBtn} onClick={() => setPendingDecision(null)}>Cancel</button>
                     <button
                       className={s.arConfirmBtn}
                       disabled={submitting || (pendingDecision !== 'approved' && !remarks.trim())}
-                      onClick={confirmDecision}
+                      onClick={() => { void confirmDecision(); }}
                     >
                       {submitting ? 'Submitting…' : 'Confirm decision'}
                     </button>
@@ -499,15 +619,33 @@ export default function AuditorCompanyReview({
       />
 
       <LiveRegister
+        open={sheetFile !== null}
+        onClose={() => setSheetFile(null)}
+        uploadedFile={sheetFile}
+        selectedActs={company.actsCovered}
+        companyName={company.name}
+      />
+
+      <LiveRegister
         open={liveRegisterOpen}
         onClose={() => setLiveRegisterOpen(false)}
-        uploadedFile={liveRegisterFile}
+        uploadedFile={liveFile}
         selectedActs={company.actsCovered}
         companyName={company.name}
       />
 
       {/* ── Compliance certificate — available once Level 3 is approved ─── */}
-      {company.status === 'approved' && (
+      {showTerms && (
+        <AuditorTermsModal
+          companyName={company.name}
+          busy={claiming}
+          error={claimError}
+          onAccept={() => { void acceptAndClaim(); }}
+          onClose={() => setShowTerms(false)}
+        />
+      )}
+
+      {company.status === 'approved' && company.certificate && (
         <AuditCertificate
           open={showCertificate}
           onClose={() => setShowCertificate(false)}

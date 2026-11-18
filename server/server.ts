@@ -23,6 +23,7 @@ import superAdminRouter from './routes/superAdminRoute.js';
 import certificateRouter from './routes/certificateRoute.js';
 import emailRouter from './routes/emailRoute.js';
 import validationDocsRouter from './routes/validationDocsRoute.js';
+import adminPortalRouter from './routes/adminPortalRoute.js';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
@@ -85,6 +86,7 @@ app.use('/api', factoriesRouter);
 app.use('/api', seActRouter);
 app.use('/api', manualRegistersRouter);
 app.use('/api', validationDocsRouter);
+app.use('/api', adminPortalRouter);
 app.use('/api', validationRouter);
 app.use('/api', auditorRouter);
 app.use('/api', superAdminRouter);

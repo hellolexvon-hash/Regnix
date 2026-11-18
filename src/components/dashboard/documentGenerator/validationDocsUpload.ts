@@ -33,17 +33,24 @@ function toBase64(file: Blob): Promise<string> {
   });
 }
 
-export async function uploadValidationDocs(items: UploadItem[], _companyName = ''): Promise<UploadResult> {
+export interface UploadProgress { done: number; total: number; current: string; phase: 'uploading' | 'done' }
+
+export async function uploadValidationDocs(
+  items: UploadItem[], _companyName = '', onProgress?: (p: UploadProgress) => void,
+): Promise<UploadResult> {
   const result: UploadResult = { uploaded: [], skipped: [] };
   const t = await token().catch(() => null);
   if (!t) { items.forEach(i => result.skipped.push({ name: i.name || i.file.name, reason: 'not signed in' })); return result; }
 
+  let done = 0;
+  const tick = (current: string) => onProgress?.({ done, total: items.length, current, phase: 'uploading' });
   for (const it of items) {
     const label = it.docName || it.name || it.file.name;
+    tick(label);
     const sig = `${it.file.name}|${it.file.size}|${it.file.lastModified}|${label}|${it.role ?? 'document'}`;
-    if (_sent.has(sig)) { result.uploaded.push(label); continue; }
-    if (it.file.size === 0) { result.skipped.push({ name: label, reason: 'empty file' }); continue; }
-    if (it.file.size > MAX_BYTES) { result.skipped.push({ name: label, reason: 'over 3 MB' }); continue; }
+    if (_sent.has(sig)) { result.uploaded.push(label); done++; continue; }
+    if (it.file.size === 0) { result.skipped.push({ name: label, reason: 'empty file' }); done++; continue; }
+    if (it.file.size > MAX_BYTES) { result.skipped.push({ name: label, reason: 'over 3 MB' }); done++; continue; }
     try {
       const res = await fetch('/api/validation/zoho-upload', {
         method: 'POST',
@@ -55,7 +62,9 @@ export async function uploadValidationDocs(items: UploadItem[], _companyName = '
     } catch {
       result.skipped.push({ name: label, reason: 'network' });
     }
+    done++;
   }
+  onProgress?.({ done, total: items.length, current: '', phase: 'done' });
   if (result.skipped.length) console.warn('[validation upload] not stored:', result.skipped);
   return result;
 }

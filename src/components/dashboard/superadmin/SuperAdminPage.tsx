@@ -22,19 +22,20 @@ import { useMemo, useState } from 'react';
 import s from './SuperAdmin.module.css';
 import SuperAdminAuth from './SuperAdminAuth';
 import {
-  useSuperAdminAuth, useSystemOverview, useSignupApprovals, useAdminNotifications, useAuthorizedUsers,
+  useSuperAdminAuth, useAdminPortal, useSystemOverview, useSignupApprovals, useAdminNotifications, useAuthorizedUsers,
   type AuthorizedUser,
 } from './superAdminStore';
 import { getPlan, formatINR, headcountLabel } from '@/lib/plans';
 import { useAuditorStore, type CompanyReview } from '../AuditorView/auditorStore';
 import KycDocumentPicker from './KycDocumentPicker';
+import { AdminClientsPanel, AdminAuditorsPanel, AdminAccessPanel, AdminActivityPanel } from './AdminPortalPanels';
 import { KYC_DEFAULT_LABELS } from './kycDocuments';
 import {
   IconShieldCheck, IconBuilding, IconUsers, IconAlertTriangle, IconCheckCircle,
   IconClock, IconEye, IconUndo, IconXCircle, IconLogOut, IconSearch, IconFlag,
 } from '../AuditorView/icons';
 
-type Tab = 'overview' | 'approvals' | 'authorized' | 'kyc' | 'clients' | 'auditors' | 'activity';
+type Tab = 'overview' | 'approvals' | 'authorized' | 'kyc' | 'access' | 'clients' | 'auditors' | 'activity';
 
 function kycPill(u: AuthorizedUser): { label: string; cls: string } | null {
   if (!u.kyc) return null;
@@ -100,6 +101,7 @@ export default function SuperAdminPage() {
   const approvals = useSignupApprovals(admin.isAuthenticated);
   const notifications = useAdminNotifications(admin.isAuthenticated);
   const authorized = useAuthorizedUsers(admin.isLive, admin.currentAdmin?.id ?? null);
+  const portal = useAdminPortal(admin.isLive);
   const [bellOpen, setBellOpen] = useState(false);
   const [tab, setTab] = useState<Tab>('overview');
   const [query, setQuery] = useState('');
@@ -241,6 +243,11 @@ export default function SuperAdminPage() {
         <button className={tab === 'kyc' ? `${s.saTab} ${s.saTabActive}` : s.saTab} onClick={() => setTab('kyc')}>
           KYC review <span className={s.saTabCount}>{submittedUsers.length}</span>
         </button>
+        {admin.isLive && (
+          <button className={tab === 'access' ? `${s.saTab} ${s.saTabActive}` : s.saTab} onClick={() => setTab('access')}>
+            Access requests {portal.data && portal.data.accessRequests.length > 0 && <span className={s.saTabCount}>{portal.data.accessRequests.length}</span>}
+          </button>
+        )}
         <button className={tab === 'clients' ? `${s.saTab} ${s.saTabActive}` : s.saTab} onClick={() => setTab('clients')}>
           Clients <span className={s.saTabCount}>{overview.totalCompanies}</span>
         </button>
@@ -492,7 +499,12 @@ export default function SuperAdminPage() {
           </div>
         )}
 
-        {tab === 'clients' && (
+        {tab === 'access' && admin.isLive && <AdminAccessPanel portal={portal} />}
+        {tab === 'clients' && admin.isLive && <AdminClientsPanel portal={portal} />}
+        {tab === 'auditors' && admin.isLive && <AdminAuditorsPanel portal={portal} />}
+        {tab === 'activity' && admin.isLive && <AdminActivityPanel portal={portal} />}
+
+        {tab === 'clients' && !admin.isLive && (
           <div className={s.saPanel}>
             <div className={s.saPanelHead}>
               <p className={s.saPanelTitle}>All clients</p>
@@ -533,7 +545,7 @@ export default function SuperAdminPage() {
           </div>
         )}
 
-        {tab === 'auditors' && (
+        {tab === 'auditors' && !admin.isLive && (
           <div className={s.saPanel}>
             <p className={s.saPanelTitle}>Auditor roster &amp; workload</p>
             <table className={s.saTable}>
@@ -561,7 +573,7 @@ export default function SuperAdminPage() {
           </div>
         )}
 
-        {tab === 'activity' && (
+        {tab === 'activity' && !admin.isLive && (
           <div className={s.saPanel}>
             <p className={s.saPanelTitle}>Platform activity</p>
             <div className={s.saActivityList}>

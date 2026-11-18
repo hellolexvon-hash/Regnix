@@ -20,6 +20,10 @@ interface ValidationLevel3Props {
   onApprove?:        () => void;
   onDownloadReport?: () => void;
   onBack?:           () => void;
+  /** Real audit state from the server */
+  auditNote?:        { status: 'changes_requested' | 'rejected'; remarks: string };
+  auditorAssigned?:  boolean;
+  certificateNo?:    string;
 }
 
 type StepState = 'done' | 'active' | 'pending';
@@ -79,6 +83,9 @@ export default function ValidationLevel3({
   onApprove,
   onDownloadReport,
   onBack,
+  auditNote,
+  auditorAssigned = false,
+  certificateNo,
 }: ValidationLevel3Props) {
   const [elapsed,  setElapsed]  = useState(0);
   const [approved, setApproved] = useState(isApproved);
@@ -99,7 +106,7 @@ export default function ValidationLevel3({
   }
 
   const minutes = Math.floor(elapsed / 60);
-  const steps   = buildSteps(minutes);
+  const steps   = buildSteps(auditorAssigned ? Math.max(minutes, 5) : Math.min(minutes, 1));
 
   // ── Approved ──────────────────────────────────────────────────────────────
   if (approved) {
@@ -135,11 +142,11 @@ export default function ValidationLevel3({
               <div className={s.approvedOrb}>✅</div>
               <h2 className={s.approvedTitle}>Audit Report Approved!</h2>
               <p className={s.approvedSub}>
-                Your compliance audit for <strong>{companyName}</strong> has been reviewed and approved by an independent auditor. All 3 levels of validation are complete.
+                Your compliance audit for <strong>{companyName}</strong>{certificateNo ? <> (certificate <strong>{certificateNo}</strong>)</> : null} has been reviewed and approved by an independent auditor. All 3 levels of validation are complete.
               </p>
               <button className={s.downloadReportBtn} onClick={onDownloadReport}>
                 <span>📋</span>
-                Download Audit Report
+                Download Certificate
               </button>
             </div>
 
@@ -234,6 +241,16 @@ export default function ValidationLevel3({
 
             <div className={s.cardBody}>
 
+              {auditNote && (
+                <div className={s.demoBox}>
+                  <span>{auditNote.status === 'rejected' ? '⛔' : '↩️'}</span>
+                  <div className={s.demoText}>
+                    <strong>{auditNote.status === 'rejected' ? 'Submission rejected' : 'Changes requested'}:</strong> {auditNote.remarks}
+                    <br />Fix the points above and re-run Level 2 to send it back to an auditor.
+                  </div>
+                </div>
+              )}
+
               {/* Animated orb */}
               <div className={s.auditWait}>
                 <div className={s.auditOrb}>
@@ -276,7 +293,7 @@ export default function ValidationLevel3({
               </div>
 
               {/* Demo simulate box */}
-              <div className={s.demoBox}>
+              {onApprove && <div className={s.demoBox}>
                 <span>💡</span>
                 <div className={s.demoText}>
                   <strong>Demo mode:</strong> In production, approval status updates automatically from the backend. Click below to simulate auditor approval.
@@ -284,7 +301,7 @@ export default function ValidationLevel3({
                 <button className={`${s.btnGreen} ${s.btnSmall}`} onClick={handleApprove}>
                   Simulate Approval
                 </button>
-              </div>
+              </div>}
             </div>
 
             {onBack && (

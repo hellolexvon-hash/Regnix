@@ -37,7 +37,7 @@ import TermsModal from './TermsModal';
 import type { UploadedDoc, SheetPreview } from './validationStore';
 import LiveRegister from './LiveRegister';
 import PdfViewer from './PdfViewer';
-import { uploadValidationDocs } from './validationDocsUpload';
+import { uploadValidationDocs, type Level2Payload } from './validationDocsUpload';
 
 /* ════════════════════════════════════════════════════════════════════════
    TYPES
@@ -107,7 +107,7 @@ interface Props {
   docs:             UploadedDoc[];
   liveRegisterFile: File | null;
   companyName?:     string;
-  onComplete:       () => void;
+  onComplete:       (summary: Level2Payload) => void | Promise<void>;
   onBack:           () => void;
 }
 
@@ -615,6 +615,9 @@ export default function ValidationLevel2({
   const [activDocId,   setActivDocId]   = useState<string | null>(null);
   const [issues,       setIssues]       = useState<ComplianceIssue[]>([]);
   const [showTerms,    setShowTerms]    = useState(false);
+  const [submitting,   setSubmitting]   = useState(false);
+  const [submitError,  setSubmitError]  = useState('');
+  const [syncNote,     setSyncNote]     = useState('');
   const [aiRunning,    setAiRunning]    = useState<string | null>(null);
   const [filterStatus, setFilterStatus] = useState<string>('All');
   const [filterAct,    setFilterAct]    = useState<string>('All');
@@ -655,13 +658,42 @@ export default function ValidationLevel2({
 
   const activeDoc = docCards.find(d => d.id === activDocId);
 
+  function noteFor(r: { uploaded: string[]; skipped: { name: string; reason: string }[] }): string {
+    if (r.skipped.length === 0) return r.uploaded.length ? 'Saved to your WorkDrive folder.' : '';
+    return `Not stored: ${r.skipped.map(x => `${x.name} (${x.reason})`).join(', ')}`;
+  }
+
+  /* Final step: make sure every file is stored, then hand the result to the auditor queue. */
+  async function finishLevel2() {
+    setSubmitting(true); setSubmitError('');
+    const items = docCards.filter(d => d.file).map(d => ({ file: d.file as File, name: d.file!.name, docName: d.name }));
+    if (liveRegisterFile) items.push({ file: liveRegisterFile, name: liveRegisterFile.name, docName: 'Live Register', role: 'live_register' } as never);
+    const up = await uploadValidationDocs(items as never, companyName);
+    const missing = up.skipped.map(x => x.name);
+    const scored = docCards.filter(d => d.uploadStatus === 'Uploaded');
+    try {
+      await onComplete({
+        companyName,
+        l2Score: overallScore,
+        selectedActs: Array.from(new Set(docCards.map(d => d.act))),
+        liveRegisterFileName: liveRegisterFile?.name ?? '',
+        missingFiles: missing,
+        docs: scored.map(d => ({ name: d.name, act: d.act, score: d.score, status: d.rulesFailed > 0 ? 'flagged' : 'validated' })),
+        issues: issues.map(i => ({ docName: i.docName, severity: i.severity.toLowerCase(), rule: i.description, rootCause: i.rootCause, resolved: i.status === 'Resolved' || i.status === 'Waived' })),
+      });
+    } catch (e) {
+      setSubmitError(e instanceof Error ? e.message : 'Could not submit for audit.');
+    } finally { setSubmitting(false); }
+  }
+
   /* ── File upload + simulated AI validation pass ── */
   const handleFileUpload = useCallback(async (docId: string, files: FileList | null) => {
     if (!files?.length) return;
     const file   = files[0];
     const sheets = /\.xlsx?$/i.test(file.name) ? await parseXlsx(file).catch(() => undefined) : undefined;
     // Store a copy in the company's Zoho WorkDrive folder (background, never blocks the UI)
-    void uploadValidationDocs([{ file, name: file.name }], companyName);
+    const target = docCards.find(d => d.id === docId);
+    void uploadValidationDocs([{ file, name: file.name, docName: target?.name }], companyName).then(r => setSyncNote(noteFor(r)));
 
     setDocCards(prev => prev.map(d => d.id === docId ? { ...d, uploadStatus: 'Uploaded', file, sheets } : d));
     setAiRunning(docId);
@@ -1275,8 +1307,15 @@ export default function ValidationLevel2({
         />
       )}
 
+      {(submitting || submitError || syncNote) && (
+        <div className={s.v2SyncNote} role="status">
+          {submitting ? 'Securing documents and sending to the auditor…' : submitError || syncNote}
+          {submitError && <button className={s.btnSecondary} onClick={() => setSubmitError('')}>Dismiss</button>}
+        </div>
+      )}
+
       {showTerms && (
-        <TermsModal level={2} onAgree={() => { setShowTerms(false); onComplete(); }} onClose={() => setShowTerms(false)} />
+        <TermsModal level={2} onAgree={() => { setShowTerms(false); void finishLevel2(); }} onClose={() => setShowTerms(false)} />
       )}
     </div>
   );
