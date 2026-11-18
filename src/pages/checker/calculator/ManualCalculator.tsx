@@ -14,6 +14,8 @@ export function ManualCalculator({ rules, gender, month }: Props) {
   const [hraPct, setHraPct] = useState<number | null>(null);
   const [pfCeiling, setPfCeiling] = useState(true);
   const [gratuity, setGratuity] = useState(true);
+  const [epsMember, setEpsMember] = useState(false);
+  const [edliInCtc, setEdliInCtc] = useState(false);
 
   const basic = basicPct ?? rules.params.basicPct * 100;
   const hra = hraPct ?? rules.params.hraPctOfBasic * 100;
@@ -22,9 +24,9 @@ export function ManualCalculator({ rules, gender, month }: Props) {
   const result = useMemo(() => {
     if (!(ctc > 0)) return { error: 'Enter a CTC greater than zero.' } as const;
     try {
-      return { b: calcSalary({ ctc, period, basicPct: basic / 100, hraPctOfBasic: hra / 100, pfOnCeiling: pfCeiling, gratuityInCtc: gratuity, gender, month, rules }) } as const;
+      return { b: calcSalary({ ctc, period, basicPct: basic / 100, hraPctOfBasic: hra / 100, pfOnCeiling: pfCeiling, gratuityInCtc: gratuity, epsMember, edliAdminInCtc: edliInCtc, gender, month, rules }) } as const;
     } catch (e) { return { error: (e as Error).message } as const; }
-  }, [ctc, period, basic, hra, pfCeiling, gratuity, gender, month, rules]);
+  }, [ctc, period, basic, hra, pfCeiling, gratuity, epsMember, edliInCtc, gender, month, rules]);
 
   const b = 'b' in result ? result.b : null;
   const row = (label: string, v: number, note = '') => (
@@ -57,6 +59,8 @@ export function ManualCalculator({ rules, gender, month }: Props) {
         </div>
         <label className={styles.check}><input type="checkbox" checked={pfCeiling} onChange={(e) => setPfCeiling(e.target.checked)} />PF on wage ceiling (₹{rules.params.pfWageCeiling.toLocaleString('en-IN')})</label>
         <label className={styles.check}><input type="checkbox" checked={gratuity} onChange={(e) => setGratuity(e.target.checked)} />Include gratuity ({(rules.params.gratuityRate * 100).toFixed(2)}% of basic) in CTC</label>
+        <label className={styles.check}><input type="checkbox" checked={epsMember} onChange={(e) => setEpsMember(e.target.checked)} />EPS member even above ceiling (joined when wages ≤ ₹{rules.params.pfWageCeiling.toLocaleString('en-IN')})</label>
+        <label className={styles.check}><input type="checkbox" checked={edliInCtc} onChange={(e) => setEdliInCtc(e.target.checked)} />Include EDLI 0.5% + EPF admin 0.5% in CTC</label>
         {(basicPct != null || hraPct != null) && (
           <button className={`${styles.btn} ${styles.btnGhost} ${styles.btnSm}`} onClick={() => { setBasicPct(null); setHraPct(null); }}>Reset to {rules.state || 'default'} rule values</button>
         )}
@@ -82,13 +86,17 @@ export function ManualCalculator({ rules, gender, month }: Props) {
                 {row('Special allowance', b.special, 'balancing figure')}
                 <tr className={styles.total}><td>Gross</td><td>{inr(b.gross)}</td><td /></tr>
                 <tr className={styles.sect}><td colSpan={3}>Employee deductions</td></tr>
-                {row('PF (employee)', b.pfEmployee, `${rules.params.pfEmployeeRate * 100}% of ${pfCeiling ? 'basic, capped' : 'basic'}`)}
+                {row('PF (employee)', b.pfEmployee, `${+(rules.params.pfEmployeeRate * 100).toFixed(2)}% of PF wage ₹${b.pfWage.toLocaleString('en-IN')}${pfCeiling && b.basic > rules.params.pfWageCeiling ? ` (capped at ₹${rules.params.pfWageCeiling.toLocaleString('en-IN')})` : ''}`)}
                 {row('ESIC (employee)', b.esicEmployee, b.esicApplicable ? `${rules.params.esicEmployeeRate * 100}% of gross` : `gross above ₹${rules.params.esicGrossCeiling.toLocaleString('en-IN')} — not applicable`)}
                 {row('Professional tax', b.pt, rules.ptSlabs.length ? `${rules.state} slab${month === 2 ? ' (Feb)' : ''}` : 'no slabs loaded')}
                 {row('Labour welfare fund', b.lwfEmployee, rules.lwf ? (b.lwfEmployee ? `${rules.lwf.frequency}, deducted this month` : `${rules.lwf.frequency}, not due this month`) : 'no LWF rule for state')}
                 <tr className={styles.total}><td>Total deductions</td><td>{inr(b.totalDeductions)}</td><td /></tr>
                 <tr className={styles.sect}><td colSpan={3}>Employer contributions</td></tr>
-                {row('PF (employer)', b.pfEmployer)}
+                {row('PF (employer) — total 12%', b.pfEmployer, `12% of PF wage ₹${b.pfWage.toLocaleString('en-IN')}`)}
+                {row('  ↳ EPS (pension)', b.epsEmployer, b.epsEmployer ? '8.33% of PF wage' : 'nil — wages above ceiling at joining')}
+                {row('  ↳ EPF (A/c 01)', b.epfEmployer, b.epsEmployer ? '12% − EPS (≈3.67%)' : 'full 12%')}
+                {row('EDLI', b.edli, `0.5% of PF wage${edliInCtc ? '' : ' · outside CTC'}`)}
+                {row('EPF admin charges', b.pfAdmin, `0.5% of PF wage${edliInCtc ? '' : ' · outside CTC'} (min ₹500/establishment)`)}
                 {row('ESIC (employer)', b.esicEmployer, b.esicApplicable ? `${rules.params.esicEmployerRate * 100}% of gross` : 'not applicable')}
                 {row('LWF (employer)', b.lwfEmployer)}
                 {gratuity && row('Gratuity provision', b.gratuity)}

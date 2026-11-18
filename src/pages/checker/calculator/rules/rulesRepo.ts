@@ -26,7 +26,7 @@ export async function loadRules(state: string, industry: string): Promise<Payrol
     const row = pickParamRow(p.data ?? [], state, industry);
     const params: PayrollParams = row ? {
       basicPct: Number(row.basic_pct), hraPctOfBasic: Number(row.hra_pct_of_basic),
-      pfEmployeeRate: Number(row.pf_ee_rate), pfEmployerRate: Number(row.pf_er_rate), pfWageCeiling: Number(row.pf_wage_ceiling),
+      pfEmployeeRate: Number(row.pf_ee_rate), pfEmployerRate: Number(row.pf_er_rate), pfWageCeiling: Math.max(Number(row.pf_wage_ceiling) || 0, DEFAULT_PARAMS.pfWageCeiling), // old ₹15,000 DB value would cap PF at 1,800; ceiling is ₹25,000 from 17.09.2026
       esicEmployeeRate: Number(row.esic_ee_rate), esicEmployerRate: Number(row.esic_er_rate), esicGrossCeiling: Number(row.esic_gross_ceiling),
       gratuityRate: Number(row.gratuity_rate),
     } : { ...DEFAULT_PARAMS };

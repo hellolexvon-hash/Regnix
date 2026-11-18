@@ -26,6 +26,22 @@ export function pfWage(rules: PayrollRules, basic: number, onCeiling: boolean) {
   return onCeiling ? Math.min(basic, rules.params.pfWageCeiling) : basic;
 }
 
+/** EPFO Q13 table: EPS 8.33% (rounded), EPF = 12% − EPS, EDLI 0.5%, admin 0.5% — all on Basic+DA capped at the ceiling. */
+export const EPS_RATE = 0.0833, EDLI_RATE = 0.005, ADMIN_RATE = 0.005;
+
+export function pfSplit(rules: PayrollRules, basic: number, onCeiling: boolean, epsMember: boolean) {
+  const p = rules.params;
+  const wage = pfWage(rules, basic, onCeiling);
+  const total = Math.round(wage * p.pfEmployerRate);
+  const epsEligible = epsMember || wage <= p.pfWageCeiling;   // nil above the ceiling for post-cap joiners
+  const eps = epsEligible ? Math.round(wage * EPS_RATE + 1e-9) : 0;
+  return {
+    wage, total, eps, epf: total - eps,
+    edli: Math.round(wage * EDLI_RATE + 1e-9),
+    admin: Math.round(wage * ADMIN_RATE + 1e-9),
+  };
+}
+
 interface Parts { basic: number; pfEr: number; esicEr: number; gratuity: number }
 
 function parts(g: number, inp: SalaryInput, esicOn: boolean): Parts {
@@ -33,7 +49,7 @@ function parts(g: number, inp: SalaryInput, esicOn: boolean): Parts {
   const basic = g * inp.basicPct;
   return {
     basic,
-    pfEr: pfWage(inp.rules, basic, inp.pfOnCeiling) * p.pfEmployerRate,
+    pfEr: pfWage(inp.rules, basic, inp.pfOnCeiling) * (p.pfEmployerRate + (inp.edliAdminInCtc ? EDLI_RATE + ADMIN_RATE : 0)),
     esicEr: esicOn ? ceil(g * p.esicEmployerRate) : 0,
     gratuity: inp.gratuityInCtc ? basic * p.gratuityRate : 0,
   };
@@ -83,7 +99,8 @@ export function calcSalary(inp: SalaryInput): SalaryBreakdown {
   const esicApplicable = gross <= p.esicGrossCeiling;
   const wage = pfWage(rules, basic, inp.pfOnCeiling);
   const pfEmployee = Math.round(wage * p.pfEmployeeRate);
-  const pfEmployer = Math.round(wage * p.pfEmployerRate);
+  const split = pfSplit(rules, basic, inp.pfOnCeiling, inp.epsMember);
+  const pfEmployer = split.total;
   const esicEmployee = esicApplicable ? ceil(gross * p.esicEmployeeRate) : 0;
   const esicEmployer = esicApplicable ? ceil(gross * p.esicEmployerRate) : 0;
   const pt = ptFor(rules, gross, inp.gender, inp.month);
@@ -93,11 +110,11 @@ export function calcSalary(inp: SalaryInput): SalaryBreakdown {
   const totalDeductions = r2(pfEmployee + esicEmployee + pt + lw.ee);
   return {
     gross, basic, hra, special,
-    pfEmployee, pfEmployer, esicEmployee, esicEmployer, esicApplicable,
+    pfEmployee, pfEmployer, pfWage: wage, epsEmployer: split.eps, epfEmployer: split.epf, edli: split.edli, pfAdmin: split.admin, esicEmployee, esicEmployer, esicApplicable,
     pt, lwfEmployee: lw.ee, lwfEmployer: lw.er, gratuity,
     totalDeductions,
     netPay: r2(gross - totalDeductions),
-    employerCost: r2(gross + pfEmployer + esicEmployer + gratuity + lw.er),
+    employerCost: r2(gross + pfEmployer + split.edli + split.admin + esicEmployer + gratuity + lw.er),
     ctcMonthly: r2(ctcMonthly),
     warnings,
   };

@@ -46,6 +46,10 @@ export interface SalaryInput {
   hraPctOfBasic: number;
   pfOnCeiling: boolean;
   gratuityInCtc: boolean;
+  /** Member joined when wages were within the ceiling, so EPS (8.33%) also applies above it. */
+  epsMember: boolean;
+  /** Count EDLI 0.5% + EPF admin 0.5% inside CTC (otherwise shown as extra employer cost). */
+  edliAdminInCtc: boolean;
   gender: Gender;
   month: number;             // 1-12, used for PT (Feb) and LWF
   rules: PayrollRules;
@@ -58,6 +62,11 @@ export interface SalaryBreakdown {
   special: number;
   pfEmployee: number;
   pfEmployer: number;
+  pfWage: number;            // contribution wage = Basic (+DA), capped at the ceiling
+  epsEmployer: number;       // 8.33% pension share of the employer 12%
+  epfEmployer: number;       // balance of the employer 12% (3.67%, or all 12% when EPS is nil)
+  edli: number;              // 0.5%
+  pfAdmin: number;           // 0.5%
   esicEmployee: number;
   esicEmployer: number;
   esicApplicable: boolean;
