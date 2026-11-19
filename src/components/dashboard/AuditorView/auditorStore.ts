@@ -163,6 +163,8 @@ const AUDITOR_ACTIONS: Record<string, string> = {
   '/api/client/notifications':     'cli-notifications',
 };
 
+let directBroken = false;
+
 export async function authFetch(url: string, init: RequestInit = {}): Promise<Response> {
   const { data } = await supabase.auth.getSession();
   const headers = new Headers(init.headers);
@@ -172,12 +174,16 @@ export async function authFetch(url: string, init: RequestInit = {}): Promise<Re
   const action = AUDITOR_ACTIONS[path];
   if (!action) return fetch(url, { ...init, headers });
 
-  const direct = `/api/email-handler?action=${action}${query ? `&${query}` : ''}`;
-  try {
-    const res = await fetch(direct, { ...init, headers });
-    const html = (res.headers.get('content-type') || '').includes('text/html');
-    if (!html && res.status !== 404 && res.status !== 405) return res;
-  } catch { /* fall through to the public path */ }
+  // Once the action URL has failed, stop trying it: every call would otherwise cost two round-trips.
+  if (!directBroken) {
+    const direct = `/api/email-handler?action=${action}${query ? `&${query}` : ''}`;
+    try {
+      const res = await fetch(direct, { ...init, headers });
+      const html = (res.headers.get('content-type') || '').includes('text/html');
+      if (!html && res.status !== 404 && res.status !== 405) return res;
+      directBroken = true;
+    } catch { /* fall through to the public path */ }
+  }
   return fetch(url, { ...init, headers });
 }
 

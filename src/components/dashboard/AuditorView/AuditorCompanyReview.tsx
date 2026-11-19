@@ -79,12 +79,30 @@ function toFileFromBlob(blob: Blob, fileName: string): File {
   return new File([blob], fileName, { type: blob.type || 'application/octet-stream' });
 }
 
+// Opened files are kept for the session so re-opening a document is instant (no second download).
+const BLOB_CACHE = new Map<string, Blob>();
+let lastFetchError = '';
+
 async function fetchBlob(url: string): Promise<Blob | null> {
+  lastFetchError = '';
+  const hit = BLOB_CACHE.get(url);
+  if (hit) return hit;
   try {
     const res = await authFetch(url);
-    if (!res.ok) return null;
-    return await res.blob();
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      lastFetchError = body?.message ?? `Server responded ${res.status}.`;
+      return null;
+    }
+    if ((res.headers.get('content-type') || '').includes('text/html')) {
+      lastFetchError = 'The file route is not deployed (got a web page instead of the file).';
+      return null;
+    }
+    const blob = await res.blob();
+    BLOB_CACHE.set(url, blob);
+    return blob;
   } catch {
+    lastFetchError = 'Could not reach the server.';
     return null;
   }
 }
@@ -118,7 +136,7 @@ export default function AuditorCompanyReview({
     if (!company.liveRegisterUrl) { setFileError('The company\'s live register was not stored (missing or over 3 MB).'); return; }
     if (!liveFile) {
       const blob = await fetchBlob(company.liveRegisterUrl);
-      if (!blob) { setFileError('Could not load the live register.'); return; }
+      if (!blob) { setFileError(`Could not load the live register. ${lastFetchError}`); return; }
       setLiveFile(new File([blob], company.liveRegisterFileName || 'Live Register.xlsx', { type: blob.type }));
     }
     setLiveRegisterOpen(true);
@@ -149,8 +167,8 @@ export default function AuditorCompanyReview({
     setFileError('');
     if (!doc.fileUrl) { setFileError(`"${doc.name}" has no stored file — ask the company to re-upload it.`); return; }
     const blob = await fetchBlob(doc.fileUrl);
-    if (!blob) { setFileError(`Could not load "${doc.name}".`); return; }
-    const isPdf = blob.type === 'application/pdf' || /\.pdf$/i.test(doc.fileName ?? '');
+    if (!blob) { setFileError(`Could not load "${doc.name}". ${lastFetchError}`); return; }
+    const isPdf = blob.type === 'application/pdf' || /\.pdf$/i.test(doc.fileName ?? '') || doc.mimeType === 'application/pdf';
     if (isPdf) setOpenDoc({ doc, blob });
     else setSheetFile(new File([blob], doc.fileName || doc.name, { type: blob.type }));
   }
@@ -158,7 +176,7 @@ export default function AuditorCompanyReview({
   async function openStoredFile(url: string, name: string, mime: string | null) {
     setFileError('');
     const blob = await fetchBlob(url);
-    if (!blob) { setFileError(`Could not load "${name}".`); return; }
+    if (!blob) { setFileError(`Could not load "${name}". ${lastFetchError}`); return; }
     const isPdf = (mime ?? blob.type) === 'application/pdf' || /\.pdf$/i.test(name);
     if (isPdf) setOpenDoc({ doc: { id: url, name, act: '', status: 'validated', score: 0, fileName: name }, blob });
     else setSheetFile(new File([blob], name, { type: blob.type }));

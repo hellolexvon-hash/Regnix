@@ -355,22 +355,27 @@ async function bootstrapHandler(req: Request, res: Response) {
     if (!me) return res.status(403).json({ ok: false, message: 'Not an authorised auditor.' });
     const supa = db();
 
-    const [{ data: cycles }, { data: aps }, { data: certs }] = await Promise.all([
+    // Round 1: the cycles + auditors (independent). Round 2: everything keyed by cycle / org (parallel).
+    // Previously this pulled EVERY file and certificate row in the database and ran 4 sequential rounds.
+    const [{ data: cycles }, { data: aps }] = await Promise.all([
       supa.from('review_cycles').select('*').not('l2_completed_at', 'is', null).order('l2_completed_at', { ascending: false }).limit(300),
       supa.from('auditor_profiles').select('user_id, license_id, specialization, joined_at').eq('is_active', true),
-      supa.from('certificates').select('review_cycle_id, certificate_no, issued_at, pdf_sha256, revoked_at'),
     ]);
+    const cycleIds = (cycles ?? []).map((c) => c.id as string);
     const orgIds = [...new Set((cycles ?? []).map((c) => c.organization_id as string))];
-    const { data: orgs } = orgIds.length ? await supa.from('organizations').select('*').in('id', orgIds) : { data: [] as any[] };
+    const [{ data: orgs }, { data: files }, { data: certs }] = await Promise.all([
+      orgIds.length ? supa.from('organizations').select('*').in('id', orgIds) : Promise.resolve({ data: [] as any[] }),
+      cycleIds.length ? supa.from('validation_zoho_files').select('id, profile_id, review_cycle_id, doc_name, doc_role, file_name, mime_type, size_bytes, uploaded_at, storage_key').in('review_cycle_id', cycleIds) : Promise.resolve({ data: [] as any[] }),
+      cycleIds.length ? supa.from('certificates').select('review_cycle_id, certificate_no, issued_at, pdf_sha256, revoked_at').in('review_cycle_id', cycleIds) : Promise.resolve({ data: [] as any[] }),
+    ]);
     const ownerIds = [...new Set((orgs ?? []).map((o: any) => o.owner_profile_id as string).filter(Boolean))];
     const apIds = (aps ?? []).map((a) => a.user_id as string);
     const profIds = [...new Set([...ownerIds, ...apIds])];
-    const [{ data: profs }, { data: cps }, { data: files }] = await Promise.all([
+    const [{ data: profs }, { data: cps }, { data: kycs }] = await Promise.all([
       profIds.length ? supa.from('profiles').select('id, full_name, email').in('id', profIds) : Promise.resolve({ data: [] as any[] }),
       ownerIds.length ? supa.from('company_profiles').select('*').in('user_id', ownerIds) : Promise.resolve({ data: [] as any[] }),
-      supa.from('validation_zoho_files').select('id, profile_id, review_cycle_id, doc_name, doc_role, file_name, mime_type, size_bytes, uploaded_at, storage_key'),
+      ownerIds.length ? supa.from('kyc_files').select('profile_id, doc_label, file_name, zoho_url, created_at').in('profile_id', ownerIds) : Promise.resolve({ data: [] as any[] }),
     ]);
-    const { data: kycs } = ownerIds.length ? await supa.from('kyc_files').select('profile_id, doc_label, file_name, zoho_url, created_at').in('profile_id', ownerIds) : { data: [] as any[] };
 
     const orgById = new Map((orgs ?? []).map((o: any) => [o.id, o]));
     const profById = new Map((profs ?? []).map((p: any) => [p.id, p]));
@@ -394,15 +399,20 @@ async function bootstrapHandler(req: Request, res: Response) {
       const fileUrl = (id: string) => (unlocked ? `/api/auditor/file?id=${id}` : null);
       const usedFiles = new Set<string>();
       const docs = (snap.docs ?? []).map((d: any, i: number) => {
-        const f = cf.find((x) => x.doc_role === 'document' && x.doc_name === d.name && !usedFiles.has(x.id));
+        const nm = (v: unknown) => String(v ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+        const docs0 = cf.filter((x) => x.doc_role === 'document' && !usedFiles.has(x.id));
+        // Prefer an exact name that has a stored copy, then a normalised match, then any match.
+        const f = docs0.find((x) => x.doc_name === d.name && x.storage_key)
+          ?? docs0.find((x) => nm(x.doc_name) === nm(d.name) && x.storage_key)
+          ?? docs0.find((x) => nm(x.doc_name) === nm(d.name));
         if (f) usedFiles.add(f.id);
         return {
           id: f?.id ?? `${c.id}-d${i}`, name: d.name, act: d.act, status: d.status, score: d.score,
-          fileUrl: f ? fileUrl(f.id) : null, fileName: f?.file_name ?? null, mimeType: f?.mime_type ?? null,
-          uploadedAt: f?.uploaded_at ?? null, hasFile: !!f,
+          fileUrl: f?.storage_key ? fileUrl(f.id) : null, fileName: f?.file_name ?? null, mimeType: f?.mime_type ?? null,
+          uploadedAt: f?.uploaded_at ?? null, hasFile: !!f?.storage_key,
         };
       });
-      const live = cf.find((x) => x.doc_role === 'live_register');
+      const live = cf.find((x) => x.doc_role === 'live_register' && x.storage_key) ?? cf.find((x) => x.doc_role === 'live_register');
       // Everything the company filed — visible only once access is approved
       const details = unlocked ? {
         company: {
@@ -414,7 +424,7 @@ async function bootstrapHandler(req: Request, res: Response) {
         },
         kycFiles: (kycs ?? []).filter((k: any) => k.profile_id === org.owner_profile_id)
           .map((k: any) => ({ label: k.doc_label, fileName: k.file_name, url: k.zoho_url ?? null, at: k.created_at })),
-        files: cf.map((x: any) => ({ id: x.id, docName: x.doc_name, role: x.doc_role, fileName: x.file_name, mimeType: x.mime_type, size: x.size_bytes, at: x.uploaded_at, url: `/api/auditor/file?id=${x.id}` })),
+        files: cf.filter((x: any) => x.storage_key).map((x: any) => ({ id: x.id, docName: x.doc_name, role: x.doc_role, fileName: x.file_name, mimeType: x.mime_type, size: x.size_bytes, at: x.uploaded_at, url: `/api/auditor/file?id=${x.id}` })),
       } : null;
       const cert: any = certByCycle.get(c.id as string);
       return {
@@ -430,7 +440,7 @@ async function bootstrapHandler(req: Request, res: Response) {
         l2Score: Number(c.l2_score ?? 0), l2CompletedAt: c.l2_completed_at,
         status: c.status, assignedTo: c.assigned_auditor_id ?? null, termsAcceptedAt: c.terms_accepted_at ?? null,
         decisionRemarks: c.decision_remarks ?? '', decidedAt: c.decided_at ?? null,
-        liveRegisterUrl: live ? fileUrl(live.id) : null, liveRegisterFileName: live?.file_name ?? snap.liveRegisterFileName ?? null,
+        liveRegisterUrl: live?.storage_key ? fileUrl(live.id) : null, liveRegisterFileName: live?.file_name ?? snap.liveRegisterFileName ?? null,
         locked: !unlocked, accessStatus: c.access_status ?? 'none', details,
         certificate: cert ? { certificateNo: cert.certificate_no, issuedAt: cert.issued_at, sha256: cert.pdf_sha256 || null, revoked: !!cert.revoked_at } : null,
       };
@@ -504,7 +514,7 @@ async function fileHandler(req: Request, res: Response) {
     const { data, error } = await supa.storage.from(BUCKET).download(f.storage_key as string);
     if (error || !data) return res.status(404).json({ ok: false, message: 'File not found.' });
     res.setHeader('Content-Type', (f.mime_type as string) || 'application/octet-stream');
-    res.setHeader('Cache-Control', 'private, no-store');
+    res.setHeader('Cache-Control', 'private, max-age=300');
     res.send(Buffer.from(await data.arrayBuffer()));
   } catch (e) {
     console.error('[auditor file]', e);
