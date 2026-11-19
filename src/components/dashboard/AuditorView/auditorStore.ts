@@ -160,6 +160,7 @@ const AUDITOR_ACTIONS: Record<string, string> = {
   '/api/auditor/file':             'aud-file',
   '/api/auditor/reviews/decision': 'aud-decision',
   '/api/auditor/certificate':      'aud-cert',
+  '/api/client/notifications':     'cli-notifications',
 };
 
 export async function authFetch(url: string, init: RequestInit = {}): Promise<Response> {
@@ -304,4 +305,33 @@ export function useAuditorStore() {
       } catch { return { ok: false, error: 'Could not reach the server.' }; }
     },
   };
+}
+
+
+// ── Auditor notifications (access approved / denied, new submissions, assignments) ──
+export interface AuditorNotice { id: string; kind: 'success' | 'warning' | 'info' | 'danger'; title: string; detail: string; at: string }
+const SEEN = 'regnix.auditor.notif.seen';
+
+export function useAuditorNotifications(enabled: boolean) {
+  const [items, setItems] = useState<AuditorNotice[]>([]);
+  const [seen, setSeen] = useState<number>(() => { try { return Number(localStorage.getItem(SEEN)) || 0; } catch { return 0; } });
+
+  useEffect(() => {
+    if (!enabled) return;
+    let alive = true;
+    const load = async () => {
+      try {
+        const r = await authFetch('/api/client/notifications', { headers: { Accept: 'application/json' } });
+        const j = await r.json().catch(() => null);
+        if (alive && r.ok && j?.ok) setItems(j.notifications ?? []);
+      } catch { /* ignore */ }
+    };
+    void load();
+    const t = window.setInterval(() => { void load(); }, 30_000);
+    return () => { alive = false; window.clearInterval(t); };
+  }, [enabled]);
+
+  const unread = items.filter((n) => +new Date(n.at) > seen).length;
+  const markAllRead = () => { const t = Date.now(); setSeen(t); try { localStorage.setItem(SEEN, String(t)); } catch { /* ignore */ } };
+  return { items, unread, seen, markAllRead };
 }

@@ -753,7 +753,13 @@ export function useAdminPortal(enabled: boolean) {
     setLoading(false);
   }, [enabled]);
 
-  useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => {
+    void refresh();
+    if (!enabled) return;
+    // live-ish: new access requests / submissions show up without a manual refresh
+    const t = window.setInterval(() => { void refresh(); }, 30_000);
+    return () => window.clearInterval(t);
+  }, [refresh, enabled]);
 
   /** Run a mutation; refreshes the overview on success. */
   const act = useCallback(async (op: string, body: Record<string, unknown> = {}): Promise<{ ok: boolean; message?: string; tempPassword?: string | null }> => {
@@ -766,4 +772,15 @@ export function useAdminPortal(enabled: boolean) {
   }, [refresh]);
 
   return { data, loading, error, notice, refresh, act };
+}
+/** Download rows as a CSV file (Excel-safe: BOM + quoted cells). */
+export function downloadCsv(filename: string, rows: Array<Record<string, unknown>>) {
+  if (!rows.length) return;
+  const cols = Object.keys(rows[0]);
+  const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const csv = [cols.map(esc).join(','), ...rows.map((r) => cols.map((c) => esc(r[c])).join(','))].join('\r\n');
+  const url = URL.createObjectURL(new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' }));
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
 }

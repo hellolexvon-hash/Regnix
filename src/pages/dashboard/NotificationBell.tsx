@@ -1,89 +1,64 @@
 /**
  * src/pages/dashboard/NotificationBell.tsx
- * Bell button + dropdown. Same button look as before (.iconBtn) — now with live data.
+ * Header bell: live feed of review / access / auditor activity with an unread badge.
  */
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Icon } from '@/components/ui/Icons';
-import { useNotifications, timeAgo, type AppNotification } from '@/hooks/useNotifications';
-import headerStyles from './DashboardHeader.module.css';
-import styles from './NotificationBell.module.css';
+import { Icon, type IconName } from './Icons';
+import { timeAgo, type Notice } from './dashboardApi';
+import x from './DashboardExtras.module.css';
 
-const TYPE_META: Record<AppNotification['type'], { icon: string; color: string; label: string }> = {
-  review:   { icon: 'clipboard',   color: '#7C3AED', label: 'Review'   },
-  request:  { icon: 'inbox',       color: '#D97706', label: 'Request'  },
-  approval: { icon: 'checkCircle', color: '#059669', label: 'Approval' },
-  document: { icon: 'fileText',    color: '#2563EB', label: 'Document' },
-  system:   { icon: 'bell',        color: '#8B85A8', label: 'System'   },
-};
+const KIND_ICON: Record<Notice['kind'], IconName> = { success: 'checkCircle', warning: 'alert', info: 'info', danger: 'alert' };
 
-export function NotificationBell() {
-  const { items, unreadCount, markRead, markAllRead } = useNotifications();
+export function NoticeRow({ n, unread, onClick }: { n: Notice; unread: boolean; onClick?: () => void }) {
+  return (
+    <button type="button" className={`${x.notice} ${unread ? x.noticeUnread : ''}`} onClick={onClick}>
+      <span className={`${x.nIcon} ${x['k_' + n.kind]}`}><Icon name={KIND_ICON[n.kind]} size={15} /></span>
+      <span className={x.nBody}>
+        <span className={x.nTitle}>{n.title}</span>
+        <span className={x.nDetail} style={{ display: 'block' }}>{n.detail}</span>
+        <span className={x.nTime} style={{ display: 'block' }}>{timeAgo(n.at)}</span>
+      </span>
+    </button>
+  );
+}
+
+interface Props { notices: Notice[]; unread: number; seenAt: number; onOpen: () => void; onMarkRead: () => void; onRefresh: () => void }
+
+export function NotificationBell({ notices, unread, seenAt, onOpen, onMarkRead, onRefresh }: Props) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
-    const onDown = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false); };
-    document.addEventListener('mousedown', onDown);
-    return () => document.removeEventListener('mousedown', onDown);
-  }, []);
-
-  const openItem = (n: AppNotification) => {
-    markRead(n.id);
-    setOpen(false);
-    if (n.link) navigate(n.link);
-  };
+    if (!open) return;
+    const away = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false); };
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', away);
+    document.addEventListener('keydown', esc);
+    return () => { document.removeEventListener('mousedown', away); document.removeEventListener('keydown', esc); };
+  }, [open]);
 
   return (
-    <div className={styles.wrap} ref={ref}>
-      <button
-        className={headerStyles.iconBtn}
-        title="Notifications"
-        aria-label={`Notifications${unreadCount ? `, ${unreadCount} unread` : ''}`}
-        aria-expanded={open}
-        onClick={() => setOpen(v => !v)}
-      >
+    <div className={x.bellWrap} ref={ref}>
+      <button type="button" className={`${x.bellBtn} ${open ? x.bellOpen : ''}`} title="Notifications" aria-label={`Notifications${unread ? `, ${unread} unread` : ''}`}
+        aria-expanded={open} onClick={() => { setOpen((v) => !v); if (!open) { onOpen(); onRefresh(); } }}>
         <Icon name="bell" size={16} />
-        {unreadCount > 0 && <span className={styles.count}>{unreadCount > 9 ? '9+' : unreadCount}</span>}
+        {unread > 0 && <span className={x.bellCount}>{unread > 9 ? '9+' : unread}</span>}
       </button>
-
       {open && (
-        <div className={styles.menu} role="menu">
-          <div className={styles.menuHead}>
-            <span className={styles.menuTitle}>Notifications</span>
-            {unreadCount > 0 && <button className={styles.markAll} onClick={markAllRead}>Mark all read</button>}
+        <div className={x.drop} role="dialog" aria-label="Notifications">
+          <div className={x.dropHead}>
+            <span className={x.dropTitle}>Notifications</span>
+            {unread > 0 && <button type="button" className={x.dropLink} onClick={onMarkRead}>Mark all read</button>}
           </div>
-
-          <div className={styles.list}>
-            {items.length === 0 && (
-              <div className={styles.empty}>
-                <Icon name="inbox" size={22} />
-                <span>You're all caught up</span>
-              </div>
-            )}
-            {items.map(n => {
-              const m = TYPE_META[n.type] ?? TYPE_META.system;
-              return (
-                <button key={n.id} className={`${styles.item} ${n.read ? '' : styles.unread}`} onClick={() => openItem(n)}>
-                  <span className={styles.itemIcon} style={{ background: `${m.color}14`, color: m.color }}>
-                    <Icon name={m.icon} size={14} />
-                  </span>
-                  <span className={styles.itemBody}>
-                    <span className={styles.itemTop}>
-                      <span className={styles.itemTitle}>{n.title}</span>
-                      {n.priority === 'high' && <span className={styles.high}>Urgent</span>}
-                    </span>
-                    {n.body && <span className={styles.itemText}>{n.body}</span>}
-                    <span className={styles.itemMeta}>
-                      {n.sender_name ? `${n.sender_name}${n.sender_role ? ` · ${n.sender_role}` : ''} · ` : ''}
-                      {timeAgo(n.created_at)}
-                    </span>
-                  </span>
-                  {!n.read && <span className={styles.dot} />}
-                </button>
-              );
-            })}
+          <div className={x.dropList}>
+            {notices.length === 0 ? (
+              <div className={x.dropEmpty}><Icon name="bell" size={22} />You're all caught up.</div>
+            ) : notices.map((n) => (
+              <NoticeRow key={n.id} n={n} unread={+new Date(n.at) > seenAt}
+                onClick={() => { setOpen(false); if (n.link) navigate(n.link); }} />
+            ))}
           </div>
         </div>
       )}

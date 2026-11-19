@@ -162,6 +162,42 @@
       "destination": "/api/email-handler?action=cert-verify"
     },
     {
+      "source": "/api/client/notifications",
+      "destination": "/api/email-handler?action=cli-notifications"
+    },
+    {
+      "source": "/api/client/documents",
+      "destination": "/api/email-handler?action=cli-documents"
+    },
+    {
+      "source": "/api/client/document-file",
+      "destination": "/api/email-handler?action=cli-doc-file"
+    },
+    {
+      "source": "/api/client/planner",
+      "destination": "/api/email-handler?action=cli-planner"
+    },
+    {
+      "source": "/api/client/assistant",
+      "destination": "/api/email-handler?action=cli-assistant"
+    },
+    {
+      "source": "/api/admin/portal/overview",
+      "destination": "/api/email-handler?action=admin-overview"
+    },
+    {
+      "source": "/api/admin/portal/review",
+      "destination": "/api/email-handler?action=admin-detail"
+    },
+    {
+      "source": "/api/admin/portal/file",
+      "destination": "/api/email-handler?action=admin-file"
+    },
+    {
+      "source": "/api/admin/portal/action",
+      "destination": "/api/email-handler?action=admin-action"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }

@@ -470,6 +470,18 @@ async function claimHandler(req: Request, res: Response) {
       data = r.data;
     }
     if (!data?.length) return res.status(409).json({ ok: false, message: 'This company was already claimed.' });
+    // Tell the admins: an auditor is asking for access (shows in the console bell + Access requests tab)
+    if (accessStatus === 'requested') {
+      try {
+        const { data: cy } = await db().from('review_cycles').select('organization_id').eq('id', id).maybeSingle();
+        const { data: org } = cy ? await db().from('organizations').select('name').eq('id', cy.organization_id).maybeSingle() : { data: null };
+        await db().from('admin_notifications').insert({
+          type: 'access_request', title: 'Auditor access request',
+          detail: `${me.fullName} requested access to ${(org?.name as string) || 'a company'}.`,
+          actor_name: me.fullName, entity_type: 'review_cycle', entity_id: id,
+        });
+      } catch { /* a notification failure must not block the claim */ }
+    }
     await db().from('audit_log').insert({ actor_user_id: me.id, action: 'review.claim', entity_type: 'review_cycle', entity_id: id, metadata: { terms: TERMS_VERSION } });
     res.json({ ok: true, termsAcceptedAt: new Date().toISOString(), accessStatus });
   } catch (e) {

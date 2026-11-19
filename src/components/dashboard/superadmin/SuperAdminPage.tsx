@@ -28,6 +28,7 @@ import {
 import { getPlan, formatINR, headcountLabel } from '@/lib/plans';
 import { useAuditorStore, type CompanyReview } from '../AuditorView/auditorStore';
 import KycDocumentPicker from './KycDocumentPicker';
+import { AdminCommandCenter, AdminReviewsPanel } from './AdminDashboardPanels';
 import { AdminClientsPanel, AdminAuditorsPanel, AdminAccessPanel, AdminActivityPanel } from './AdminPortalPanels';
 import { KYC_DEFAULT_LABELS } from './kycDocuments';
 import {
@@ -35,7 +36,7 @@ import {
   IconClock, IconEye, IconUndo, IconXCircle, IconLogOut, IconSearch, IconFlag,
 } from '../AuditorView/icons';
 
-type Tab = 'overview' | 'approvals' | 'authorized' | 'kyc' | 'access' | 'clients' | 'auditors' | 'activity';
+type Tab = 'overview' | 'approvals' | 'authorized' | 'kyc' | 'access' | 'reviews' | 'clients' | 'auditors' | 'activity';
 
 function kycPill(u: AuthorizedUser): { label: string; cls: string } | null {
   if (!u.kyc) return null;
@@ -209,6 +210,8 @@ export default function SuperAdminPage() {
                         void notifications.markRead(n.id);
                         if (n.type === 'new_signup') { setTab('approvals'); setBellOpen(false); }
                         if (n.type === 'kyc_submitted') { setTab('kyc'); setBellOpen(false); }
+                        if (n.type === 'access_request') { setTab('access'); setBellOpen(false); }
+                        if (n.type === 'l3_ready') { setTab(admin.isLive ? 'reviews' : 'clients'); setBellOpen(false); }
                       }}
                     >
                       <span className={s.saBellTitle}>
@@ -248,6 +251,11 @@ export default function SuperAdminPage() {
             Access requests {portal.data && portal.data.accessRequests.length > 0 && <span className={s.saTabCount}>{portal.data.accessRequests.length}</span>}
           </button>
         )}
+        {admin.isLive && (
+          <button className={tab === 'reviews' ? `${s.saTab} ${s.saTabActive}` : s.saTab} onClick={() => setTab('reviews')}>
+            Reviews {portal.data && <span className={s.saTabCount}>{portal.data.reviews.length}</span>}
+          </button>
+        )}
         <button className={tab === 'clients' ? `${s.saTab} ${s.saTabActive}` : s.saTab} onClick={() => setTab('clients')}>
           Clients <span className={s.saTabCount}>{overview.totalCompanies}</span>
         </button>
@@ -260,7 +268,9 @@ export default function SuperAdminPage() {
       </div>
 
       <main className={s.saContent}>
-        {tab === 'overview' && (
+        {tab === 'overview' && admin.isLive && <AdminCommandCenter portal={portal} goTab={setTab} />}
+        {tab === 'reviews' && admin.isLive && <AdminReviewsPanel portal={portal} />}
+        {tab === 'overview' && !admin.isLive && (
           <>
             <div className={s.saStatGrid}>
               <div className={s.saStatCard}>

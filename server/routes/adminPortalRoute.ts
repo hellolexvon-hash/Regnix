@@ -60,7 +60,7 @@ export async function getAccessMode(): Promise<'auto' | 'admin'> {
     const v = String((data?.value as unknown) ?? '').replace(/"/g, '').toLowerCase();
     if (v === 'admin' || v === 'auto') return v;
   } catch { /* table missing → fall back to env */ }
-  return (process.env.AUDITOR_ACCESS_MODE ?? 'auto').toLowerCase() === 'admin' ? 'admin' : 'auto';
+  return (process.env.AUDITOR_ACCESS_MODE ?? 'admin').toLowerCase() === 'auto' ? 'auto' : 'admin';
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -369,7 +369,7 @@ async function actionHandler(req: Request, res: Response) {
 
     // ── settings ──────────────────────────────────────────────────────────────
     if (op === 'set_access_mode') {
-      const mode = b.mode === 'admin' ? 'admin' : 'auto';
+      const mode = b.mode === 'auto' ? 'auto' : 'admin';
       const { error } = await supa.from('platform_settings').upsert({ key: 'auditor_access_mode', value: mode, updated_at: now, updated_by: admin.id }, { onConflict: 'key' });
       if (error) return res.status(400).json({ ok: false, message: `Setting could not be saved (run the SQL migration): ${error.message}` });
       await log(admin.id, 'admin.set_access_mode', 'settings', null, { detail: `Auditor access mode set to ${mode}` });

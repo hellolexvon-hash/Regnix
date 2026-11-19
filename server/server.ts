@@ -24,6 +24,8 @@ import certificateRouter from './routes/certificateRoute.js';
 import emailRouter from './routes/emailRoute.js';
 import validationDocsRouter from './routes/validationDocsRoute.js';
 import adminPortalRouter from './routes/adminPortalRoute.js';
+import clientPortalRouter from './routes/clientPortalRoute.js';
+import { ACTION_PATHS } from './lib/actionPaths.js';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
@@ -78,6 +80,19 @@ app.get('/api/health', (_req, res) => {
   });
 });
 
+// Dev shim for the Vercel function: /api/email-handler?action=x → the route it dispatches to.
+// (On Vercel the real api/email-handler.ts does this; locally there was no such route, so every
+// call 404'd before falling back to the public path.)
+app.all('/api/email-handler', (req, _res, next) => {
+  const target = ACTION_PATHS[String(req.query.action ?? '')];
+  if (!target) return next();
+  const qs = new URLSearchParams(req.query as Record<string, string>);
+  qs.delete('action');
+  const rest = qs.toString();
+  req.url = `${target}${rest ? `?${rest}` : ''}`;
+  next();
+});
+
 app.use('/api', generateDocsRouter);
 app.use('/api', codeWagesRouter);
 app.use('/api', apprenticesRouter);
@@ -87,6 +102,7 @@ app.use('/api', seActRouter);
 app.use('/api', manualRegistersRouter);
 app.use('/api', validationDocsRouter);
 app.use('/api', adminPortalRouter);
+app.use('/api', clientPortalRouter);
 app.use('/api', validationRouter);
 app.use('/api', auditorRouter);
 app.use('/api', superAdminRouter);

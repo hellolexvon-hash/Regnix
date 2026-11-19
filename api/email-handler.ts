@@ -10,33 +10,10 @@
 import type { Request, Response } from 'express';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { emailApp } from '../server/lib/vercelApp.js';
+import { ACTION_PATHS } from '../server/lib/actionPaths.js';
 
 const app = emailApp();
 
-const ACTION_PATHS: Readonly<Record<string, string>> = {
-  signup: '/api/webhooks/signup',
-  approval: '/api/email/approval',
-  rejection: '/api/email/rejection',
-  'kyc-request': '/api/email/kyc-request',
-  'kyc-verified': '/api/email/kyc-verified',
-  'kyc-info': '/api/kyc/info',
-  'kyc-file': '/api/kyc/file',
-  'kyc-submit': '/api/kyc/submit',
-  'val-upload': '/api/kyc/validation-upload',
-  'val-submit': '/api/kyc/validation-submit',
-  'val-status': '/api/kyc/validation-status',
-  'val-cert': '/api/kyc/validation-cert',
-  'aud-bootstrap': '/api/kyc/auditor-bootstrap',
-  'aud-claim': '/api/kyc/auditor-claim',
-  'aud-file': '/api/kyc/auditor-file',
-  'aud-decision': '/api/kyc/auditor-decision',
-  'aud-cert': '/api/kyc/auditor-cert',
-  'cert-verify': '/api/kyc/cert-verify',
-  'admin-overview': '/api/kyc/admin-overview',
-  'admin-detail': '/api/kyc/admin-detail',
-  'admin-file': '/api/kyc/admin-file',
-  'admin-action': '/api/kyc/admin-action',
-};
 
 const PATH_ACTIONS: Readonly<Record<string, string>> = {
   '/api/webhooks/signup': 'signup',
@@ -61,6 +38,11 @@ const PATH_ACTIONS: Readonly<Record<string, string>> = {
   '/api/admin/portal/review': 'admin-detail',
   '/api/admin/portal/file': 'admin-file',
   '/api/admin/portal/action': 'admin-action',
+  '/api/client/notifications': 'cli-notifications',
+  '/api/client/documents': 'cli-documents',
+  '/api/client/document-file': 'cli-doc-file',
+  '/api/client/planner': 'cli-planner',
+  '/api/client/assistant': 'cli-assistant',
 };
 
 type RequestWithVercelQuery = IncomingMessage & {

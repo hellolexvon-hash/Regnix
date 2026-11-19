@@ -63,6 +63,8 @@ const STATUS_TEXT: Record<CompanyReview['status'], string> = {
 
 function lockedText(c: CompanyReview): string {
   if (c.status === 'pending') return 'Request access to this review (and accept the auditor terms) to see every document and all the data this company submitted.';
+  if (c.accessStatus === 'denied') return 'Regnix did not approve access to this review. Contact an administrator if you think this is a mistake.';
+  if (c.accessStatus === 'requested') return 'Access requested — waiting for Regnix to approve. Documents and company data unlock as soon as it is approved.';
   if (c.status === 'in_review' && !c.termsAcceptedAt) return 'Regnix assigned this review to you. Accept the auditor terms to unlock the documents and company data.';
   if (c.accessStatus === 'requested') return 'Access requested — waiting for Regnix to approve. Documents and company data unlock as soon as it is approved.';
   if (c.accessStatus === 'denied') return 'Access to this review was not approved.';

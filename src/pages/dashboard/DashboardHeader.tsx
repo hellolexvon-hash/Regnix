@@ -1,33 +1,25 @@
 /**
  * src/pages/dashboard/DashboardHeader.tsx
- * Same layout as before. Emojis replaced by SVG icons; bell is now a live
- * notification dropdown (reviews/requests from admins & auditors).
+ * Real user name/role from Supabase profile. Same layout as before — emojis replaced by
+ * vector icons, and the bell now shows live review / access / auditor notifications.
  */
 
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
-import { Icon } from '@/components/ui/Icons';
-import { AiOrb } from './AiAssistantPanel';
+import { Icon, AgentMark } from './Icons';
 import { NotificationBell } from './NotificationBell';
+import { useNotifications } from './dashboardApi';
 import styles from './DashboardHeader.module.css';
 
 interface Props {
   onAiToggle: () => void;
   aiOpen: boolean;
-  /** Current dashboard section id, used for the breadcrumb */
-  activeView?: string;
 }
 
-const VIEW_LABELS: Record<string, string> = {
-  dashboard: 'Dashboard', calendar: 'Compliance Calendar', generator: 'Document Generator',
-  checker: 'Applicability Checker', planner: 'Audit Planner', documents: 'Documents',
-  library: 'E-Library', reports: 'Analytics & Reports', tasks: 'Tasks & Workflow',
-  notifications: 'Notifications', settings: 'Settings',
-};
-
-export function DashboardHeader({ onAiToggle, aiOpen, activeView = 'dashboard' }: Props) {
+export function DashboardHeader({ onAiToggle, aiOpen }: Props) {
   const { user, profile, logout } = useAuth();
   const navigate = useNavigate();
+  const { notices, unread, seenAt, refresh, markAllRead } = useNotifications();
 
   const handleLogout = async () => {
     await logout();
@@ -42,8 +34,8 @@ export function DashboardHeader({ onAiToggle, aiOpen, activeView = 'dashboard' }
     <header className={styles.header}>
       <div className={styles.breadcrumb}>
         <span className={styles.breadRoot}>Regnix</span>
-        <span className={styles.breadSep}><Icon name="chevronRight" size={12} /></span>
-        <span className={styles.breadCurrent}>{VIEW_LABELS[activeView] ?? 'Dashboard'}</span>
+        <span className={styles.breadSep}>›</span>
+        <span className={styles.breadCurrent}>Dashboard</span>
       </div>
 
       <div className={styles.right}>
@@ -57,18 +49,19 @@ export function DashboardHeader({ onAiToggle, aiOpen, activeView = 'dashboard' }
           className={`${styles.aiToggleBtn} ${aiOpen ? styles.aiToggleActive : ''}`}
           onClick={onAiToggle}
           title="AI Compliance Assistant"
-          aria-pressed={aiOpen}
         >
-          <span className={styles.aiToggleIcon}><AiOrb size={18} /></span>
-          <span className={styles.aiToggleLabel}>AI Compliance Assistant</span>
+          <AgentMark size={14} />
+          <span>AI Compliance Assistant</span>
         </button>
 
-        <button className={styles.iconBtn} title="Compliance Calendar" aria-label="Compliance Calendar"
-          onClick={() => navigate('/dashboard/calendar')}>
+        <button className={styles.iconBtn} title="Compliance Calendar" aria-label="Compliance Calendar" onClick={() => navigate('/dashboard/calendar')}>
           <Icon name="calendar" size={16} />
         </button>
 
-        <NotificationBell />
+        <NotificationBell
+          notices={notices} unread={unread} seenAt={seenAt}
+          onOpen={() => undefined} onMarkRead={markAllRead} onRefresh={refresh}
+        />
 
         <div className={styles.userMenu}>
           <div className={styles.avatar}>{initials}</div>
@@ -77,7 +70,7 @@ export function DashboardHeader({ onAiToggle, aiOpen, activeView = 'dashboard' }
             <p className={styles.userRole}>{role}</p>
           </div>
           <button className={styles.logoutBtn} onClick={handleLogout} title="Sign out" aria-label="Sign out">
-            <Icon name="logout" size={14} />
+            <Icon name="logout" size={15} />
           </button>
         </div>
       </div>

@@ -110,7 +110,7 @@ export function AdminClientDrawer({ portal, cycle, profile, onClose }: { portal:
                         <option value="">Assign to auditor…</option>
                         {activeAuditors.map((a) => <option key={a.id} value={a.id}>{a.fullName || a.email} ({a.inReview} active)</option>)}
                       </select>
-                      <button className={s.btn} disabled={busy || !pick} onClick={() => run('assign', { id: rv.id, auditorId: pick }, 'Assign this review? The auditor must still accept the terms.')}>Assign</button>
+                      <button className={s.btn} disabled={busy || !pick} onClick={() => run('assign', { id: rv.id, auditorId: pick }, 'Assign this review? The auditor gets immediate access to the documents and data.')}>Assign</button>
                       {rv.auditor && <button className={`${s.btn} ${s.btnDanger}`} disabled={busy} onClick={() => run('release', { id: rv.id }, 'Release this review back to the queue?')}>Release to queue</button>}
                     </>
                   )}

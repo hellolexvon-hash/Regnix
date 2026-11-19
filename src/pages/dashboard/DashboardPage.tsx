@@ -7,11 +7,11 @@ import ComplianceCalendar from '../../components/dashboard/comlianceCalender/Com
 import DocumentGenerator from '../../components/dashboard/documentGenerator/DocumentGenerator';
 import ValidationPage from '../../components/dashboard/documentGenerator/ValidationPage';
 import DashboardHome from './DashboardHome';
+import DocumentsPage from './DocumentsPage';
+import AuditPlannerPage from './AuditPlannerPage';
+import { AiAssistantPanel } from './AiAssistantPanel';
 import { LibraryPage } from '@/pages/library/LibraryPage';
 import CalculatorPage from '@/pages/checker/calculator/CalculatorPage';
-import { AiAssistantPanel } from './AiAssistantPanel';
-import AuditPlannerPage from './AuditPlannerPage';
-import DocumentsPage from './DocumentsPage';
 import styles from './DashboardPage.module.css';
 
 function renderView(section: string) {
@@ -48,13 +48,6 @@ export default function DashboardPage() {
     if (!loading && !isAuthenticated) navigate('/login', { replace: true });
   }, [isAuthenticated, loading, navigate]);
 
-  // Lets dashboard cards (e.g. "Explain this score", Resources hub) open the AI agent
-  useEffect(() => {
-    const open = () => setAiOpen(true);
-    window.addEventListener('regnix:open-ai', open);
-    return () => window.removeEventListener('regnix:open-ai', open);
-  }, []);
-
   if (loading) return null;
   if (!isAuthenticated) return null;
 
@@ -67,7 +60,7 @@ export default function DashboardPage() {
         onNavigate={handleNavigate}
       />
       <div className={styles.main}>
-        <DashboardHeader onAiToggle={() => setAiOpen(v => !v)} aiOpen={aiOpen} activeView={activeView} />
+        <DashboardHeader onAiToggle={() => setAiOpen(v => !v)} aiOpen={aiOpen} />
         <div className={styles.contentRow}>
           <div className={styles.content}>
             {renderView(activeView)}

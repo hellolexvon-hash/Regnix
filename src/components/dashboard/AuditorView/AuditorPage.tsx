@@ -25,10 +25,11 @@ import AuditorAuth from './AuditorAuth';
 import AuditorDashboard from './AuditorDashboard';
 import AuditorCompanyReview from './AuditorCompanyReview';
 import AuditorCommandCenter from './AuditorCommandCenter';
+import AuditorBell from './AuditorBell';
 import { useAuditorStore, type ReviewStatus } from './auditorStore';
 import {
   IconScale, IconHome, IconInbox, IconEye, IconCheckCircle, IconUndo,
-  IconXCircle, IconFolder, IconShieldCheck, IconBell, IconChevronDown, IconLogOut,
+  IconXCircle, IconFolder, IconShieldCheck, IconChevronDown, IconLogOut,
   IconLayers,
 } from './icons';
 
@@ -155,7 +156,7 @@ export default function AuditorPage() {
           </span>
 
           <div className={s.topbarRight}>
-            <button className={s.topbarIconBtn} title="Notifications"><IconBell size={15} /></button>
+            <AuditorBell onOpenQueue={() => goToNav('in_review')} />
 
             <div className={s.topbarProfile}>
               <button className={s.topbarProfileBtn} onClick={() => setMenuOpen(o => !o)}>
