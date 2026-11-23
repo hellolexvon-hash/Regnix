@@ -15,7 +15,7 @@
  * Zero inline styles — all from Auditor.module.css (.ar* classes).
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import s from './Auditor.module.css';
 import o from './AuditorOpening.module.css';
 import { authFetch, type Auditor, type CompanyReview, type IssueSeverity, type ReviewDoc } from './auditorStore';
@@ -168,11 +168,21 @@ export default function AuditorCompanyReview({
   const busyOpening = opening !== null;
 
   // ── L3 findings (per document), kept in the browser so a refresh never loses them ──
-  const REVIEW_KEY = `regnix.l3.review.${company.id}`;
+  // One findings sheet per round: after the company resubmits, the auditor starts clean (earlier asks are shown beside each document).
+  const REVIEW_KEY = `regnix.l3.review.${company.id}${company.resubmission?.round ? `.r${company.resubmission.round}` : ''}`;
   const [reviews, setReviews] = useState<ReviewMap>(() => {
     try { return JSON.parse(localStorage.getItem(REVIEW_KEY) || '{}') as ReviewMap; } catch { return {}; }
   });
-  useEffect(() => { try { localStorage.setItem(REVIEW_KEY, JSON.stringify(reviews)); } catch { /* ignore */ } }, [reviews, REVIEW_KEY]);
+  const loadedKey = useRef(REVIEW_KEY);
+  useEffect(() => {
+    if (loadedKey.current !== REVIEW_KEY) {
+      // The company resubmitted while this screen was open → switch to the new round's (empty) sheet instead of overwriting it.
+      loadedKey.current = REVIEW_KEY;
+      try { setReviews(JSON.parse(localStorage.getItem(REVIEW_KEY) || '{}') as ReviewMap); } catch { setReviews({}); }
+      return;
+    }
+    try { localStorage.setItem(REVIEW_KEY, JSON.stringify(reviews)); } catch { /* ignore */ }
+  }, [reviews, REVIEW_KEY]);
   const [workspace, setWorkspace] = useState<{ doc: ReviewDoc; blob: Blob | null; kind: 'pdf' | 'sheet' | 'none' } | null>(null);
   const reviewOf = (id: string): DocReview => reviews[id] ?? { findings: [] };
   const patchReview = (id: string, fn: (r: DocReview) => DocReview) => setReviews((m) => ({ ...m, [id]: fn(m[id] ?? { findings: [] }) }));
@@ -418,7 +428,7 @@ export default function AuditorCompanyReview({
                     </span>
                     <div className={s.arDocInfo}>
                       <span className={s.arDocName}>{doc.name}</span>
-                      <span className={s.arDocAct}>{doc.act}{doc.hasFile === false && <> &middot; <span className={s.arNoFile}>no file stored</span></>}</span>
+                      <span className={s.arDocAct}>{doc.act}{company.resubmission?.replacedDocs.includes(doc.name) && <> &middot; <strong>replaced by company</strong></>}{doc.hasFile === false && <> &middot; <span className={s.arNoFile}>no file stored</span></>}</span>
                     </div>
                     {(() => {
                       const r = reviews[doc.id];

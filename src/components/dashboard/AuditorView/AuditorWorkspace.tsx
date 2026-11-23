@@ -80,6 +80,17 @@ export default function AuditorWorkspace(p: Props) {
   const next = idx >= 0 && idx < company.docs.length - 1 ? company.docs[idx + 1] : null;
   const user = p.auditorName || 'Auditor';
 
+  // After the company resubmits: which documents they replaced, and what this auditor asked for last time on this one.
+  const replacedSet = useMemo(() => new Set(company.resubmission?.replacedDocs ?? []), [company.resubmission]);
+  const earlier = useMemo(() => {
+    const out: { keyword: string; severity: string; comment: string }[] = [];
+    for (const line of (company.resubmission?.previousRemarks ?? '').split(/\r?\n/)) {
+      const m = /^\s*\d+\.\s+(.+?)\s+[—-]\s+(.+?)\s+\((Critical|Major|Minor)\):\s*([\s\S]*)$/.exec(line);
+      if (m && m[1] === doc.name) out.push({ keyword: m[2], severity: m[3], comment: m[4].trim() });
+    }
+    return out;
+  }, [company.resubmission, doc.name]);
+
   const counts = useMemo(() => {
     let pass = 0, reject = 0;
     company.docs.forEach((d) => { const st = stateOf(reviews[d.id]); if (st === 'pass') pass++; else if (st === 'reject') reject++; });
@@ -124,7 +135,8 @@ export default function AuditorWorkspace(p: Props) {
   const choose = (o: FlagOption) => { setPicked(o); setComment(o.text); setMenu(false); };
   const hasFlags = review.findings.length > 0;
   const canReject = !!picked && comment.trim().length > 0 && !p.readOnly;
-  const canPass = !p.readOnly && !picked && !hasFlags;
+  // PASS is always available to the assigned auditor: it overrides any half-filled rejection and clears earlier flags on this document.
+  const canPass = !p.readOnly;
 
   const reject = () => {
     if (!picked || !canReject) return;
@@ -134,8 +146,11 @@ export default function AuditorWorkspace(p: Props) {
   };
   const pass = () => {
     if (!canPass) return;
+    const n = review.findings.length;
+    review.findings.forEach((f) => p.onRemoveFlag(f.id));
+    setPicked(null); setComment('');
     p.onVerdict('pass');
-    log(`PASS ${doc.name}`);
+    log(`PASS ${doc.name}${n ? ` (cleared ${n} flag${n !== 1 ? 's' : ''})` : ''}`);
   };
   const removeFlag = (f: Finding) => { p.onRemoveFlag(f.id); log(`Removed flag "${f.keyword}" on ${doc.name}`); };
 
@@ -172,6 +187,7 @@ export default function AuditorWorkspace(p: Props) {
               <button key={d.id} className={`${s.file} ${d.id === doc.id ? s.fileOn : ''}`} disabled={p.loadingNext} onClick={() => d.id !== doc.id && p.onOpenDoc(d)}>
                 {stateIcon(stateOf(reviews[d.id]))}
                 <span className={s.fileName}>{d.name}</span>
+                {replacedSet.has(d.name) && <span className={s.newTag} title="Replaced by the company after your change request">NEW</span>}
               </button>
             ))}
           </div>
@@ -189,6 +205,12 @@ export default function AuditorWorkspace(p: Props) {
             <span className={s.viewerSpacer} />
             {p.kind === 'pdf' && <button className={s.linkBtn} onClick={p.onFullscreen}>Zoom &amp; annotate</button>}
           </div>
+          {(replacedSet.has(doc.name) || earlier.length > 0) && (
+            <div className={s.earlier}>
+              {replacedSet.has(doc.name) && <span className={s.earlierHead}>↻ Replaced by the company — check that the fix is correct</span>}
+              {earlier.map((e, i) => (<span key={i} className={s.earlierItem}>You asked: <b>{e.keyword}</b> ({e.severity}) — {e.comment}</span>))}
+            </div>
+          )}
           {docIssues.length + mismatches.length > 0 && (
             <div className={s.lookStrip}>
               <span className={s.lookTitle}>Where to look first</span>
@@ -229,6 +251,7 @@ export default function AuditorWorkspace(p: Props) {
                 </button>
                 {menu && (
                   <div className={s.ddMenu} role="listbox">
+                    {picked && <button className={s.ddItem} onClick={() => { setPicked(null); setComment(''); setMenu(false); }}><span className={s.ddText}>— Clear selection —</span></button>}
                     {set.options.map((o) => (
                       <button key={o.keyword} role="option" aria-selected={picked?.keyword === o.keyword} className={`${s.ddItem} ${picked?.keyword === o.keyword ? s.ddSel : ''}`} onClick={() => choose(o)}>
                         <span className={s.ddText}>{o.keyword}</span>
@@ -248,8 +271,8 @@ export default function AuditorWorkspace(p: Props) {
 
             <div className={s.actions}>
               <button className={s.rejectBtn} disabled={!canReject} onClick={reject}>REJECT &amp; STATE CHANGE</button>
-              <button className={s.passBtn} disabled={!canPass} onClick={pass} title={hasFlags ? 'Remove the flags below to pass this document' : picked ? 'Clear the rejection reason to pass' : undefined}>
-                <IconCheckCircle size={14} /> PASS &amp; VALIDATE
+              <button className={s.passBtn} disabled={!canPass} onClick={pass} title={hasFlags ? 'Marks the document correct and removes the flags below' : undefined}>
+                <IconCheckCircle size={14} /> {hasFlags ? `PASS & CLEAR ${review.findings.length} FLAG${review.findings.length !== 1 ? 'S' : ''}` : 'PASS & VALIDATE'}
               </button>
             </div>
             {review.verdict === 'pass' && !hasFlags && <p className={s.passed}>Passed — recorded for your decision remarks.</p>}

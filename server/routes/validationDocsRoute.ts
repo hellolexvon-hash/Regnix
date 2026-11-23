@@ -269,7 +269,7 @@ async function submitHandler(req: Request, res: Response) {
     const now = new Date();
     const month = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString().slice(0, 10);
 
-    let q = supa.from('review_cycles').select('id, status, l2_snapshot, l2_score, decision_remarks').eq('organization_id', org!.id);
+    let q = supa.from('review_cycles').select('id, status, l2_snapshot, l2_score, decision_remarks, assigned_auditor_id, terms_accepted_at, terms_version, access_status').eq('organization_id', org!.id);
     q = sess?.id ? q.eq('validation_session_id', sess.id) : q.eq('reporting_month', month);
     const { data: cur } = await q.order('created_at', { ascending: false }).limit(1).maybeSingle();
 
@@ -296,9 +296,14 @@ async function submitHandler(req: Request, res: Response) {
     if (cur && ['approved', 'in_review'].includes(cur.status as string)) {
       return res.status(409).json({ ok: false, message: cur.status === 'approved' ? 'Already approved.' : 'An auditor is reviewing this submission.' });
     }
+    // A reply to a change request goes straight back to the SAME auditor (access and accepted terms are kept), so they
+    // see the replacement files immediately instead of the case dropping into the queue and needing a new claim.
+    const keepAuditor = b.resubmit === true && !!cur?.assigned_auditor_id && !!cur?.terms_accepted_at && cur?.access_status === 'approved';
     const common = {
       l2_score: l2ScoreFinal, l2_completed_at: now.toISOString(), l2_snapshot: snapshot, current_level: 'level_3',
-      status: 'pending', assigned_auditor_id: null, terms_accepted_at: null, terms_version: null, access_status: 'none',
+      ...(keepAuditor
+        ? { status: 'in_review', assigned_auditor_id: cur!.assigned_auditor_id, terms_accepted_at: cur!.terms_accepted_at, terms_version: cur!.terms_version ?? null, access_status: 'approved' }
+        : { status: 'pending', assigned_auditor_id: null, terms_accepted_at: null, terms_version: null, access_status: 'none' }),
       decision_remarks: null, decided_at: null,
     };
     if (cycleId) {
@@ -314,7 +319,7 @@ async function submitHandler(req: Request, res: Response) {
     await supa.from('validation_zoho_files').update({ review_cycle_id: cycleId }).eq('profile_id', user.id);
     try {
       await supa.from('admin_notifications').insert({
-        type: 'l3_ready', title: 'Ready for auditor', detail: b.resubmit === true ? `${orgName} replied to the auditor's change request and is waiting for an auditor.` : `${orgName} passed Level 2 and is waiting for an auditor.`,
+        type: 'l3_ready', title: 'Ready for auditor', detail: b.resubmit === true ? `${orgName} replied to the auditor's change request${keepAuditor ? ' — back with the same auditor.' : ' and is waiting for an auditor.'}` : `${orgName} passed Level 2 and is waiting for an auditor.`,
         entity_type: 'review_cycle', entity_id: cycleId,
       });
     } catch { /* ignore */ }

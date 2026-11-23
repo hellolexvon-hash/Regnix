@@ -19,7 +19,7 @@
  * branches are already structured to make that a drop-in change.
  */
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import s from './Auditor.module.css';
 import AuditorAuth from './AuditorAuth';
 import AuditorDashboard from './AuditorDashboard';
@@ -73,6 +73,19 @@ export default function AuditorPage() {
   const [menuOpen, setMenuOpen] = useState(false);
 
   const auditor = store.currentAuditor;
+
+  // Keep the portal current: a company can resubmit corrected files at any time, so reload when a review is opened
+  // and every 45 s while signed in (and when the tab regains focus). The loaded data is replaced, never merged.
+  const { refresh } = store;
+  const signedIn = !!auditor;
+  useEffect(() => {
+    if (!signedIn) return;
+    const tick = () => { if (document.visibilityState === 'visible') void refresh(); };
+    const id = window.setInterval(tick, 45_000);
+    document.addEventListener('visibilitychange', tick);
+    return () => { window.clearInterval(id); document.removeEventListener('visibilitychange', tick); };
+  }, [signedIn, refresh]);
+  useEffect(() => { if (signedIn && openCompanyId) void refresh(); }, [openCompanyId, signedIn, refresh]);
 
   const navCounts = useMemo(() => {
     const c = store.companies;
