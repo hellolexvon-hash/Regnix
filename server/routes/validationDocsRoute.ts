@@ -366,7 +366,7 @@ async function bootstrapHandler(req: Request, res: Response) {
     const [{ data: orgs }, { data: files }, { data: certs }] = await Promise.all([
       orgIds.length ? supa.from('organizations').select('*').in('id', orgIds) : Promise.resolve({ data: [] as any[] }),
       cycleIds.length ? supa.from('validation_zoho_files').select('id, profile_id, review_cycle_id, doc_name, doc_role, file_name, mime_type, size_bytes, uploaded_at, storage_key').in('review_cycle_id', cycleIds) : Promise.resolve({ data: [] as any[] }),
-      cycleIds.length ? supa.from('certificates').select('review_cycle_id, certificate_no, issued_at, pdf_sha256, revoked_at').in('review_cycle_id', cycleIds) : Promise.resolve({ data: [] as any[] }),
+      cycleIds.length ? supa.from('certificates').select('review_cycle_id, certificate_no, issued_at, pdf_sha256, revoked_at, pdf_storage_key').in('review_cycle_id', cycleIds) : Promise.resolve({ data: [] as any[] }),
     ]);
     const ownerIds = [...new Set((orgs ?? []).map((o: any) => o.owner_profile_id as string).filter(Boolean))];
     const apIds = (aps ?? []).map((a) => a.user_id as string);
@@ -442,7 +442,7 @@ async function bootstrapHandler(req: Request, res: Response) {
         decisionRemarks: c.decision_remarks ?? '', decidedAt: c.decided_at ?? null,
         liveRegisterUrl: live?.storage_key ? fileUrl(live.id) : null, liveRegisterFileName: live?.file_name ?? snap.liveRegisterFileName ?? null,
         locked: !unlocked, accessStatus: c.access_status ?? 'none', details,
-        certificate: cert ? { certificateNo: cert.certificate_no, issuedAt: cert.issued_at, sha256: cert.pdf_sha256 || null, revoked: !!cert.revoked_at } : null,
+        certificate: cert ? { certificateNo: cert.certificate_no, issuedAt: cert.issued_at, sha256: cert.pdf_sha256 || null, revoked: !!cert.revoked_at, hasPdf: !!cert.pdf_storage_key } : null,
       };
     });
 

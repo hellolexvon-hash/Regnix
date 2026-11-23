@@ -7,7 +7,7 @@
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { Icon, type IconName } from './Icons';
-import { NoticeRow } from './NotificationBell';
+import { NoticeRow, useNoticeAction } from './NotificationBell';
 import { useNotifications } from './dashboardApi';
 import { EBOOK } from './AiAssistantPanel';
 import styles from './DashboardHome.module.css';
@@ -154,6 +154,7 @@ function TimelineBar({ label, pastW, nextW, pastColor, nextColor }: {
 export default function DashboardHome() {
   const { profile } = useAuth();
   const navigate = useNavigate();
+  const noticeAct = useNoticeAction();
   const { notices, unread, seenAt } = useNotifications();
 
   const companyName = profile?.company_name || profile?.firm_name || 'Your Organisation';
@@ -189,7 +190,7 @@ export default function DashboardHome() {
           ) : (
             <div className={x.feed}>
               {notices.slice(0, 5).map((n) => (
-                <NoticeRow key={n.id} n={n} unread={+new Date(n.at) > seenAt} onClick={() => n.link && navigate(n.link)} />
+                <NoticeRow key={n.id} n={n} unread={+new Date(n.at) > seenAt} busy={noticeAct.busyId === n.id} onClick={() => noticeAct.act(n)} />
               ))}
             </div>
           )}

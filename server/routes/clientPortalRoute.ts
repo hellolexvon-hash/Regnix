@@ -31,7 +31,7 @@ async function userFrom(req: Request) {
 }
 
 const safeName = (n: string) => n.replace(/[^\w.\- ()&]/g, '_').slice(0, 120);
-type Note = { id: string; kind: 'success' | 'warning' | 'info' | 'danger'; title: string; detail: string; at: string; link?: string };
+type Note = { id: string; kind: 'success' | 'warning' | 'info' | 'danger'; title: string; detail: string; at: string; link?: string; certId?: string };
 
 async function roleOf(id: string): Promise<'admin' | 'auditor' | 'client'> {
   const supa = db();
@@ -70,13 +70,24 @@ async function notificationsHandler(req: Request, res: Response) {
         ? await supa.from('review_cycles').select('id, status, access_status, assigned_auditor_id, l2_completed_at, decided_at, decision_remarks, reporting_month, created_at').in('organization_id', orgIds).order('created_at', { ascending: false }).limit(10)
         : { data: [] as any[] };
       const audIds = [...new Set((cycles ?? []).map((c) => c.assigned_auditor_id as string).filter(Boolean))];
-      const { data: auds } = audIds.length ? await supa.from('profiles').select('id, full_name').in('id', audIds) : { data: [] as any[] };
+      const cycleIds = (cycles ?? []).map((c) => c.id as string);
+      const [{ data: auds }, { data: certs }] = await Promise.all([
+        audIds.length ? supa.from('profiles').select('id, full_name').in('id', audIds) : Promise.resolve({ data: [] as any[] }),
+        cycleIds.length ? supa.from('certificates').select('review_cycle_id, certificate_no, issued_at, pdf_storage_key, revoked_at').in('review_cycle_id', cycleIds) : Promise.resolve({ data: [] as any[] }),
+      ]);
       const nm = (id: string) => (auds ?? []).find((a: any) => a.id === id)?.full_name || 'An auditor';
+      // Certificate issued — only once the PDF is stored, so "View" always works
+      for (const ct of certs ?? []) {
+        if (ct.pdf_storage_key && !ct.revoked_at) notes.push({
+          id: `${ct.review_cycle_id}-cert`, kind: 'success', title: 'Compliance certificate issued',
+          detail: `Certificate ${ct.certificate_no} is ready. Tap to view it.`, at: ct.issued_at, certId: ct.review_cycle_id as string,
+        });
+      }
       for (const c of cycles ?? []) {
         const month = c.reporting_month ? String(c.reporting_month).slice(0, 7) : '';
         if (c.l2_completed_at) notes.push({ id: `${c.id}-sub`, kind: 'info', title: 'Submitted for audit', detail: `Your ${month} validation is in the audit queue.`, at: c.l2_completed_at, link: '/dashboard/planner' });
         if (c.assigned_auditor_id) notes.push({ id: `${c.id}-asg`, kind: 'info', title: 'Auditor assigned', detail: `${nm(c.assigned_auditor_id)} is now reviewing your submission.`, at: c.decided_at ?? c.l2_completed_at ?? c.created_at, link: '/dashboard/planner' });
-        if (c.status === 'approved') notes.push({ id: `${c.id}-ok`, kind: 'success', title: 'Audit approved', detail: 'Your audit certificate is ready to download.', at: c.decided_at ?? c.created_at, link: '/dashboard/planner' });
+        if (c.status === 'approved') notes.push({ id: `${c.id}-ok`, kind: 'success', title: 'Audit approved', detail: 'Your audit was approved. The certificate follows shortly.', at: c.decided_at ?? c.created_at, link: '/dashboard/planner' });
         if (c.status === 'changes_requested') notes.push({ id: `${c.id}-chg`, kind: 'warning', title: 'Auditor requested changes', detail: c.decision_remarks || 'Please review the auditor remarks and re-submit.', at: c.decided_at ?? c.created_at, link: '/dashboard/validation' });
         if (c.status === 'rejected') notes.push({ id: `${c.id}-rej`, kind: 'danger', title: 'Audit rejected', detail: c.decision_remarks || 'See the auditor remarks for details.', at: c.decided_at ?? c.created_at, link: '/dashboard/validation' });
       }
@@ -120,6 +131,12 @@ async function documentsHandler(req: Request, res: Response) {
     const user = await userFrom(req);
     if (!user) return res.status(401).json({ ok: false, message: 'Sign in required.' });
     const supa = db();
+    const orgIds = await orgIdsOf(user.id);
+    const { data: myCycles } = orgIds.length ? await supa.from('review_cycles').select('id').in('organization_id', orgIds) : { data: [] as any[] };
+    const myCycleIds = (myCycles ?? []).map((c: any) => c.id as string);
+    const { data: certRows } = myCycleIds.length
+      ? await supa.from('certificates').select('review_cycle_id, certificate_no, issued_at, pdf_storage_key, revoked_at').in('review_cycle_id', myCycleIds).neq('pdf_storage_key', '')
+      : { data: [] as any[] };
     const [{ data: val }, { data: kyc }, { data: prof }, { data: folder }] = await Promise.all([
       supa.from('validation_zoho_files').select('id, doc_name, doc_role, file_name, mime_type, size_bytes, zoho_file_id, zoho_url, storage_key, uploaded_at, review_cycle_id').eq('profile_id', user.id).order('uploaded_at', { ascending: false }).limit(500),
       supa.from('kyc_files').select('id, doc_label, file_name, mime_type, size_bytes, zoho_file_id, zoho_url, created_at').eq('profile_id', user.id).order('created_at', { ascending: false }).limit(200),
@@ -136,6 +153,11 @@ async function documentsHandler(req: Request, res: Response) {
         id: f.id, source: 'kyc' as const, category: 'KYC', name: f.doc_label || f.file_name, fileName: f.file_name, mimeType: f.mime_type,
         size: Number(f.size_bytes) || 0, at: f.created_at, zohoUrl: f.zoho_url ?? null, inZoho: !!f.zoho_file_id || !!f.zoho_url, canPreview: false, reviewCycleId: null,
       })),
+      ...(certRows ?? []).filter((c: any) => !c.revoked_at).map((c: any) => ({
+        id: c.review_cycle_id as string, source: 'certificate' as const, category: 'Certificate',
+        name: `Compliance Certificate — ${c.certificate_no}`, fileName: `${c.certificate_no}.pdf`, mimeType: 'application/pdf', size: 0,
+        at: c.issued_at, zohoUrl: null, inZoho: false, canPreview: true, reviewCycleId: c.review_cycle_id as string,
+      })),
     ].sort((a, b) => +new Date(b.at) - +new Date(a.at));
     res.json({ ok: true, documents, folderUrl: prof?.zoho_folder_url ?? (folder as any)?.folder_url ?? null });
   } catch (e) {
@@ -148,6 +170,21 @@ async function docFileHandler(req: Request, res: Response) {
   try {
     const user = await userFrom(req);
     if (!user) return res.status(401).json({ ok: false, message: 'Sign in required.' });
+    const certCycle = String(req.query.cert ?? '');
+    if (certCycle) {
+      // The company's own compliance certificate PDF (stored when the auditor generated it)
+      const supa = db();
+      const { data: cy } = await supa.from('review_cycles').select('organization_id').eq('id', certCycle).maybeSingle();
+      if (!cy || !(await orgIdsOf(user.id)).includes(cy.organization_id as string)) return res.status(404).json({ ok: false, message: 'Certificate not found.' });
+      const { data: ct } = await supa.from('certificates').select('certificate_no, pdf_storage_key, revoked_at').eq('review_cycle_id', certCycle).maybeSingle();
+      if (!ct?.pdf_storage_key || ct.revoked_at) return res.status(404).json({ ok: false, message: 'Certificate PDF is not ready yet.' });
+      const dl = await supa.storage.from(BUCKET).download(ct.pdf_storage_key as string);
+      if (dl.error || !dl.data) return res.status(404).json({ ok: false, message: 'Certificate PDF is not available.' });
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `inline; filename="${safeName(String(ct.certificate_no))}.pdf"`);
+      res.setHeader('Cache-Control', 'private, max-age=300');
+      return res.send(Buffer.from(await dl.data.arrayBuffer()));
+    }
     const id = String(req.query.id ?? '');
     const { data: f } = await db().from('validation_zoho_files').select('profile_id, file_name, mime_type, storage_key').eq('id', id).maybeSingle();
     if (!f || f.profile_id !== user.id || !f.storage_key) return res.status(404).json({ ok: false, message: 'File not found.' });

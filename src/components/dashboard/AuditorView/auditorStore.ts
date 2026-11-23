@@ -136,7 +136,7 @@ export interface CompanyReview {
   locked?:            boolean;          // true until THIS auditor claims it and accepts the terms
   termsAcceptedAt?:   Date | null;
   missingFiles?:      string[];         // files that could not be stored (e.g. over 3 MB)
-  certificate?:       { certificateNo: string; issuedAt: Date; sha256: string | null; revoked: boolean } | null;
+  certificate?:       { certificateNo: string; issuedAt: Date; sha256: string | null; revoked: boolean; hasPdf?: boolean } | null;
 }
 
 interface Store {
@@ -235,6 +235,11 @@ async function hydrateStore(): Promise<void> {
   } catch (err) {
     patch({ loading: false, hydrated: true, error: err instanceof Error ? err.message : 'Failed to load auditor portal data.' });
   }
+}
+
+/** After the certificate PDF is stored, flag it locally so it isn't generated again on the next open. */
+export function markCertificateStored(companyId: string) {
+  patch({ companies: _store.companies.map((c) => (c.id === companyId && c.certificate ? { ...c, certificate: { ...c.certificate, hasPdf: true } } : c)) });
 }
 
 async function reload() { _hydratePromise = hydrateStore(); await _hydratePromise; }

@@ -14,7 +14,7 @@
 import { useEffect, useRef, useState, forwardRef } from 'react';
 import QRCode from 'qrcode';
 import s from './AuditCertificate.module.css';
-import type { Auditor, CompanyReview } from './auditorStore';
+import { markCertificateStored, type Auditor, type CompanyReview } from './auditorStore';
 import { buildCertificateData, type CertificateData, type RiskLevel } from './certificateData';
 import { saveCertificate } from './certificateApi';
 import { IconScale, IconCheckCircle, IconShieldCheck, IconAlertTriangle } from './icons';
@@ -211,7 +211,8 @@ type Notice = { kind: 'ok' | 'err'; text: string } | null;
 
 export default function AuditCertificate({ open, onClose, company, auditor }: Props) {
   const exportRef = useRef<HTMLDivElement>(null);
-  const [busy, setBusy] = useState<'' | 'pdf' | 'email'>('');
+  const [busy, setBusy] = useState<'' | 'pdf' | 'email' | 'auto'>('');
+  const autoRef = useRef(false);
   const [notice, setNotice] = useState<Notice>(null);
   const [qr, setQr] = useState('');
 
@@ -224,6 +225,16 @@ export default function AuditCertificate({ open, onClose, company, auditor }: Pr
       .then(u => { if (alive) setQr(u); }).catch(() => { if (alive) setQr(''); });
     return () => { alive = false; };
   }, [open, data.verifyUrl]);
+
+  // First time the certificate is opened: render + store the PDF automatically so the company
+  // is notified and finds it in Notifications and Documents (no need to press Download first).
+  useEffect(() => {
+    if (!open || !qr || autoRef.current) return;
+    if (!company.certificate || company.certificate.hasPdf) return;
+    autoRef.current = true;
+    void run('auto');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, qr, company.certificate?.hasPdf]);
 
   if (!open) return null;
 
@@ -252,14 +263,16 @@ export default function AuditCertificate({ open, onClose, company, auditor }: Pr
     auditor: data.auditor, issuedOn: data.issuedOn,
   };
 
-  async function run(kind: 'pdf' | 'email') {
+  async function run(kind: 'pdf' | 'email' | 'auto') {
     setBusy(kind); setNotice(null);
     try {
       const out = await renderPdf();
       if (!out) throw new Error('render');
       if (kind === 'pdf') out.pdf.save(`${data.certificateNo}_${company.name.replace(/\s+/g, '_')}.pdf`);
       const r = await saveCertificate({ companyId: company.id, pdfBase64: out.base64, sendEmail: kind === 'email', snapshot });
-      if (!r.ok) setNotice({ kind: 'err', text: r.error ?? 'Could not save the certificate.' });
+      if (r.ok) markCertificateStored(company.id);
+      if (!r.ok) { if (kind === 'auto') autoRef.current = false; setNotice({ kind: 'err', text: r.error ?? 'Could not save the certificate.' }); }
+      else if (kind === 'auto') setNotice({ kind: 'ok', text: 'Certificate saved — the company has been notified and can open it from Notifications and Documents.' });
       else if (kind === 'email' && r.emailed === false) setNotice({ kind: 'err', text: 'Saved for the company, but email is not configured or the contact has no email.' });
       else setNotice({ kind: 'ok', text: kind === 'email' ? `Emailed to ${company.contactEmail} and saved to the company's portal.` : 'Downloaded and saved to the company\'s portal.' });
     } catch {

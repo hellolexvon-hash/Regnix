@@ -1,0 +1,133 @@
+/* Dark three-pane review workspace (files | document | rule checks) + audit trail strip. */
+.ws { position: fixed; inset: 0; z-index: 8000; display: flex; flex-direction: column; background: #0B0F1A; font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif; font-size: 12.5px; color: #D5DBE8; }
+.wsHidden { display: none; }
+
+.top { display: flex; align-items: center; gap: 14px; padding: 10px 18px; background: #0F1524; border-bottom: 1px solid #1E2740; flex-shrink: 0; }
+.topBack, .navBtn { background: #17203A; border: 1px solid #2A3658; color: #E5EAF7; border-radius: 8px; padding: 6px 12px; font-size: 11.5px; font-weight: 700; cursor: pointer; font-family: inherit; }
+.topBack:hover, .navBtn:hover:not(:disabled) { background: #212C4D; }
+.navBtn:disabled { opacity: 0.4; cursor: not-allowed; }
+.topTitle { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.topName { font-size: 14px; font-weight: 800; color: #fff; letter-spacing: 0.01em; }
+.topSub { font-size: 10.5px; color: #8E9AB8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.counters { display: flex; gap: 8px; }
+.tile { display: flex; flex-direction: column; align-items: center; min-width: 84px; padding: 5px 12px; background: #131B2F; border: 1px solid #1E2740; border-radius: 9px; }
+.tile span { font-size: 8.5px; font-weight: 800; letter-spacing: 0.08em; color: #7F8BAA; }
+.tile b { font-size: 17px; font-weight: 800; color: #fff; line-height: 1.2; }
+.cOk { color: #34D399 !important; } .cWarn { color: #FB923C !important; } .cBad { color: #F87171 !important; }
+
+.body { flex: 1; min-height: 0; display: grid; grid-template-columns: 230px minmax(0, 1fr) 390px; gap: 10px; padding: 10px; }
+.paneHead { font-size: 10px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: #7F8BAA; margin: 0; display: flex; align-items: center; gap: 6px; }
+.paneHead em { font-style: normal; background: #1A2340; color: #A9B4D0; padding: 1px 7px; border-radius: 99px; letter-spacing: 0; font-size: 10px; }
+
+.files { min-height: 0; display: flex; flex-direction: column; gap: 8px; background: #0F1524; border: 1px solid #1E2740; border-radius: 12px; padding: 12px 8px 8px; }
+.files > .paneHead { padding: 0 6px; }
+.fileList { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 3px; }
+.file { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; padding: 8px 8px; background: transparent; border: 1px solid transparent; border-radius: 8px; color: #B7C0D8; cursor: pointer; font-family: inherit; font-size: 11.5px; font-weight: 600; }
+.file:hover:not(:disabled) { background: #151D33; }
+.file:disabled { cursor: wait; }
+.fileOn { background: #1A2547; border-color: #31428A; color: #fff; }
+.fileName { flex: 1; min-width: 0; line-height: 1.35; }
+.st { width: 16px; height: 16px; border-radius: 50%; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 800; }
+.stOk { background: #064E3B; color: #34D399; border: 1px solid #10B981; }
+.stBad { background: #450A0A; color: #F87171; border: 1px solid #EF4444; }
+.stTodo { background: #FB923C; width: 9px; height: 9px; margin: 0 3.5px; }
+.fileNav { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding-top: 6px; border-top: 1px solid #1E2740; }
+.navCount { font-size: 11px; color: #8E9AB8; }
+
+.viewer { position: relative; min-height: 0; background: #0F1524; border: 1px solid #1E2740; border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; }
+.viewerBar { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid #1E2740; font-size: 11px; color: #8E9AB8; flex-shrink: 0; }
+.viewerBar strong { color: #E5EAF7; }
+.viewerSpacer { flex: 1; }
+.linkBtn { background: #17203A; border: 1px solid #2A3658; color: #A5B4FC; border-radius: 7px; padding: 5px 10px; font-size: 10.5px; font-weight: 700; cursor: pointer; font-family: inherit; }
+.linkBtn:hover { background: #212C4D; }
+.lookStrip { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 7px 12px; background: #2A1A0A; border-bottom: 1px solid #5A3513; flex-shrink: 0; max-height: 88px; overflow-y: auto; }
+.lookTitle { font-size: 9.5px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: #FB923C; }
+.lookItem { display: inline-flex; gap: 5px; align-items: center; font-size: 10.5px; color: #FDBA74; background: #3A2410; border-radius: 6px; padding: 3px 8px; line-height: 1.4; }
+.lookItem b { color: #FED7AA; }
+.frame { flex: 1; min-height: 0; width: 100%; border: 0; background: #525659; }
+.sheetBox { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 30px; text-align: center; color: #8E9AB8; }
+.sheetBox p { margin: 0; max-width: 380px; line-height: 1.6; }
+.openBtn { background: #4F46E5; color: #fff; border: 0; border-radius: 9px; padding: 10px 16px; font-size: 12px; font-weight: 700; cursor: pointer; font-family: inherit; }
+.openBtn:hover { background: #4338CA; }
+
+.panel { min-height: 0; display: flex; flex-direction: column; background: #0F1524; border: 1px solid #1E2740; border-radius: 12px; overflow: hidden; }
+.panelScroll { flex: 1; min-height: 0; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 14px; }
+.readonly { background: #1B1F45; border: 1px solid #353B8A; color: #C7CCFF; border-radius: 8px; padding: 8px 10px; font-size: 11px; line-height: 1.5; }
+.field { display: flex; flex-direction: column; gap: 6px; }
+.label { font-size: 10px; font-weight: 800; letter-spacing: 0.06em; color: #A9B4D0; display: flex; justify-content: space-between; gap: 8px; }
+.label span { font-weight: 600; letter-spacing: 0; color: #7F8BAA; text-align: right; }
+
+.dd { position: relative; }
+.ddBtn { width: 100%; display: flex; align-items: center; gap: 8px; text-align: left; padding: 10px 12px; background: #131B2F; border: 1.5px solid #2A3658; border-radius: 9px; color: #E5EAF7; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; }
+.ddBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+.ddBtn:hover:not(:disabled) { border-color: #4B5E9E; }
+.ddPlaceholder { flex: 1; color: #7F8BAA; }
+.ddText { flex: 1; min-width: 0; }
+.ddCaret { color: #7F8BAA; }
+.ddMenu { position: absolute; z-index: 5; left: 0; right: 0; top: calc(100% + 4px); max-height: 300px; overflow-y: auto; background: #131B2F; border: 1.5px solid #2A3658; border-radius: 9px; padding: 4px; box-shadow: 0 12px 30px rgba(0,0,0,0.5); }
+.ddItem { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; padding: 8px 10px; background: transparent; border: 0; border-radius: 7px; color: #D5DBE8; font-size: 11.5px; font-weight: 600; cursor: pointer; font-family: inherit; }
+.ddItem:hover { background: #1A2547; }
+.ddSel { background: #1F2B58; color: #fff; }
+.optSev { font-size: 9px; font-weight: 800; padding: 2px 7px; border-radius: 99px; flex-shrink: 0; }
+.bCritical { background: #FEE2E2; color: #B91C1C; } .bMajor { background: #FEF3C7; color: #92400E; } .bMinor { background: #D1FAE5; color: #065F46; }
+
+.textarea { border: 1.5px solid #2A3658; border-radius: 9px; padding: 10px 12px; font-size: 12px; font-family: inherit; color: #E5EAF7; background: #131B2F; outline: none; resize: vertical; line-height: 1.55; }
+.textarea:focus { border-color: #6366F1; }
+.textarea:disabled { opacity: 0.5; }
+.warn { font-size: 10.5px; color: #FB923C; margin: 0; }
+.hint { font-size: 10.5px; color: #7F8BAA; margin: 0; line-height: 1.5; }
+.passed { font-size: 11px; color: #34D399; margin: 0; }
+
+.actions { display: flex; flex-direction: column; gap: 8px; }
+.rejectBtn { background: linear-gradient(180deg, #F97316, #EA580C); color: #fff; border: 0; border-radius: 9px; padding: 12px 14px; font-size: 12px; font-weight: 800; letter-spacing: 0.04em; cursor: pointer; font-family: inherit; }
+.rejectBtn:hover:not(:disabled) { background: linear-gradient(180deg, #FB923C, #F97316); }
+.passBtn { display: flex; align-items: center; justify-content: center; gap: 6px; background: #059669; color: #fff; border: 0; border-radius: 9px; padding: 12px 14px; font-size: 12px; font-weight: 800; letter-spacing: 0.04em; cursor: pointer; font-family: inherit; }
+.passBtn:hover:not(:disabled) { background: #10B981; }
+.rejectBtn:disabled, .passBtn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+.flags { display: flex; flex-direction: column; gap: 6px; }
+.flag { display: flex; gap: 8px; align-items: flex-start; padding: 9px 10px; border: 1px solid #1E2740; border-left-width: 3px; border-radius: 8px; background: #131B2F; }
+.fCritical { border-left-color: #DC2626; } .fMajor { border-left-color: #D97706; } .fMinor { border-left-color: #059669; }
+.flagBody { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.flagTitle { font-size: 11.5px; font-weight: 700; color: #fff; }
+.ws .flagText { font-size: 11px; color: #A9B4D0; line-height: 1.5; word-break: break-word; }
+.flagMeta { font-size: 10px; color: #7F8BAA; }
+.rm { background: none; border: 0; color: #7F8BAA; font-size: 15px; line-height: 1; cursor: pointer; padding: 0 2px; }
+.rm:hover { color: #F87171; }
+.foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 14px; border-top: 1px solid #1E2740; flex-shrink: 0; }
+.footNote { font-size: 10.5px; color: #7F8BAA; }
+
+/* Audit trail strip */
+.trail { flex-shrink: 0; margin: 0 10px 10px; background: #0F1524; border: 1px solid #1E2740; border-radius: 12px; overflow: hidden; }
+.trailHead, .trailRow { display: grid; grid-template-columns: 90px 150px minmax(0, 1fr) 150px; gap: 12px; padding: 5px 14px; font-size: 10.5px; }
+.trailHead { font-size: 9px; font-weight: 800; letter-spacing: 0.08em; color: #7F8BAA; background: #131B2F; }
+.trailBody { max-height: 92px; overflow-y: auto; }
+.trailRow { border-top: 1px solid #172038; color: #B7C0D8; }
+.trailAct { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.trailRow code { color: #34D399; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; }
+.trailEmpty { padding: 8px 14px; font-size: 10.5px; color: #7F8BAA; }
+
+@media (max-width: 1100px) {
+  .body { grid-template-columns: 1fr; grid-template-rows: 150px minmax(240px, 1fr) minmax(0, 1fr); overflow-y: auto; }
+  .counters .tile { min-width: 60px; }
+  .trailHead, .trailRow { grid-template-columns: 70px 90px minmax(0, 1fr) 110px; }
+}
+
+/* ── Classes still used by AuditorCompanyReview (documents list + decision summary, light theme) ── */
+.rowBadge { font-size: 9.5px; font-weight: 800; padding: 2px 8px; border-radius: 99px; white-space: nowrap; flex-shrink: 0; }
+.rbTodo { background: #F3F4F6; color: #6B7280; } .rbOk { background: #D1FAE5; color: #065F46; } .rbBad { background: #FEE2E2; color: #B91C1C; }
+.progress { display: flex; align-items: center; gap: 10px; font-size: 11px; color: #6B7280; }
+.progressTrack { flex: 1; height: 5px; background: #F3F4F6; border-radius: 99px; overflow: hidden; display: block; }
+.progressFill { display: block; height: 100%; background: #6C3BD5; border-radius: 99px; }
+.sumBox { border: 1px solid #EEECF8; background: #FAFAFB; border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+.sumTitle { margin: 0; font-size: 12.5px; font-weight: 800; color: #111827; }
+.sumRow { display: flex; gap: 8px; flex-wrap: wrap; }
+.sumChip { font-size: 10.5px; font-weight: 700; padding: 3px 10px; border-radius: 99px; background: #F3F4F6; color: #4B5563; }
+.sumList { display: flex; flex-direction: column; gap: 6px; }
+.flagText { font-size: 11px; color: #4B5563; line-height: 1.5; word-break: break-word; }
+.recommend { font-size: 11.5px; line-height: 1.55; padding: 9px 12px; border-radius: 8px; background: #EFF6FF; border: 1px solid #BFDBFE; color: #1E40AF; }
+.sumBtn { align-self: flex-start; background: #F3F0FF; border: 1px solid #DDD6FE; color: #6C3BD5; border-radius: 8px; padding: 7px 13px; font-size: 11.5px; font-weight: 700; cursor: pointer; font-family: inherit; }
+.sumBtn:hover:not(:disabled) { background: #EDE9FE; }
+.sumBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+.counter { font-size: 10.5px; color: #9CA3AF; text-align: right; }
+.counterOver { color: #DC2626; font-weight: 700; }

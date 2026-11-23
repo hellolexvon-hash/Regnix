@@ -15,18 +15,22 @@
  * Zero inline styles — all from Auditor.module.css (.ar* classes).
  */
 
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import s from './Auditor.module.css';
+import o from './AuditorOpening.module.css';
 import { authFetch, type Auditor, type CompanyReview, type IssueSeverity, type ReviewDoc } from './auditorStore';
 import PdfViewer from '../documentGenerator/PdfViewer';
 import LiveRegister from '../documentGenerator/LiveRegister';
 import AuditorTermsModal from './AuditorTermsModal';
 import { resolveRuleSet } from './ruleLibrary';
 import AuditCertificate from './AuditCertificate';
+import AuditorWorkspace, { type DocReview, type Finding, type ReviewMap, type Verdict } from './AuditorWorkspace';
+import w from './AuditorWorkspace.module.css';
+import { SEVERITY_LABEL, SEVERITY_RANK, TAT_BY_SEVERITY } from './l3Flags';
 import {
   IconArrowLeft, IconFileText, IconFlag, IconPenLine, IconCheckCircle, IconUndo,
   IconXCircle, IconAlertTriangle, IconTable, IconChevronDown, IconChevronRight,
-  IconClock, IconEye, IconShieldCheck, IconListChecks, IconFolder,
+  IconClock, IconEye, IconShieldCheck, IconListChecks, IconFolder, IconSpinner,
 } from './icons';
 
 interface AuditorCompanyReviewProps {
@@ -79,33 +83,65 @@ function toFileFromBlob(blob: Blob, fileName: string): File {
   return new File([blob], fileName, { type: blob.type || 'application/octet-stream' });
 }
 
-// Opened files are kept for the session so re-opening a document is instant (no second download).
+// ── File loading: cached, de-duplicated, with download progress ─────────────────────────────
+// Opened/prefetched files are kept for the session (small LRU) so reopening is instant, and two
+// requests for the same file share one download.
 const BLOB_CACHE = new Map<string, Blob>();
+const CACHE_MAX = 24;
+const INFLIGHT = new Map<string, Promise<{ blob: Blob | null; error: string }>>();
+const LISTENERS = new Map<string, Set<(loaded: number, total: number) => void>>();
 let lastFetchError = '';
 
-async function fetchBlob(url: string): Promise<Blob | null> {
-  lastFetchError = '';
-  const hit = BLOB_CACHE.get(url);
-  if (hit) return hit;
+function cachePut(url: string, blob: Blob) {
+  BLOB_CACHE.delete(url); BLOB_CACHE.set(url, blob);
+  while (BLOB_CACHE.size > CACHE_MAX) BLOB_CACHE.delete(BLOB_CACHE.keys().next().value as string);
+}
+
+async function download(url: string): Promise<{ blob: Blob | null; error: string }> {
   try {
     const res = await authFetch(url);
     if (!res.ok) {
       const body = await res.json().catch(() => null);
-      lastFetchError = body?.message ?? `Server responded ${res.status}.`;
-      return null;
+      return { blob: null, error: body?.message ?? `Server responded ${res.status}.` };
     }
-    if ((res.headers.get('content-type') || '').includes('text/html')) {
-      lastFetchError = 'The file route is not deployed (got a web page instead of the file).';
-      return null;
+    const type = res.headers.get('content-type') || '';
+    if (type.includes('text/html')) return { blob: null, error: 'The file route is not deployed (got a web page instead of the file).' };
+    const total = Number(res.headers.get('content-length')) || 0;
+    let blob: Blob;
+    if (res.body && total) {
+      const reader = res.body.getReader();
+      const chunks: Uint8Array[] = [];
+      let loaded = 0;
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (value) { chunks.push(value); loaded += value.length; LISTENERS.get(url)?.forEach((fn) => fn(loaded, total)); }
+      }
+      blob = new Blob(chunks, { type });
+    } else {
+      blob = await res.blob();
     }
-    const blob = await res.blob();
-    BLOB_CACHE.set(url, blob);
-    return blob;
+    cachePut(url, blob);
+    return { blob, error: '' };
   } catch {
-    lastFetchError = 'Could not reach the server.';
-    return null;
+    return { blob: null, error: 'Could not reach the server.' };
   }
 }
+
+async function fetchBlob(url: string, onProgress?: (loaded: number, total: number) => void): Promise<Blob | null> {
+  lastFetchError = '';
+  const hit = BLOB_CACHE.get(url);
+  if (hit) { cachePut(url, hit); onProgress?.(1, 1); return hit; }
+  if (onProgress) { const set = LISTENERS.get(url) ?? new Set(); set.add(onProgress); LISTENERS.set(url, set); }
+  let p = INFLIGHT.get(url);
+  if (!p) { p = download(url).finally(() => { INFLIGHT.delete(url); LISTENERS.delete(url); }); INFLIGHT.set(url, p); }
+  const r = await p;
+  lastFetchError = r.error;
+  return r.blob;
+}
+
+/** Warm the cache in the background (no UI, errors ignored). */
+function prefetch(url?: string | null) { if (url && !BLOB_CACHE.has(url) && !INFLIGHT.has(url)) void fetchBlob(url); }
 
 export default function AuditorCompanyReview({
   company, auditor, onBack, onClaim, onDecide,
@@ -128,14 +164,42 @@ export default function AuditorCompanyReview({
   const [actionError, setActionError] = useState('');
   const [fileError, setFileError] = useState('');
   const [showCertificate, setShowCertificate] = useState(false);
+  const [opening, setOpening] = useState<{ label: string; pct: number | null } | null>(null);
+  const busyOpening = opening !== null;
+
+  // ── L3 findings (per document), kept in the browser so a refresh never loses them ──
+  const REVIEW_KEY = `regnix.l3.review.${company.id}`;
+  const [reviews, setReviews] = useState<ReviewMap>(() => {
+    try { return JSON.parse(localStorage.getItem(REVIEW_KEY) || '{}') as ReviewMap; } catch { return {}; }
+  });
+  useEffect(() => { try { localStorage.setItem(REVIEW_KEY, JSON.stringify(reviews)); } catch { /* ignore */ } }, [reviews, REVIEW_KEY]);
+  const [workspace, setWorkspace] = useState<{ doc: ReviewDoc; blob: Blob | null; kind: 'pdf' | 'sheet' | 'none' } | null>(null);
+  const reviewOf = (id: string): DocReview => reviews[id] ?? { findings: [] };
+  const patchReview = (id: string, fn: (r: DocReview) => DocReview) => setReviews((m) => ({ ...m, [id]: fn(m[id] ?? { findings: [] }) }));
+  function setVerdict(id: string, v: Verdict) { patchReview(id, (r) => ({ ...r, verdict: v })); }
+  function addFlag(id: string, f: Omit<Finding, 'id' | 'at'>) {
+    patchReview(id, (r) => ({ verdict: 'flag', findings: [...r.findings, { ...f, id: `${Date.now()}-${r.findings.length}`, at: new Date().toISOString() }] }));
+  }
+  function removeFlag(id: string, fid: string) {
+    patchReview(id, (r) => { const findings = r.findings.filter((x) => x.id !== fid); return { verdict: findings.length ? 'flag' : undefined, findings }; });
+  }
 
   const canWork = company.status === 'in_review' && company.assignedTo === auditor.id && !company.locked;
 
+  /** Load a file with a visible loader (label + progress) and a clear failure message. */
+  async function load(url: string, label: string): Promise<Blob | null> {
+    setOpening({ label, pct: null });
+    const blob = await fetchBlob(url, (l, t) => setOpening((o) => (o && o.label === label ? { ...o, pct: t ? Math.min(100, Math.round((l / t) * 100)) : null } : o)));
+    setOpening(null);
+    return blob;
+  }
+
   async function openLiveRegister() {
+    if (busyOpening) return;
     setFileError('');
     if (!company.liveRegisterUrl) { setFileError('The company\'s live register was not stored (missing or over 3 MB).'); return; }
     if (!liveFile) {
-      const blob = await fetchBlob(company.liveRegisterUrl);
+      const blob = await load(company.liveRegisterUrl, 'live register');
       if (!blob) { setFileError(`Could not load the live register. ${lastFetchError}`); return; }
       setLiveFile(new File([blob], company.liveRegisterFileName || 'Live Register.xlsx', { type: blob.type }));
     }
@@ -164,18 +228,26 @@ export default function AuditorCompanyReview({
   }
 
   async function handleOpenDocument(doc: ReviewDoc) {
+    if (busyOpening) return;
     setFileError('');
-    if (!doc.fileUrl) { setFileError(`"${doc.name}" has no stored file — ask the company to re-upload it.`); return; }
-    const blob = await fetchBlob(doc.fileUrl);
+    if (!doc.fileUrl) {
+      if (workspace) { setWorkspace({ doc, blob: null, kind: 'none' }); return; }
+      setFileError(`"${doc.name}" has no stored file — ask the company to re-upload it.`); return;
+    }
+    const blob = await load(doc.fileUrl, doc.name);
     if (!blob) { setFileError(`Could not load "${doc.name}". ${lastFetchError}`); return; }
     const isPdf = blob.type === 'application/pdf' || /\.pdf$/i.test(doc.fileName ?? '') || doc.mimeType === 'application/pdf';
-    if (isPdf) setOpenDoc({ doc, blob });
-    else setSheetFile(new File([blob], doc.fileName || doc.name, { type: blob.type }));
+    // Split view: document on the left, checks + flag suggestions on the right.
+    setWorkspace({ doc, blob, kind: isPdf ? 'pdf' : 'sheet' });
+    // Warm the next document so "Next ›" is instant.
+    const i = company.docs.findIndex((x) => x.id === doc.id);
+    prefetch(company.docs[i + 1]?.fileUrl);
   }
 
   async function openStoredFile(url: string, name: string, mime: string | null) {
+    if (busyOpening) return;
     setFileError('');
-    const blob = await fetchBlob(url);
+    const blob = await load(url, name);
     if (!blob) { setFileError(`Could not load "${name}". ${lastFetchError}`); return; }
     const isPdf = (mime ?? blob.type) === 'application/pdf' || /\.pdf$/i.test(name);
     if (isPdf) setOpenDoc({ doc: { id: url, name, act: '', status: 'validated', score: 0, fileName: name }, blob });
@@ -185,11 +257,32 @@ export default function AuditorCompanyReview({
   function toggleExpand(docId: string) {
     setExpandedDocId(cur => (cur === docId ? null : docId));
     setChecklistDocId(null);
+    // Start downloading the file as soon as the row opens, so "Open filed document" is instant.
+    const d = company.docs.find(x => x.id === docId);
+    if (d && !company.locked) prefetch(d.fileUrl);
   }
 
   function toggleChecklist(docId: string) {
     setChecklistDocId(cur => (cur === docId ? null : docId));
   }
+
+  // Everything the auditor flagged, folded into text for the existing `remarks` field (max 2000 chars).
+  const summary = useMemo(() => {
+    const flags = company.docs.flatMap((d) => (reviews[d.id]?.findings ?? []).map((f) => ({ ...f, docName: d.name })))
+      .sort((a, b) => SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity]);
+    const count = { critical: 0, major: 0, minor: 0 };
+    flags.forEach((f) => { count[f.severity] += 1; });
+    const reviewed = company.docs.filter((d) => reviews[d.id]?.verdict || (reviews[d.id]?.findings.length ?? 0) > 0).length;
+    const worst = count.critical ? 'critical' : count.major ? 'major' : count.minor ? 'minor' : null;
+    const lines = flags.map((f, i) => `${i + 1}. ${f.docName} — ${f.keyword} (${SEVERITY_LABEL[f.severity]}): ${f.comment}`);
+    let remarks = flags.length ? `L3 review findings:\n${lines.join('\n')}\nPlease rectify within ${worst ? TAT_BY_SEVERITY[worst] : 5} working days.` : '';
+    if (remarks.length > 2000) remarks = `${remarks.slice(0, 1990)}…`;
+    const recommend = flags.length === 0
+      ? (reviewed === company.docs.length && company.docs.length > 0 ? 'Every document is marked correct. You can approve.' : 'No flags recorded. Review the remaining documents, then approve if all is in order.')
+      : worst === 'critical' ? 'Critical flags found. Request changes (supplier has 2 working days) or reject if the problem cannot be corrected.'
+      : 'Flags found. Request changes so the supplier can rectify and resubmit.';
+    return { flags, count, reviewed, remarks, recommend };
+  }, [company.docs, reviews]);
 
   return (
     <div className={s.arPage}>
@@ -278,8 +371,8 @@ export default function AuditorCompanyReview({
                   : 'All documents passed Level 2 checks with no flags.'}
               </p>
             </div>
-            <button className={s.arRegisterBtn} onClick={() => { void openLiveRegister(); }} disabled={company.locked}>
-              <IconTable size={14} /> Open live register
+            <button className={s.arRegisterBtn} onClick={() => { void openLiveRegister(); }} onMouseEnter={() => { if (!company.locked) prefetch(company.liveRegisterUrl); }} disabled={company.locked || busyOpening}>
+              {opening?.label === 'live register' ? <IconSpinner size={14} /> : <IconTable size={14} />} {opening?.label === 'live register' ? 'Opening…' : 'Open live register'}
             </button>
           </div>
 
@@ -317,6 +410,11 @@ export default function AuditorCompanyReview({
                       <span className={s.arDocName}>{doc.name}</span>
                       <span className={s.arDocAct}>{doc.act}{doc.hasFile === false && <> &middot; <span className={s.arNoFile}>no file stored</span></>}</span>
                     </div>
+                    {(() => {
+                      const r = reviews[doc.id];
+                      const n = r?.findings.length ?? 0;
+                      return <span className={`${w.rowBadge} ${n ? w.rbBad : r?.verdict === 'pass' ? w.rbOk : w.rbTodo}`}>{n ? `${n} flag${n !== 1 ? 's' : ''}` : r?.verdict === 'pass' ? 'Correct' : 'Not reviewed'}</span>;
+                    })()}
                     <span className={doc.status === 'flagged' ? `${s.arDocScore} ${s.arDocScoreLow}` : s.arDocScore}>
                       {doc.score}
                     </span>
@@ -342,8 +440,8 @@ export default function AuditorCompanyReview({
                             <IconCheckCircle size={11} /> All fields tally
                           </span>
                         )}
-                        <button className={s.arOpenDocBtn} disabled={company.locked || !doc.fileUrl} onClick={() => { void handleOpenDocument(doc); }}>
-                          <IconFileText size={13} /> Open filed document
+                        <button className={s.arOpenDocBtn} disabled={company.locked || !doc.fileUrl || busyOpening} onMouseEnter={() => prefetch(doc.fileUrl)} onClick={() => { void handleOpenDocument(doc); }}>
+                          {opening?.label === doc.name ? <IconSpinner size={13} /> : <IconFileText size={13} />} {opening?.label === doc.name ? 'Opening…' : 'Open filed document'}
                         </button>
                       </div>
 
@@ -460,8 +558,8 @@ export default function AuditorCompanyReview({
                     <div key={f.id} className={s.arFileRow}>
                       <span className={s.arFileName}>{f.docName || f.fileName}{f.role === 'live_register' ? ' (live register)' : ''}</span>
                       <span className={s.arFileMeta}>{f.fileName} · {(f.size / 1024).toFixed(0)} KB · {fmtDate(new Date(f.at))}</span>
-                      <button className={s.arOpenDocBtn} onClick={() => { void openStoredFile(f.url, f.fileName, f.mimeType); }}>
-                        <IconFileText size={13} /> Open
+                      <button className={s.arOpenDocBtn} disabled={busyOpening} onMouseEnter={() => prefetch(f.url)} onClick={() => { void openStoredFile(f.url, f.fileName, f.mimeType); }}>
+                        {opening?.label === f.fileName ? <IconSpinner size={13} /> : <IconFileText size={13} />} {opening?.label === f.fileName ? 'Opening…' : 'Open'}
                       </button>
                     </div>
                   ))}
@@ -568,6 +666,27 @@ export default function AuditorCompanyReview({
                 </p>
               </div>
 
+              <div className={w.sumBox}>
+                <p className={w.sumTitle}>Review summary</p>
+                <div className={w.progress}>
+                  <span className={w.progressTrack}><span className={w.progressFill} ref={el => { if (el) el.style.width = `${company.docs.length ? Math.round((summary.reviewed / company.docs.length) * 100) : 0}%`; }} /></span>
+                  {summary.reviewed} of {company.docs.length} documents reviewed
+                </div>
+                <div className={w.sumRow}>
+                  <span className={w.sumChip}>{summary.flags.length} flag{summary.flags.length !== 1 ? 's' : ''}</span>
+                  {(['critical', 'major', 'minor'] as const).map(k => summary.count[k] > 0 && <span key={k} className={`${w.sumChip} ${k === 'critical' ? w.bCritical : k === 'major' ? w.bMajor : w.bMinor}`}>{summary.count[k]} {SEVERITY_LABEL[k]}</span>)}
+                </div>
+                {summary.flags.length > 0 && (
+                  <div className={w.sumList}>
+                    {summary.flags.map(f => (
+                      <div key={f.id} className={w.flagText}><b>{f.docName}</b> — {f.keyword} ({SEVERITY_LABEL[f.severity]}): {f.comment}</div>
+                    ))}
+                  </div>
+                )}
+                <div className={w.recommend}>{summary.recommend}</div>
+                <button className={w.sumBtn} disabled={summary.flags.length === 0} onClick={() => setRemarks(summary.remarks)}>Use my findings as remarks</button>
+              </div>
+
               <div className={s.arRemarksField}>
                 <label className={s.arLabel}>Auditor remarks</label>
                 <textarea
@@ -576,7 +695,9 @@ export default function AuditorCompanyReview({
                   placeholder="Summarize your findings — this is shared with the company."
                   value={remarks}
                   onChange={e => setRemarks(e.target.value)}
+                  maxLength={2000}
                 />
+                <span className={remarks.length > 1900 ? `${w.counter} ${w.counterOver}` : w.counter}>{remarks.length} / 2000</span>
               </div>
 
               <div className={s.arDecisionBtns}>
@@ -631,8 +752,44 @@ export default function AuditorCompanyReview({
         </div>
       )}
 
+      {/* ── Opening loader: always visible while a file downloads ───────── */}
+      {opening && (
+        <div className={o.opening} role="status" aria-live="polite">
+          <span className={o.openingSpin}><IconSpinner size={18} /></span>
+          <div className={o.openingBody}>
+            <span className={o.openingTitle}>Opening {opening.label}…</span>
+            <span className={o.openingTrack}>
+              <span className={opening.pct == null ? `${o.openingBar} ${o.openingBarIndet}` : o.openingBar} data-pct={opening.pct ?? undefined} ref={el => { if (el && opening.pct != null) el.style.width = `${opening.pct}%`; }} />
+            </span>
+            <span className={o.openingSub}>{opening.pct == null ? 'Fetching from secure storage' : `${opening.pct}%`}</span>
+          </div>
+        </div>
+      )}
+
       {/* ── Real document + live register viewers (same tools the company
            used to submit) — this is the actual manual-tally workflow ──── */}
+      {workspace && (
+        <AuditorWorkspace
+          doc={workspace.doc}
+          company={company}
+          blob={workspace.blob}
+          kind={workspace.kind}
+          review={reviewOf(workspace.doc.id)}
+          reviews={reviews}
+          auditorName={auditor.fullName}
+          readOnly={!canWork}
+          suspended={openDoc !== null || sheetFile !== null}
+          loadingNext={busyOpening}
+          onVerdict={(v) => setVerdict(workspace.doc.id, v)}
+          onAddFlag={(f) => addFlag(workspace.doc.id, f)}
+          onRemoveFlag={(fid) => removeFlag(workspace.doc.id, fid)}
+          onOpenDoc={(d) => { void handleOpenDocument(d); }}
+          onFullscreen={() => { if (workspace.blob) setOpenDoc({ doc: workspace.doc, blob: workspace.blob }); }}
+          onOpenSheet={() => { if (workspace.blob) setSheetFile(new File([workspace.blob], workspace.doc.fileName || workspace.doc.name, { type: workspace.blob.type })); }}
+          onClose={() => setWorkspace(null)}
+        />
+      )}
+
       <PdfViewer
         open={openDoc !== null}
         onClose={() => setOpenDoc(null)}

@@ -62,8 +62,25 @@ export function usePortal<T>(action: keyof typeof PUBLIC, pollMs = 0) {
   return { data, loading, error, refresh: load };
 }
 
+/** Opens an issued compliance certificate (PDF) in a new tab. Throws a readable message on failure. */
+export async function openCertificate(certId: string, download = false, fileName = 'Compliance-Certificate.pdf'): Promise<void> {
+  const win = download ? null : window.open('', '_blank'); // opened synchronously so popup blockers allow it
+  try {
+    const res = await portalFetch('cli-doc-file', {}, `cert=${encodeURIComponent(certId)}`);
+    if (!res.ok) throw new Error('The certificate is not available yet. Please try again shortly.');
+    const url = URL.createObjectURL(await res.blob());
+    if (download) { const a = document.createElement('a'); a.href = url; a.download = fileName; a.click(); }
+    else if (win) win.location.href = url;
+    else window.open(url, '_blank');
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  } catch (e) {
+    win?.close();
+    throw e instanceof Error ? e : new Error('Could not open the certificate.');
+  }
+}
+
 // ── notifications ──
-export interface Notice { id: string; kind: 'success' | 'warning' | 'info' | 'danger'; title: string; detail: string; at: string; link?: string }
+export interface Notice { id: string; kind: 'success' | 'warning' | 'info' | 'danger'; title: string; detail: string; at: string; link?: string; certId?: string }
 const SEEN_KEY = 'regnix.notif.seen';
 
 export function useNotifications() {
