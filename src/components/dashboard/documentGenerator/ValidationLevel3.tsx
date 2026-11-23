@@ -24,6 +24,8 @@ interface ValidationLevel3Props {
   auditNote?:        { status: 'changes_requested' | 'rejected'; remarks: string };
   auditorAssigned?:  boolean;
   certificateNo?:    string;
+  /** Opens the change-request upload page (auditor's request + replacement uploads). */
+  onOpenChanges?:    () => void;
 }
 
 type StepState = 'done' | 'active' | 'pending';
@@ -86,6 +88,7 @@ export default function ValidationLevel3({
   auditNote,
   auditorAssigned = false,
   certificateNo,
+  onOpenChanges,
 }: ValidationLevel3Props) {
   const [elapsed,  setElapsed]  = useState(0);
   const [approved, setApproved] = useState(isApproved);
@@ -246,7 +249,14 @@ export default function ValidationLevel3({
                   <span>{auditNote.status === 'rejected' ? '⛔' : '↩️'}</span>
                   <div className={s.demoText}>
                     <strong>{auditNote.status === 'rejected' ? 'Submission rejected' : 'Changes requested'}:</strong> {auditNote.remarks}
-                    <br />Fix the points above and re-run Level 2 to send it back to an auditor.
+                    <br />Fix the points above and upload the corrected documents to send it back to an auditor.
+                    {onOpenChanges && (
+                      <div>
+                        <button className={`${s.btnPrimary} ${s.btnSmall}`} onClick={onOpenChanges}>
+                          View request &amp; upload corrected documents →
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

@@ -1,0 +1,31 @@
+/* Upload / opening feedback — overlay card + toast. */
+.overlay { position: fixed; inset: 0; z-index: 9400; background: rgba(15, 12, 35, 0.55); backdrop-filter: blur(2px); display: flex; align-items: center; justify-content: center; padding: 20px; }
+.card { width: 100%; max-width: 440px; max-height: 88vh; overflow-y: auto; background: #fff; border-radius: 16px; padding: 26px 24px 22px; text-align: center; box-shadow: 0 28px 70px rgba(15, 12, 35, 0.4); display: flex; flex-direction: column; align-items: center; gap: 10px; font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif; }
+.icon { width: 52px; height: 52px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: 800; }
+.iconWork { background: #EDE9FE; } .iconOk { background: #D1FAE5; color: #047857; } .iconWarn { background: #FEF3C7; color: #B45309; } .iconBad { background: #FEE2E2; color: #B91C1C; }
+.spin { width: 24px; height: 24px; border-radius: 50%; border: 3px solid #C4B5FD; border-top-color: #6C3BD5; animation: vu-spin 0.8s linear infinite; }
+.title { margin: 0; font-size: 16px; font-weight: 800; color: #111827; }
+.detail { margin: 0; font-size: 12.5px; line-height: 1.55; color: #6B7280; word-break: break-word; }
+.track { width: 100%; height: 7px; background: #EEECF8; border-radius: 99px; overflow: hidden; position: relative; margin-top: 4px; }
+.fill { display: block; height: 100%; background: linear-gradient(90deg, #6C3BD5, #8B5CF6); border-radius: 99px; transition: width 0.25s; }
+.indet { position: absolute; top: 0; bottom: 0; width: 40%; background: linear-gradient(90deg, #6C3BD5, #8B5CF6); border-radius: 99px; animation: vu-indet 1.2s ease-in-out infinite; }
+.hint { margin: 2px 0 0; font-size: 11px; color: #9CA3AF; }
+.failList { list-style: none; margin: 4px 0 0; padding: 0; width: 100%; display: flex; flex-direction: column; gap: 6px; text-align: left; max-height: 200px; overflow-y: auto; }
+.failList li { display: flex; flex-direction: column; gap: 1px; background: #FEF2F2; border: 1px solid #FECACA; border-radius: 8px; padding: 7px 10px; }
+.failList b { font-size: 12px; color: #991B1B; }
+.failList span { font-size: 11px; color: #B45309; }
+.actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin-top: 8px; }
+.primary { background: #6C3BD5; color: #fff; border: 0; border-radius: 9px; padding: 9px 16px; font-size: 12.5px; font-weight: 700; cursor: pointer; font-family: inherit; }
+.primary:hover { background: #5B2EC4; }
+.secondary { background: #fff; color: #374151; border: 1px solid #E5E7EB; border-radius: 9px; padding: 9px 16px; font-size: 12.5px; font-weight: 700; cursor: pointer; font-family: inherit; }
+.secondary:hover { background: #F9FAFB; }
+
+.toast { position: fixed; right: 20px; bottom: 20px; z-index: 9300; display: flex; align-items: center; gap: 10px; max-width: 380px; padding: 11px 14px; border-radius: 11px; font-size: 12.5px; font-weight: 600; box-shadow: 0 12px 34px rgba(15, 12, 35, 0.22); font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif; animation: vu-rise 0.22s ease-out; }
+.toastOk { background: #ECFDF5; border: 1px solid #6EE7B7; color: #065F46; }
+.toastBad { background: #FEF2F2; border: 1px solid #FCA5A5; color: #991B1B; }
+.toastInfo { background: #EEF2FF; border: 1px solid #C7D2FE; color: #3730A3; }
+.toastX { background: none; border: 0; font-size: 17px; line-height: 1; cursor: pointer; color: inherit; opacity: 0.6; }
+.toastX:hover { opacity: 1; }
+@keyframes vu-spin { to { transform: rotate(360deg); } }
+@keyframes vu-indet { 0% { left: -40%; } 100% { left: 100%; } }
+@keyframes vu-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }

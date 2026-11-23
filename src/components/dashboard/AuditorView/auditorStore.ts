@@ -136,6 +136,7 @@ export interface CompanyReview {
   locked?:            boolean;          // true until THIS auditor claims it and accepts the terms
   termsAcceptedAt?:   Date | null;
   missingFiles?:      string[];         // files that could not be stored (e.g. over 3 MB)
+  resubmission?:      { at: string; note: string; replacedDocs: string[]; previousRemarks: string; round: number } | null;  // company's reply to a change request
   certificate?:       { certificateNo: string; issuedAt: Date; sha256: string | null; revoked: boolean; hasPdf?: boolean } | null;
 }
 
@@ -211,7 +212,7 @@ function mapCompany(r: any): CompanyReview {
     issues: r.issues ?? [], l2Score: Number(r.l2Score) || 0, l2CompletedAt: d(r.l2CompletedAt) ?? new Date(),
     status: r.status, assignedTo: r.assignedTo ?? null, decisionRemarks: r.decisionRemarks ?? '', decidedAt: d(r.decidedAt),
     liveRegisterUrl: r.liveRegisterUrl ?? null, liveRegisterFile: null, liveRegisterFileName: r.liveRegisterFileName ?? null,
-    locked: !!r.locked, accessStatus: r.accessStatus ?? 'none', details: r.details ?? null, termsAcceptedAt: d(r.termsAcceptedAt), missingFiles: r.missingFiles ?? [],
+    locked: !!r.locked, accessStatus: r.accessStatus ?? 'none', details: r.details ?? null, termsAcceptedAt: d(r.termsAcceptedAt), missingFiles: r.missingFiles ?? [], resubmission: r.resubmission ?? null,
     certificate: r.certificate ? { ...r.certificate, issuedAt: d(r.certificate.issuedAt) ?? new Date() } : null,
   };
 }

@@ -14,6 +14,8 @@ import ValidationLanding from './ValidationLanding';
 import ValidationLevel1  from './ValidationLevel1';
 import ValidationLevel2  from './ValidationLevel2';
 import ValidationLevel3  from './ValidationLevel3';
+import ValidationChangeRequest from './ValidationChangeRequest';
+import { FlashToast } from './ValidationUploadUi';
 import { uploadValidationDocs, submitLevel2, fetchL3Status, downloadCertificate, type Level2Payload, type L3Status } from './validationDocsUpload';
 
 interface ValidationPageProps {
@@ -28,10 +30,24 @@ interface ValidationRouteState {
   selectedActs?: string[];
 }
 
-export default function ValidationPage({
+type Flash = { text: string; kind: 'ok' | 'bad' | 'info' } | null;
+
+/** Wrapper keeps one toast (upload / submit result) on screen across every level screen. */
+export default function ValidationPage(props: ValidationPageProps) {
+  const [flash, setFlash] = useState<Flash>(null);
+  return (
+    <>
+      <ValidationPageInner {...props} setFlash={setFlash} />
+      {flash && <FlashToast text={flash.text} kind={flash.kind} onDone={() => setFlash(null)} />}
+    </>
+  );
+}
+
+function ValidationPageInner({
   companyName      = 'Your Company',
   liveRegisterFile = null,
-}: ValidationPageProps) {
+  setFlash,
+}: ValidationPageProps & { setFlash: (f: Flash) => void }) {
   const navigate = useNavigate();
   const location = useLocation();
   const { sub }  = useParams<{ sub?: string }>();
@@ -128,8 +144,13 @@ export default function ValidationPage({
     sig: string,
   ) {
     setUploadedDocs(docs);
-    // Background copy of every Level 1 document to the company's Zoho WorkDrive folder
-    void uploadValidationDocs(docs.map(d => ({ file: d.file, name: d.name })), resolvedCompanyName);
+    // Background copy of every Level 1 document to the company's Zoho WorkDrive folder — with a visible result
+    setFlash({ text: `Uploading ${docs.length} document${docs.length !== 1 ? 's' : ''}…`, kind: 'info' });
+    void uploadValidationDocs(docs.map(d => ({ file: d.file, name: d.name })), resolvedCompanyName)
+      .then(r => setFlash(r.skipped.length
+        ? { text: `✗ ${r.skipped.length} of ${docs.length} document${docs.length !== 1 ? 's' : ''} could not be stored (${r.skipped.slice(0, 2).map(x => `${x.name}: ${x.reason}`).join('; ')}). They will be retried when you submit Level 2.`, kind: 'bad' }
+        : { text: `✓ All ${docs.length} document${docs.length !== 1 ? 's' : ''} uploaded and stored securely.`, kind: 'ok' }))
+      .catch(() => setFlash({ text: '✗ Upload failed — check your connection. Files will be retried when you submit Level 2.', kind: 'bad' }));
     setSignatureUrl(sig);
     setLevelState(0, 'done');
     setLevelState(1, 'pending');
@@ -142,11 +163,13 @@ export default function ValidationPage({
     setLevelState(1, 'done');
     setLevelState(2, 'pending');
     setSubmittedAt(new Date());
+    setFlash({ text: '✓ Submitted for audit. An auditor will pick it up shortly.', kind: 'ok' });
     goTo('landing');
   }
 
   // Level 3: poll the real audit status (claimed → decided) while the page is open
   const [l3, setL3] = useState<L3Status | null>(null);
+  const [showChanges, setShowChanges] = useState(false);
   useEffect(() => {
     if (screen !== 'level3' && screen !== 'landing') return;
     let alive = true;
@@ -170,6 +193,25 @@ export default function ValidationPage({
   if (!hydrated) return null;
 
   // ── Render ──────────────────────────────────────────────────────────────────
+
+  if (screen === 'level3' && showChanges && l3 && (l3.status === 'changes_requested' || l3.status === 'rejected')) {
+    return (
+      <ValidationChangeRequest
+          companyName={resolvedCompanyName}
+          status={l3.status}
+          remarks={l3.remarks ?? ''}
+          decidedAt={l3.decidedAt}
+          onBack={() => setShowChanges(false)}
+          onResubmitted={() => {
+            setShowChanges(false);
+            setL3(null);
+            setLevelState(2, 'pending');
+            setSubmittedAt(new Date());
+            setFlash({ text: '✓ Resubmitted. The auditor has been notified of your corrections.', kind: 'ok' });
+          }}
+      />
+    );
+  }
 
   if (screen === 'level1') {
     return (
@@ -208,6 +250,7 @@ export default function ValidationPage({
         auditNote={l3 && ['changes_requested', 'rejected'].includes(l3.status) ? { status: l3.status as 'changes_requested' | 'rejected', remarks: l3.remarks ?? '' } : undefined}
         auditorAssigned={!!l3?.assigned}
         certificateNo={l3?.certificate?.certificateNo}
+        onOpenChanges={l3 && ['changes_requested', 'rejected'].includes(l3.status) ? () => setShowChanges(true) : undefined}
         onApprove={import.meta.env.DEV ? () => setApproved(true) : undefined}
         onDownloadReport={handleDownloadReport}
         onBack={() => {

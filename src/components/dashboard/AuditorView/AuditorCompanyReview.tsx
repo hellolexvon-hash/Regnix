@@ -387,6 +387,16 @@ export default function AuditorCompanyReview({
               Files the company could not store (over 3 MB or upload error): {company.missingFiles!.join(', ')}.
             </div>
           )}
+          {company.resubmission && (
+            <div className={s.arLockedNote}>
+              <span>
+                <strong>Resubmitted by the company (round {company.resubmission.round}).</strong>{' '}
+                {company.resubmission.replacedDocs.length > 0 ? `Replaced: ${company.resubmission.replacedDocs.join(', ')}. ` : ''}
+                {company.resubmission.note ? `Company note: “${company.resubmission.note}” ` : ''}
+                Check that each earlier flag has been fixed.
+              </span>
+            </div>
+          )}
           {fileError && <p className={s.arActionError}>{fileError}</p>}
 
           <div className={s.arDocList}>

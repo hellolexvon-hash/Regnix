@@ -91,9 +91,23 @@ export async function submitLevel2(p: Level2Payload): Promise<{ ok: boolean; mes
   } catch { return { ok: false, message: 'Could not reach the server.' }; }
 }
 
+/** Reply to an auditor's change request: the replacement files are already uploaded; this sends the case back to the queue. */
+export async function resubmitForAudit(note: string, replacedDocs: string[]): Promise<{ ok: boolean; message?: string }> {
+  try {
+    const t = await token();
+    if (!t) return { ok: false, message: 'Please sign in again.' };
+    const res = await fetch('/api/validation/l2-submit', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${t}` },
+      body: JSON.stringify({ resubmit: true, note, replacedDocs }),
+    });
+    const body = await res.json().catch(() => ({}));
+    return res.ok ? { ok: true } : { ok: false, message: body?.message ?? `Server ${res.status}` };
+  } catch { return { ok: false, message: 'Could not reach the server.' }; }
+}
+
 export interface L3Status {
   status: 'none' | 'pending' | 'in_review' | 'approved' | 'changes_requested' | 'rejected';
-  remarks?: string; assigned?: boolean;
+  remarks?: string; assigned?: boolean; decidedAt?: string | null;
   certificate?: { certificateNo: string; issuedAt: string; hasPdf: boolean } | null;
 }
 

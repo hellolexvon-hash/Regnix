@@ -38,6 +38,7 @@ import type { UploadedDoc, SheetPreview } from './validationStore';
 import LiveRegister from './LiveRegister';
 import PdfViewer from './PdfViewer';
 import { uploadValidationDocs, type Level2Payload, type UploadProgress } from './validationDocsUpload';
+import { UploadOverlay } from './ValidationUploadUi';
 
 /* ════════════════════════════════════════════════════════════════════════
    TYPES
@@ -620,7 +621,8 @@ export default function ValidationLevel2({
   const [syncNote,     setSyncNote]     = useState('');
   const [bgUploading,  setBgUploading]  = useState(false);
   const [progress,     setProgress]     = useState<UploadProgress | null>(null);
-  const [stage,        setStage]        = useState<'idle' | 'uploading' | 'sending' | 'error'>('idle');
+  const [stage,        setStage]        = useState<'idle' | 'uploading' | 'review' | 'sending' | 'error'>('idle');
+  const [upFailed,     setUpFailed]     = useState<{ name: string; reason: string }[]>([]);
   const [aiRunning,    setAiRunning]    = useState<string | null>(null);
   const [filterStatus, setFilterStatus] = useState<string>('All');
   const [filterAct,    setFilterAct]    = useState<string>('All');
@@ -668,12 +670,21 @@ export default function ValidationLevel2({
 
   /* Final step: make sure every file is stored, then hand the result to the auditor queue. */
   async function finishLevel2() {
-    setSubmitting(true); setSubmitError(''); setStage('uploading'); setProgress(null);
+    setSubmitting(true); setSubmitError(''); setStage('uploading'); setProgress(null); setUpFailed([]);
     const items = docCards.filter(d => d.file).map(d => ({ file: d.file as File, name: d.file!.name, docName: d.name }));
     if (liveRegisterFile) items.push({ file: liveRegisterFile, name: liveRegisterFile.name, docName: 'Live Register', role: 'live_register' } as never);
     const up = await uploadValidationDocs(items as never, companyName, setProgress);
-    setStage('sending');
-    const missing = up.skipped.map(x => x.name);
+    // Anything that did not reach storage is shown to the company with the reason — retry it or continue knowingly.
+    if (up.skipped.length > 0) { setUpFailed(up.skipped); setStage('review'); setSubmitting(false); return; }
+    await sendToAuditor([]);
+  }
+
+  /* Hand the Level 2 result to the auditor queue. `notStored` = files that never reached storage. */
+  async function sendToAuditor(notStored: string[]) {
+    setSubmitting(true); setSubmitError(''); setStage('sending');
+    // Documents marked uploaded but with no file in this browser (e.g. after a refresh) cannot be sent either — say so.
+    const noFile = docCards.filter(d => d.uploadStatus === 'Uploaded' && !d.file).map(d => d.name);
+    const missing = Array.from(new Set([...notStored, ...noFile]));
     const scored = docCards.filter(d => d.uploadStatus === 'Uploaded');
     try {
       await onComplete({
@@ -700,7 +711,11 @@ export default function ValidationLevel2({
     const target = docCards.find(d => d.id === docId);
     setBgUploading(true); setSyncNote(`Uploading ${file.name}…`);
     void uploadValidationDocs([{ file, name: file.name, docName: target?.name }], companyName)
-      .then(r => setSyncNote(noteFor(r)))
+      .then(r => {
+        setSyncNote(r.skipped.length ? `✗ ${noteFor(r)} — upload it again.` : `✓ ${file.name} uploaded and stored securely.`);
+        if (!r.skipped.length) setTimeout(() => setSyncNote(n => (n.startsWith('✓') ? '' : n)), 6000);
+      })
+      .catch(() => setSyncNote(`✗ ${file.name} could not be uploaded — check your connection and upload it again.`))
       .finally(() => setBgUploading(false));
 
     setDocCards(prev => prev.map(d => d.id === docId ? { ...d, uploadStatus: 'Uploaded', file, sheets } : d));
@@ -1315,38 +1330,26 @@ export default function ValidationLevel2({
         />
       )}
 
-      {(submitting || stage === 'error') && (
-        <div className={s.v2UpOverlay} role="dialog" aria-modal="true" aria-live="polite">
-          <div className={s.v2UpCard}>
-            {stage === 'error' ? (
-              <>
-                <p className={s.v2UpTitle}>Could not submit for audit</p>
-                <p className={s.v2UpSub}>{submitError}</p>
-                <button className={s.btnSecondary} onClick={() => { setStage('idle'); setSubmitError(''); }}>Close</button>
-              </>
-            ) : (
-              <>
-                <p className={s.v2UpTitle}>
-                  {stage === 'uploading' ? 'Uploading your documents' : 'Sending to the auditor'}
-                </p>
-                <div className={s.v2UpBar}>
-                  <div
-                    className={s.v2UpFill}
-                    style={{ width: `${stage === 'sending' ? 100 : progress && progress.total ? Math.round((progress.done / progress.total) * 100) : 4}%` }}
-                  />
-                </div>
-                <p className={s.v2UpSub}>
-                  {stage === 'uploading'
-                    ? (progress && progress.total
-                        ? `${progress.done} of ${progress.total} uploaded${progress.current ? ` — ${progress.current}` : ''}`
-                        : 'Preparing…')
-                    : `✓ All ${progress?.total ?? ''} documents uploaded. Submitting for audit…`}
-                </p>
-                <p className={s.v2UpHint}>Please keep this page open until it finishes.</p>
-              </>
-            )}
-          </div>
-        </div>
+      {(submitting || stage === 'error' || stage === 'review') && (
+        stage === 'error' ? (
+          <UploadOverlay state="error" title="Could not submit for audit" detail={submitError}
+            onClose={() => { setStage('idle'); setSubmitError(''); }} closeLabel="Close" />
+        ) : stage === 'review' ? (
+          <UploadOverlay state="review"
+            title={`${upFailed.length} file${upFailed.length !== 1 ? 's' : ''} did not upload`}
+            detail="The auditor can only open documents that reached storage. Retry the failed files, or continue and the auditor will see them marked as missing."
+            failed={upFailed}
+            onRetry={() => { void finishLevel2(); }}
+            onContinue={() => { void sendToAuditor(upFailed.map(x => x.name)); }} continueLabel="Submit anyway"
+            onClose={() => { setStage('idle'); setSubmitting(false); }} closeLabel="Go back" />
+        ) : (
+          <UploadOverlay state="working"
+            title={stage === 'uploading' ? 'Uploading your documents' : 'Sending to the auditor'}
+            pct={stage === 'sending' ? 100 : progress && progress.total ? Math.round((progress.done / progress.total) * 100) : null}
+            detail={stage === 'uploading'
+              ? (progress && progress.total ? `${progress.done} of ${progress.total} uploaded${progress.current ? ` — ${progress.current}` : ''}` : 'Preparing…')
+              : `✓ All ${progress?.total ?? ''} documents uploaded. Submitting for audit…`} />
+        )
       )}
 
       {!submitting && syncNote && (

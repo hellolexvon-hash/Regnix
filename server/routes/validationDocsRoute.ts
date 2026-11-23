@@ -169,17 +169,26 @@ async function uploadHandler(req: Request, res: Response) {
     const sha = createHash('sha256').update(bytes).digest('hex');
     const supa = db();
 
-    const { data: existing } = await supa.from('validation_zoho_files').select('id, zoho_file_id, zoho_url, storage_key')
-      .eq('profile_id', user.id).eq('sha256', sha).maybeSingle();
+    // The same file can legitimately fill two checklist slots (e.g. one declaration for two names). Look at ALL rows for this
+    // file: reuse the row for this document name, or a row still carrying its raw filename from Level 1; otherwise add a new row
+    // that shares the stored copy — never rename another document's row (that made the first document lose its file).
+    const { data: sameFile } = await supa.from('validation_zoho_files').select('id, zoho_file_id, zoho_url, storage_key, doc_name, doc_role')
+      .eq('profile_id', user.id).eq('sha256', sha);
+    const rowsSame = (sameFile ?? []) as any[];
+    const anyCopy = rowsSame.find((r) => r.storage_key) ?? rowsSame[0];
+    const isRaw = (n: unknown) => /\.[a-z0-9]{2,5}$/i.test(String(n ?? ''));
+    const target = rowsSame.find((r) => r.doc_name === docName && r.doc_role === role)
+      ?? rowsSame.find((r) => isRaw(r.doc_name) && r.doc_role === role);
+    const existing = target ?? null;
 
-    const storageKey = existing?.storage_key as string | undefined ?? `${user.id}/${sha}.${ext}`;
-    if (!existing?.storage_key) {
+    const storageKey = (existing?.storage_key ?? anyCopy?.storage_key) as string | undefined ?? `${user.id}/${sha}.${ext}`;
+    if (!existing?.storage_key && !anyCopy?.storage_key) {
       const { error } = await supa.storage.from(BUCKET).upload(storageKey, bytes, { contentType: mime, upsert: true });
       if (error) throw error;
     }
 
-    let zohoId = (existing?.zoho_file_id as string | null) ?? null;
-    let zohoUrl = (existing?.zoho_url as string | null) ?? null;
+    let zohoId = ((existing?.zoho_file_id ?? anyCopy?.zoho_file_id) as string | null) ?? null;
+    let zohoUrl = ((existing?.zoho_url ?? anyCopy?.zoho_url) as string | null) ?? null;
     let storedName = fileName;
     let zohoOk = !!zohoId;
     if (!zohoId) {
@@ -195,9 +204,14 @@ async function uploadHandler(req: Request, res: Response) {
     if (existing) {
       await supa.from('validation_zoho_files').update(meta).eq('id', existing.id);
     } else {
-      await supa.from('validation_zoho_files').insert({
+      const ins = await supa.from('validation_zoho_files').insert({
         profile_id: user.id, sha256: sha, file_name: storedName, size_bytes: bytes.length, ...meta,
       });
+      if (ins.error && anyCopy) {
+        // A unique (profile, sha) constraint would reject the second row — fall back to the old behaviour rather than fail the upload.
+        console.error('[validation upload] second row rejected, re-labelling existing row', ins.error.message);
+        await supa.from('validation_zoho_files').update(meta).eq('id', anyCopy.id);
+      } else if (ins.error) throw ins.error;
     }
     res.json({ ok: true, zoho: zohoOk, url: zohoUrl, duplicate: !!existing });
   } catch (e) {
@@ -240,7 +254,7 @@ async function submitHandler(req: Request, res: Response) {
       industry: (cp?.industry as string) || (profile?.industry as string) || '',
       cin: (cp?.cin as string) || null, gstin: (cp?.gstin as string) || (profile?.gstin as string) || null,
       address: (cp?.address as string) || null, state: (cp?.state as string) || null,
-      employee_count: parseInt(String(cp?.headcount ?? '0'), 10) || 0, acts_covered: selectedActs,
+      employee_count: parseInt(String(cp?.headcount ?? '0'), 10) || 0, ...(b.resubmit === true ? {} : { acts_covered: selectedActs }),
     };
     let { data: org } = await supa.from('organizations').select('id').eq('owner_profile_id', user.id).limit(1).maybeSingle();
     if (org) await supa.from('organizations').update(orgRow).eq('id', org.id);
@@ -255,17 +269,35 @@ async function submitHandler(req: Request, res: Response) {
     const now = new Date();
     const month = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString().slice(0, 10);
 
-    let q = supa.from('review_cycles').select('id, status').eq('organization_id', org!.id);
+    let q = supa.from('review_cycles').select('id, status, l2_snapshot, l2_score, decision_remarks').eq('organization_id', org!.id);
     q = sess?.id ? q.eq('validation_session_id', sess.id) : q.eq('reporting_month', month);
     const { data: cur } = await q.order('created_at', { ascending: false }).limit(1).maybeSingle();
 
-    const snapshot = { docs, issues, selectedActs, missingFiles, liveRegisterFileName: str(b.liveRegisterFileName), submittedAt: now.toISOString() };
+    let snapshot: Record<string, any> = { docs, issues, selectedActs, missingFiles, liveRegisterFileName: str(b.liveRegisterFileName), submittedAt: now.toISOString() };
+    let l2ScoreFinal = l2Score;
+    if (b.resubmit === true) {
+      // Company has replaced the documents the auditor asked about: keep the Level 2 result, record what changed, send it back to the queue.
+      if (!cur || !['changes_requested', 'rejected'].includes(cur.status as string)) {
+        return res.status(409).json({ ok: false, message: 'There is no change request to respond to.' });
+      }
+      const old: any = cur.l2_snapshot ?? {};
+      const names: string[] = (Array.isArray(b.replacedDocs) ? b.replacedDocs : []).map((a: unknown) => str(a, 150)).filter(Boolean).slice(0, 80);
+      snapshot = {
+        ...old, submittedAt: now.toISOString(),
+        missingFiles: (old.missingFiles ?? []).filter((m: string) => !names.includes(m)),
+        resubmission: {
+          at: now.toISOString(), note: str(b.note, 1000), replacedDocs: names,
+          previousRemarks: (cur.decision_remarks as string) ?? '', round: ((old.resubmission?.round as number) ?? 0) + 1,
+        },
+      };
+      l2ScoreFinal = Number(cur.l2_score ?? l2Score);
+    }
     let cycleId = cur?.id as string | undefined;
     if (cur && ['approved', 'in_review'].includes(cur.status as string)) {
       return res.status(409).json({ ok: false, message: cur.status === 'approved' ? 'Already approved.' : 'An auditor is reviewing this submission.' });
     }
     const common = {
-      l2_score: l2Score, l2_completed_at: now.toISOString(), l2_snapshot: snapshot, current_level: 'level_3',
+      l2_score: l2ScoreFinal, l2_completed_at: now.toISOString(), l2_snapshot: snapshot, current_level: 'level_3',
       status: 'pending', assigned_auditor_id: null, terms_accepted_at: null, terms_version: null, access_status: 'none',
       decision_remarks: null, decided_at: null,
     };
@@ -282,7 +314,7 @@ async function submitHandler(req: Request, res: Response) {
     await supa.from('validation_zoho_files').update({ review_cycle_id: cycleId }).eq('profile_id', user.id);
     try {
       await supa.from('admin_notifications').insert({
-        type: 'l3_ready', title: 'Ready for auditor', detail: `${orgName} passed Level 2 and is waiting for an auditor.`,
+        type: 'l3_ready', title: 'Ready for auditor', detail: b.resubmit === true ? `${orgName} replied to the auditor's change request and is waiting for an auditor.` : `${orgName} passed Level 2 and is waiting for an auditor.`,
         entity_type: 'review_cycle', entity_id: cycleId,
       });
     } catch { /* ignore */ }
@@ -395,7 +427,8 @@ async function bootstrapHandler(req: Request, res: Response) {
       const snap: any = c.l2_snapshot ?? {};
       // Unlocked = assigned to me + access approved. Admin assignment grants access directly; self-claims are gated by access_status.
       const unlocked = c.assigned_auditor_id === me.id && c.access_status === 'approved';
-      const cf = filesByCycle.get(c.id as string) ?? [];
+      // Newest upload first, so a replacement file always wins over the one it replaced.
+      const cf = [...(filesByCycle.get(c.id as string) ?? [])].sort((a, b) => String(b.uploaded_at ?? '').localeCompare(String(a.uploaded_at ?? '')));
       const fileUrl = (id: string) => (unlocked ? `/api/auditor/file?id=${id}` : null);
       const usedFiles = new Set<string>();
       const docs = (snap.docs ?? []).map((d: any, i: number) => {
@@ -437,6 +470,7 @@ async function bootstrapHandler(req: Request, res: Response) {
           id: `${c.id}-i${n}`, docName: i.docName, severity: i.severity, rule: i.rule, rootCause: i.rootCause, resolvedL2: !!i.resolved,
         })),
         missingFiles: snap.missingFiles ?? [],
+        resubmission: snap.resubmission ?? null,
         l2Score: Number(c.l2_score ?? 0), l2CompletedAt: c.l2_completed_at,
         status: c.status, assignedTo: c.assigned_auditor_id ?? null, termsAcceptedAt: c.terms_accepted_at ?? null,
         decisionRemarks: c.decision_remarks ?? '', decidedAt: c.decided_at ?? null,

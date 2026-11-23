@@ -1,12 +1,16 @@
 /**
  * AuditorTermsModal.tsx
  *
- * Shown when an auditor self-assigns a company. The terms must be read to the end and
- * both boxes ticked before "Accept & claim" unlocks. Acceptance is recorded server-side
+ * Pop-up shown when an auditor asks for access to a company. Terms must be read to the end and both
+ * boxes ticked before "Accept & request access" unlocks. Acceptance is recorded server-side
  * (review_cycles.terms_accepted_at / terms_version) and gates access to the documents.
+ *
+ * Self-contained: styled by AuditorTerms.module.css (no need to append CSS to Auditor.module.css) and rendered
+ * through a portal on <body>, so it always floats above the page as a centred dialog.
  */
 import { useEffect, useRef, useState } from 'react';
-import s from './Auditor.module.css';
+import { createPortal } from 'react-dom';
+import t from './AuditorTerms.module.css';
 
 interface Props {
   companyName: string;
@@ -29,57 +33,78 @@ const TERMS: [string, string][] = [
 export default function AuditorTermsModal({ companyName, busy, error, onAccept, onClose }: Props) {
   const box = useRef<HTMLDivElement>(null);
   const [read, setRead] = useState(false);
+  const [pct, setPct] = useState(0);
   const [a, setA] = useState(false);
   const [b, setB] = useState(false);
 
   useEffect(() => {
     const el = box.current;
-    if (el && el.scrollHeight <= el.clientHeight + 4) setRead(true);
+    if (el && el.scrollHeight <= el.clientHeight + 4) { setRead(true); setPct(100); }
   }, []);
+
+  // Lock page scroll behind the pop-up and let Esc close it (unless a request is in flight).
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape' && !busy) onClose(); };
+    document.addEventListener('keydown', esc);
+    return () => { document.body.style.overflow = prev; document.removeEventListener('keydown', esc); };
+  }, [busy, onClose]);
 
   function onScroll() {
     const el = box.current;
-    if (el && el.scrollTop + el.clientHeight >= el.scrollHeight - 8) setRead(true);
+    if (!el) return;
+    const max = el.scrollHeight - el.clientHeight;
+    setPct(max <= 0 ? 100 : Math.min(100, Math.round((el.scrollTop / max) * 100)));
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 8) setRead(true);
   }
 
   const ready = read && a && b && !busy;
 
-  return (
-    <div className={s.atOverlay} role="dialog" aria-modal="true">
-      <div className={s.atModal}>
-        <div className={s.atHead}>
-          <h2 className={s.atTitle}>Auditor terms &amp; conditions</h2>
-          <p className={s.atSub}>You are about to take ownership of the audit for <strong>{companyName}</strong>.</p>
+  const modal = (
+    <div className={t.overlay} role="dialog" aria-modal="true" aria-labelledby="at-title" onMouseDown={(e) => { if (e.target === e.currentTarget && !busy) onClose(); }}>
+      <div className={t.modal}>
+        <div className={t.head}>
+          <span className={t.badge} aria-hidden="true">⚖</span>
+          <div>
+            <h2 id="at-title" className={t.title}>Auditor terms &amp; conditions</h2>
+            <p className={t.sub}>You are about to request access to the audit of <strong>{companyName}</strong>. Please read and accept to continue.</p>
+          </div>
+          <button className={t.x} onClick={onClose} disabled={busy} aria-label="Close">×</button>
         </div>
 
-        <div className={s.atBody} ref={box} onScroll={onScroll}>
-          {TERMS.map(([h, t], i) => (
-            <div key={h} className={s.atClause}>
-              <p className={s.atClauseHead}>{i + 1}. {h}</p>
-              <p className={s.atClauseText}>{t}</p>
+        <div className={t.progress} aria-hidden="true"><span style={{ width: `${pct}%` }} /></div>
+
+        <div className={t.body} ref={box} onScroll={onScroll} tabIndex={0}>
+          {TERMS.map(([h, txt], i) => (
+            <div key={h} className={t.clause}>
+              <p className={t.clauseHead}><span>{i + 1}</span>{h}</p>
+              <p className={t.clauseText}>{txt}</p>
             </div>
           ))}
         </div>
-        {!read && <p className={s.atHint}>Scroll to the end to continue.</p>}
+        <p className={read ? t.hintOk : t.hint}>{read ? '✓ You have read the full terms.' : 'Scroll to the end of the terms to continue.'}</p>
 
-        <label className={s.atCheck}>
-          <input type="checkbox" disabled={!read} checked={a} onChange={e => setA(e.target.checked)} />
+        <label className={t.check}>
+          <input type="checkbox" disabled={!read} checked={a} onChange={(e) => setA(e.target.checked)} />
           <span>I have read and accept these terms.</span>
         </label>
-        <label className={s.atCheck}>
-          <input type="checkbox" disabled={!read} checked={b} onChange={e => setB(e.target.checked)} />
+        <label className={t.check}>
+          <input type="checkbox" disabled={!read} checked={b} onChange={(e) => setB(e.target.checked)} />
           <span>I confirm I am independent of this company and fit to audit it.</span>
         </label>
 
-        {error && <p className={s.atError}>{error}</p>}
+        {error && <p className={t.error}>{error}</p>}
 
-        <div className={s.atActions}>
-          <button className={s.arCancelBtn} onClick={onClose} disabled={busy}>Cancel</button>
-          <button className={s.arClaimBtn} onClick={onAccept} disabled={!ready}>
+        <div className={t.actions}>
+          <button className={t.cancel} onClick={onClose} disabled={busy}>Cancel</button>
+          <button className={t.accept} onClick={onAccept} disabled={!ready}>
             {busy ? 'Requesting…' : 'Accept & request access'}
           </button>
         </div>
       </div>
     </div>
   );
+
+  return typeof document !== 'undefined' ? createPortal(modal, document.body) : modal;
 }
